@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ОКО_КУХНЯ_ТТК — Инструкция</title>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --dark: #0f1923;
+    --card: #1a2535;
+    --teal: #00b4b4;
+    --teal2: #007f7f;
+    --gold: #f5a623;
+    --green: #2ecc71;
+    --orange: #e67e22;
+    --red: #e74c3c;
+    --white: #f0f4f8;
+    --muted: #7f9aaa;
+    --border: #243447;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--dark);
+    color: var(--white);
+    font-family: 'Golos Text', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* HERO */
+  .hero {
+    position: relative;
+    padding: 60px 20px 50px;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -80px; left: 50%;
+    transform: translateX(-50%);
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(0,180,180,0.18) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-icon {
+    font-size: 72px;
+    display: block;
+    margin-bottom: 16px;
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .hero h1 {
+    font-family: 'Unbounded', sans-serif;
+    font-size: clamp(22px, 6vw, 36px);
+    font-weight: 800;
+    color: var(--teal);
+    line-height: 1.2;
+    margin-bottom: 10px;
+    letter-spacing: -0.5px;
+  }
+
+  .hero p {
+    color: var(--muted);
+    font-size: 15px;
+    max-width: 320px;
+    margin: 0 auto 28px;
+    line-height: 1.6;
+  }
+
+  .hero-pills {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .pill {
+    background: rgba(0,180,180,0.12);
+    border: 1px solid rgba(0,180,180,0.3);
+    color: var(--teal);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  /* DIVIDER */
+  .divider {
+    width: 60px; height: 3px;
+    background: linear-gradient(90deg, var(--teal), transparent);
+    border-radius: 2px;
+    margin: 0 auto 40px;
+  }
+
+  /* SECTIONS */
+  .section {
+    padding: 0 16px 40px;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  .section-title {
+    font-family: 'Unbounded', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+
+  .card:active { transform: scale(0.98); }
+
+  .card-accent {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    border-radius: 16px 0 0 16px;
+  }
+
+  .card h3 {
+    font-family: 'Unbounded', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    padding-left: 12px;
+  }
+
+  .card p {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.7;
+    padding-left: 12px;
+  }
+
+  /* STEPS */
+  .steps { display: flex; flex-direction: column; gap: 0; }
+
+  .step {
+    display: flex;
+    gap: 16px;
+    position: relative;
+    padding-bottom: 28px;
+  }
+
+  .step:last-child { padding-bottom: 0; }
+
+  .step-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .step-num {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: var(--teal);
+    color: #000;
+    font-family: 'Unbounded', sans-serif;
+    font-size: 14px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 0 20px rgba(0,180,180,0.3);
+  }
+
+  .step-line {
+    width: 2px;
+    flex: 1;
+    background: linear-gradient(to bottom, var(--teal), transparent);
+    margin-top: 8px;
+    min-height: 30px;
+  }
+
+  .step-content {
+    padding-top: 8px;
+    flex: 1;
+  }
+
+  .step-content h3 {
+    font-family: 'Unbounded', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--white);
+    margin-bottom: 6px;
+  }
+
+  .step-content p {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .step-content .code {
+    display: inline-block;
+    background: rgba(0,180,180,0.12);
+    border: 1px solid rgba(0,180,180,0.25);
+    color: var(--teal);
+    padding: 4px 12px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 14px;
+    margin-top: 8px;
+    letter-spacing: 1px;
+  }
+
+  /* CHAT SIMULATION */
+  .chat-box {
+    background: #0d1520;
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+  }
+
+  .chat-header {
+    background: #1a2535;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .chat-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--teal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+
+  .chat-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--white);
+  }
+
+  .chat-status {
+    font-size: 11px;
+    color: var(--green);
+  }
+
+  .chat-messages {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .msg {
+    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg-bot {
+    background: #1e2f42;
+    color: var(--white);
+    border-bottom-left-radius: 4px;
+    align-self: flex-start;
+  }
+
+  .msg-user {
+    background: var(--teal2);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+    align-self: flex-end;
+  }
+
+  .msg-time {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 3px;
+    display: block;
+  }
+
+  /* BUTTONS GRID */
+  .btn-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .btn-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .btn-item .btn-icon { font-size: 22px; }
+  .btn-item .btn-name { font-size: 12px; font-weight: 600; color: var(--white); }
+  .btn-item .btn-desc { font-size: 11px; color: var(--muted); line-height: 1.4; }
+
+  /* TIP BOX */
+  .tip {
+    background: rgba(0,180,180,0.08);
+    border: 1px solid rgba(0,180,180,0.2);
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 13px;
+    color: var(--teal);
+    line-height: 1.6;
+    margin-bottom: 12px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .tip-icon { flex-shrink: 0; font-size: 16px; }
+
+  .warning {
+    background: rgba(245,166,35,0.08);
+    border-color: rgba(245,166,35,0.25);
+    color: var(--gold);
+  }
+
+  /* MEMO */
+  .memo-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .memo-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .memo-num {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Unbounded', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+    color: #000;
+  }
+
+  .memo-text { font-size: 13px; line-height: 1.5; color: var(--white); }
+
+  /* FAQ */
+  .faq-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .faq-item.open { border-color: rgba(0,180,180,0.4); }
+
+  .faq-q {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--white);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .faq-arrow {
+    color: var(--teal);
+    font-size: 16px;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+
+  .faq-item.open .faq-arrow { transform: rotate(180deg); }
+
+  .faq-a {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-top: 10px;
+    display: none;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .faq-item.open .faq-a { display: block; }
+
+  /* FOOTER */
+  footer {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  footer .footer-logo {
+    font-family: 'Unbounded', sans-serif;
+    font-size: 16px;
+    color: var(--teal);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  /* PROGRESS */
+  .progress-bar {
+    background: var(--border);
+    border-radius: 4px;
+    height: 6px;
+    margin: 12px 0 6px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--teal), var(--green));
+    animation: fillBar 1.5s ease forwards;
+  }
+
+  @keyframes fillBar {
+    from { width: 0; }
+  }
+
+  /* NAV */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(15,25,35,0.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 100%;
+  }
+
+  .nav-logo {
+    font-family: 'Unbounded', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--teal);
+    flex: 1;
+  }
+
+  .nav-badge {
+    background: var(--teal);
+    color: #000;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'Unbounded', sans-serif;
+  }
+
+  /* NOTIFICATION */
+  .notif-item {
+    display: flex;
+    gap: 14px;
+    padding: 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin-bottom: 10px;
+    align-items: flex-start;
+  }
+
+  .notif-icon {
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .notif-content h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .notif-content p { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .notif-time { font-size: 11px; color: var(--teal); font-weight: 600; margin-top: 4px; }
+
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-logo">ОКО_КУХНЯ_ТТК</div>
+  <div class="nav-badge">Инструкция</div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <span class="hero-icon">👨‍🍳</span>
+  <h1>Добро пожаловать<br>в цифровую кухню</h1>
+  <p>Всё что нужно повару — поиск ТТК, план заготовок и чек-лист смены — теперь в Telegram</p>
+  <div class="hero-pills">
+    <span class="pill">⚡ Быстро</span>
+    <span class="pill">📱 Удобно</span>
+    <span class="pill">☁️ Всегда доступно</span>
+  </div>
+</div>
+<div class="divider"></div>
+
+<!-- ПЕРВЫЙ ВХОД -->
+<div class="section">
+  <div class="section-title">🚀 Первый вход</div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-left">
+        <div class="step-num">1</div>
+        <div class="step-line"></div>
+      </div>
+      <div class="step-content">
+        <h3>Найдите бота в Telegram</h3>
+        <p>В поиске Telegram введите имя бота (спросите у администратора) и нажмите на него</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-left">
+        <div class="step-num">2</div>
+        <div class="step-line"></div>
+      </div>
+      <div class="step-content">
+        <h3>Напишите /start</h3>
+        <p>Бот попросит ввести пароль для доступа</p>
+        <span class="code">/start</span>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-left">
+        <div class="step-num">3</div>
+        <div class="step-line"></div>
+      </div>
+      <div class="step-content">
+        <h3>Введите пароль</h3>
+        <p>Пароль выдаёт администратор. Введите его точно как сказано</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-left">
+        <div class="step-num" style="background:var(--green)">4</div>
+      </div>
+      <div class="step-content">
+        <h3>Выберите ваш цех</h3>
+        <p>Нажмите на кнопку с названием вашего цеха — бот запомнит вас навсегда</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip" style="margin-top:20px">
+    <span class="tip-icon">💡</span>
+    <span>Пароль вводится только <strong>один раз</strong>! После входа бот вас запоминает навсегда.</span>
+  </div>
+
+  <!-- Chat sim -->
+  <div class="chat-box" style="margin-top:16px">
+    <div class="chat-header">
+      <div class="chat-avatar">🤖</div>
+      <div>
+        <div class="chat-name">ОКО_КУХНЯ_ТТК</div>
+        <div class="chat-status">● онлайн</div>
+      </div>
+    </div>
+    <div class="chat-messages">
+      <div class="msg msg-user">/start<span class="msg-time">✓✓</span></div>
+      <div class="msg msg-bot">🔐 Введите пароль для доступа:<span class="msg-time">сейчас</span></div>
+      <div class="msg msg-user">1234<span class="msg-time">✓✓</span></div>
+      <div class="msg msg-bot">✅ Доступ открыт!<br><br>Выберите ваш цех 👇<span class="msg-time">сейчас</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- КНОПКИ МЕНЮ -->
+<div class="section">
+  <div class="section-title">📱 Главное меню</div>
+
+  <div class="btn-grid">
+    <div class="btn-item">
+      <span class="btn-icon">🔍</span>
+      <span class="btn-name">Поиск ТТК</span>
+      <span class="btn-desc">Найти карту любого блюда или ПФ</span>
+    </div>
+    <div class="btn-item">
+      <span class="btn-icon">🍽</span>
+      <span class="btn-name">Список блюд</span>
+      <span class="btn-desc">Все ТТК по категориям</span>
+    </div>
+    <div class="btn-item">
+      <span class="btn-icon">📋</span>
+      <span class="btn-name">Чек-лист сегодня</span>
+      <span class="btn-desc">Заготовки на сегодня</span>
+    </div>
+    <div class="btn-item">
+      <span class="btn-icon">📝</span>
+      <span class="btn-name">План на завтра</span>
+      <span class="btn-desc">Составить список заготовок</span>
+    </div>
+    <div class="btn-item">
+      <span class="btn-icon">🏁</span>
+      <span class="btn-name">Завершить смену</span>
+      <span class="btn-desc">Отправить отчёт автоматически</span>
+    </div>
+    <div class="btn-item">
+      <span class="btn-icon">👤</span>
+      <span class="btn-name">Мой профиль</span>
+      <span class="btn-desc">Имя, цех, дата входа</span>
+    </div>
+  </div>
+</div>
+
+<!-- ПОИСК ТТК -->
+<div class="section">
+  <div class="section-title">🔍 Поиск ТТК</div>
+
+  <div class="tip">
+    <span class="tip-icon">💡</span>
+    <span>Просто напишите название блюда или часть слова — бот найдёт всё похожее</span>
+  </div>
+
+  <div class="card">
+    <div class="card-accent" style="background:var(--teal)"></div>
+    <h3 style="color:var(--teal)">Примеры поиска</h3>
+    <p>
+      «тар» → найдёт Тар-тар из говядины + Тар-тар ПФ<br>
+      «том» → найдёт Том ям, Том кха<br>
+      «соус» → найдёт все соусы<br>
+      «карп» → найдёт Карпаччо
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="card-accent" style="background:var(--orange)"></div>
+    <h3 style="color:var(--orange)">Что показывает бот</h3>
+    <p>
+      📌 Название блюда<br>
+      🧾 Ингредиенты с граммовкой<br>
+      👨‍🍳 Способ приготовления<br>
+      📎 Примечание (если есть)
+    </p>
+  </div>
+
+  <div class="tip">
+    <span class="tip-icon">✅</span>
+    <span>Если найдено несколько ТТК — бот покажет все по очереди</span>
+  </div>
+</div>
+
+<!-- ПЛАН НА ЗАВТРА -->
+<div class="section">
+  <div class="section-title">📝 План на завтра</div>
+
+  <div class="tip warning">
+    <span class="tip-icon">⏰</span>
+    <span>Каждый вечер в <strong>22:00</strong> бот напомнит составить план. Делайте это до конца смены!</span>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-left">
+        <div class="step-num" style="background:var(--orange)">1</div>
+        <div class="step-line" style="background:linear-gradient(to bottom, var(--orange), transparent)"></div>
+      </div>
+      <div class="step-content">
+        <h3>Нажмите «📝 План на завтра»</h3>
+        <p>Бот покажет полный список заготовок вашего цеха с мин/макс количеством</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-left">
+        <div class="step-num" style="background:var(--orange)">2</div>
+        <div class="step-line" style="background:linear-gradient(to bottom, var(--orange), transparent)"></div>
+      </div>
+      <div class="step-content">
+        <h3>Напишите заготовки</h3>
+        <p>Пишите названия — можно все сразу, каждую с новой строки:</p>
+        <div style="background:#0d1520;border-radius:10px;padding:12px;margin-top:10px;font-size:12px;color:var(--white);line-height:1.8;font-family:monospace">
+          том ям<br>джус<br>куриный бульон<br>мисо масло
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-left">
+        <div class="step-num" style="background:var(--green)">3</div>
+      </div>
+      <div class="step-content">
+        <h3>Нажмите «✅ Отправить план»</h3>
+        <p>План сохранится и уйдёт в группу автоматически. Утром нажмите «📋 Чек-лист сегодня»</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip" style="margin-top:16px">
+    <span class="tip-icon">⚠️</span>
+    <span>Если пишете план после полуночи — бот спросит: на сегодня или на завтра?</span>
+  </div>
+</div>
+
+<!-- ЧЕК-ЛИСТ -->
+<div class="section">
+  <div class="section-title">✅ Чек-лист смены</div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-left">
+        <div class="step-num" style="background:var(--green)">1</div>
+        <div class="step-line" style="background:linear-gradient(to bottom,var(--green),transparent)"></div>
+      </div>
+      <div class="step-content">
+        <h3>Нажмите «📋 Чек-лист сегодня»</h3>
+        <p>Бот покажет список заготовок на сегодня</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-left">
+        <div class="step-num" style="background:var(--green)">2</div>
+        <div class="step-line" style="background:linear-gradient(to bottom,var(--green),transparent)"></div>
+      </div>
+      <div class="step-content">
+        <h3>Отмечайте выполненное</h3>
+        <p>Нажмите на позицию — она отмечается ✅. Нажмите снова — снимает отметку</p>
+        <div style="margin-top:10px">
+          <div class="progress-bar"><div class="progress-fill" style="width:60%"></div></div>
+          <p style="font-size:11px;color:var(--muted)">📊 Прогресс: 7 из 12</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-left">
+        <div class="step-num" style="background:var(--red)">3</div>
+      </div>
+      <div class="step-content">
+        <h3>Завершите смену</h3>
+        <p>Нажмите «🏁 Завершить смену» — отчёт автоматически уйдёт администратору и в группу</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- УВЕДОМЛЕНИЯ -->
+<div class="section">
+  <div class="section-title">🔔 Уведомления</div>
+
+  <div class="notif-item">
+    <div class="notif-icon" style="background:rgba(93,45,142,0.2)">🌙</div>
+    <div class="notif-content">
+      <h4>Напоминание о плане</h4>
+      <p>Каждый вечер бот напомнит составить план заготовок на завтра</p>
+      <div class="notif-time">22:00 ежедневно</div>
+    </div>
+  </div>
+
+  <div class="notif-item">
+    <div class="notif-icon" style="background:rgba(46,204,113,0.15)">✅</div>
+    <div class="notif-content">
+      <h4>Подтверждение плана</h4>
+      <p>После отправки плана придёт подтверждение что он сохранён</p>
+      <div class="notif-time">После отправки</div>
+    </div>
+  </div>
+
+  <div class="notif-item">
+    <div class="notif-icon" style="background:rgba(231,76,60,0.15)">⚠️</div>
+    <div class="notif-content">
+      <h4>Если план не написан</h4>
+      <p>В 01:00 администратор получит уведомление о незаполненном плане</p>
+      <div class="notif-time">01:00 если нет плана</div>
+    </div>
+  </div>
+</div>
+
+<!-- FAQ -->
+<div class="section">
+  <div class="section-title">❓ Частые вопросы</div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">Нужно ли вводить пароль каждый раз? <span class="faq-arrow">▼</span></div>
+    <div class="faq-a">Нет! Пароль вводится только один раз при первом входе. Бот вас запоминает навсегда.</div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">Бот не отвечает — что делать? <span class="faq-arrow">▼</span></div>
+    <div class="faq-a">Проверьте интернет. Если всё равно нет ответа — сообщите администратору.</div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">Написал заготовку — бот не нашёл <span class="faq-arrow">▼</span></div>
+    <div class="faq-a">Проверьте написание. Попробуйте написать часть слова. Если позиции нет в списке — скажите администратору.</div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">Могу ли я изменить свой цех? <span class="faq-arrow">▼</span></div>
+    <div class="faq-a">Нет, цех меняет только администратор. Обратитесь к нему.</div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">Можно ли посмотреть свои данные? <span class="faq-arrow">▼</span></div>
+    <div class="faq-a">Да! Нажмите «👤 Мой профиль» — там ваше имя, цех и дата входа.</div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">Что если я забыл написать план до 22:00? <span class="faq-arrow">▼</span></div>
+    <div class="faq-a">Напишите план в любое время — бот работает круглосуточно. Если пишете после полуночи — бот спросит на какой день.</div>
+  </div>
+</div>
+
+<!-- ПАМЯТКА -->
+<div class="section">
+  <div class="section-title">📌 Памятка</div>
+
+  <div class="memo-list">
+    <div class="memo-item">
+      <div class="memo-num" style="background:var(--teal)">1</div>
+      <div class="memo-text">Первый раз: <strong>/start → пароль → выберите цех</strong></div>
+    </div>
+    <div class="memo-item">
+      <div class="memo-num" style="background:var(--teal)">2</div>
+      <div class="memo-text">Поиск ТТК: напишите название или часть слова</div>
+    </div>
+    <div class="memo-item">
+      <div class="memo-num" style="background:var(--orange)">3</div>
+      <div class="memo-text">Вечер: <strong>«📝 План на завтра»</strong> → заготовки → <strong>«✅ Отправить»</strong></div>
+    </div>
+    <div class="memo-item">
+      <div class="memo-num" style="background:var(--green)">4</div>
+      <div class="memo-text">Утро: <strong>«📋 Чек-лист сегодня»</strong> → отмечайте ✅</div>
+    </div>
+    <div class="memo-item">
+      <div class="memo-num" style="background:var(--red)">5</div>
+      <div class="memo-text">Конец смены: <strong>«🏁 Завершить смену»</strong> → отчёт уйдёт сам</div>
+    </div>
+    <div class="memo-item">
+      <div class="memo-num" style="background:var(--muted)">!</div>
+      <div class="memo-text">Вопросы → сообщите администратору</div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">ОКО_КУХНЯ_ТТК</div>
+  <p>Цифровая система управления кухней</p>
+  <p style="margin-top:8px;font-size:11px">Работает 24/7 · Бесплатно · Telegram</p>
+</footer>
+
+<script>
+function toggleFaq(el) {
+  el.classList.toggle('open');
+}
+
+// Animate elements on scroll
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.style.opacity = '1';
+      entry.target.style.transform = 'translateY(0)';
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.card, .memo-item, .notif-item, .btn-item, .faq-item').forEach(el => {
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(20px)';
+  el.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+  observer.observe(el);
+});
+</script>
+</body>
+</html>
