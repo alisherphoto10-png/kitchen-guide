@@ -21,14 +21,26 @@ project already scaffolded at `remotion/` in this repo.
 remotion/
   src/
     Root.tsx          — registers all <Composition> entries
-    Composition.tsx    — KitchenDeskPromo composition (scenes: logo, features, CTA)
+    Composition.tsx    — KitchenDeskPromo composition (landscape, scenes:
+                          logo, features, CTA)
+    kitchendesk-vertical/ — KitchenDeskVerticalPromo (1080x1920, 60fps, 20s):
+                          multi-scene TransitionSeries promo with app-screen
+                          mockups (План заготовок / Чек-листы / ТТК /
+                          Контроль смены), camera-move-style parallax and
+                          fade transitions. Use this as the reference
+                          pattern for further "premium vertical promo"
+                          requests — reuse its components/ (Background,
+                          Logo, ScreenMock, CheckItem) and theme.ts (colors
+                          #040816 / #22C55E / #F0F4F8) rather than
+                          reinventing them.
     index.css          — Tailwind import (Tailwind v4 is enabled)
   remotion.config.ts   — render config; already points at the sandbox's
                           Chromium build so `remotion render` works offline
   renders/              — rendered MP4s land here (gitignored, kept via .gitkeep)
   package.json          — `npm run dev` (Remotion Studio preview),
                           `npm run render` (renders KitchenDeskPromo to
-                          renders/output.mp4)
+                          renders/output.mp4), `npm run render:vertical-promo`
+                          (renders KitchenDeskVerticalPromo)
 ```
 
 ## Workflow for a text request
@@ -68,3 +80,26 @@ remotion/
 - If that path doesn't exist in a different environment, fall back to
   `npx remotion render --browser-executable=<path-to-chromium>` or let
   Remotion download its own.
+- **Fonts: do not use `@remotion/google-fonts`.** It fetches `.woff2` files
+  from `fonts.gstatic.com` inside the headless browser at render time, and
+  that fails with `ERR_CERT_AUTHORITY_INVALID` — the sandbox's egress proxy
+  re-terminates TLS with its own CA, which the browser's fetch doesn't
+  trust. Instead install fonts as system packages (they're picked up by
+  Chromium via fontconfig, no network needed at render time), e.g.:
+  `apt-get install -y fonts-inter fonts-manrope`, then reference them by
+  family name directly in CSS (`fontFamily: "Inter, sans-serif"`). Check
+  `apt-cache search fonts-<name>` for availability before assuming a font
+  isn't installable.
+- **Smooth multi-scene transitions**: use `@remotion/transitions`
+  (`TransitionSeries`, `linearTiming`, `fade`/`slide` from
+  `@remotion/transitions/fade` etc.) rather than hand-rolled crossfades.
+  Remember each `TransitionSeries.Transition` "eats" `durationInFrames`
+  frames from the total (it overlaps the end of one scene with the start of
+  the next), so if the brief specifies exact per-scene timing, pad each
+  scene's authored duration by the transition length so the final visible
+  runtime still matches spec — see `KitchenDeskVerticalPromo.tsx` for the
+  math (`SCENE_DURATIONS` comment).
+- For vertical/cinematic promos: fake camera movement with
+  `interpolate`-driven `translateY`/`scale`/`rotateX` (perspective tilt) on
+  the content wrapper rather than moving an actual camera — see
+  `Scene2Interface.tsx`'s `ScreenSlot` and `Background.tsx`'s slow drift.
