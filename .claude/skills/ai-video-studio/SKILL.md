@@ -43,6 +43,92 @@ remotion/
                           (renders KitchenDeskVerticalPromo)
 ```
 
+## Audio system (voice-over, music, sfx)
+
+Full pipeline lives in `remotion/src/audio/` — see `remotion/.env.example`
+for the TTS provider config (copy to `.env`, never commit real keys).
+
+```
+remotion/
+  .env.example         — TTS_PROVIDER + OPENAI_*/ELEVENLABS_* var names, no keys
+  public/
+    voice/               — generateVoice() writes TTS output here (gitignored)
+    music/               — drop background tracks here; addBackgroundMusic()
+                            auto-picks whatever it finds (gitignored)
+    sfx/                 — drop effect clips here; addSoundEffects() auto-
+                            connects all of them if called with no args (gitignored)
+    audio/               — reserved for standalone audio exports/mixdowns (gitignored)
+  src/audio/
+    env.ts                — loads .env, isOpenAiConfigured()/isElevenLabsConfigured()
+    tts/openai.ts          — OpenAI /v1/audio/speech call
+    tts/elevenlabs.ts      — ElevenLabs /v1/text-to-speech/{voice} call
+    generateVoice.ts        — generateVoice(text, opts?) -> VoiceAsset (Node-only)
+    library.ts               — addBackgroundMusic(name?), addSoundEffects(names?),
+                                listBackgroundMusic(), listSoundEffects() (Node-only)
+    mixAudio.tsx              — <MixAudio voice music sfx options /> — a React
+                                component you drop into any composition;
+                                ducks music under voice + fades in/out (browser-safe)
+    renderFinalVideo.ts       — renderFinalVideo({compositionId, inputProps,
+                                outputFileName}) — programmatic bundle+render
+                                via @remotion/bundler + @remotion/renderer (Node-only)
+  src/audio-demo/AudioPipelineDemo.tsx — minimal composition wired to <MixAudio>,
+                                used by the smoke-test script below
+  scripts/produce-audio-demo.ts — end-to-end pipeline smoke test (see below)
+```
+
+**Node-only vs browser-safe — do not mix them behind one barrel import.**
+`generateVoice.ts`, `library.ts`, `renderFinalVideo.ts`, `env.ts` use
+`node:fs`/`node:child_process`/`@remotion/bundler` and only ever run in a
+Node script (`tsx scripts/...`), never inside a composition. `mixAudio.tsx`
+is the only one imported by React components/compositions — it only touches
+`remotion`'s own APIs. There is deliberately no shared `src/audio/index.ts`
+re-exporting both sides: a composition importing the Node-only modules would
+try to pull `node:fs` etc. into the webpack browser bundle Remotion renders.
+
+**Workflow to ship a video with narration:**
+1. `generateVoice(text)` (Node script) — picks provider from `TTS_PROVIDER`
+   in `.env` (or `opts.provider`), calls OpenAI/ElevenLabs, saves the mp3 to
+   `public/voice/<slug>.mp3`, returns `{ relativePath, durationInSeconds }`.
+   Caches by filename — reruns without `overwrite: true` reuse the file
+   instead of re-hitting the API.
+2. `addBackgroundMusic()` / `addSoundEffects()` (Node script) — auto-connect
+   whatever's in `public/music/` / `public/sfx/`; pass a filename to pick a
+   specific one.
+3. Pass the resulting `{relativePath, durationInSeconds, startInSeconds}`
+   descriptors as `inputProps` into a composition that renders
+   `<MixAudio voice={[...]} music={{...}} sfx={[...]} />`.
+4. `renderFinalVideo({ compositionId, inputProps })` — bundles + renders to
+   `renders/`. Remotion always mixes every `<Audio>` it finds in the tree
+   into the output's audio track automatically — there's no separate
+   "attach audio" step.
+
+**Ducking/fade math** lives in `buildMusicVolumeFn` (mixAudio.tsx): music
+fades in over `musicFadeInSeconds`, dips to `duckedMusicVolume` under each
+voice segment (ramped over `duckTransitionSeconds`), and fades out over
+`musicFadeOutSeconds` at the end — all tunable via `MixAudio`'s `options`.
+
+**Gotcha: don't wrap the ducked music `<Audio>` in `<Loop>`.** `<Loop>`
+resets the local frame to 0 every cycle, but the volume envelope needs the
+*global* frame (voice segments and the fade-out point are absolute timeline
+positions) — wrapping in `<Loop>` makes the fade-in silently re-trigger on
+every loop restart. `MixAudio` instead repeats the clip manually with one
+`<Sequence>` per repeat and reconstructs the global frame inside each
+repeat's `volume={(localFrame) => fn(localFrame + repeatStartFrame)}`. Keep
+that pattern if you touch this code — verified by rendering
+`AudioPipelineDemo` and sampling `ffmpeg -af volumedetect` across the loop
+boundary (see below).
+
+**No API key in this sandbox on purpose** (per the task that built this:
+don't hardcode credentials). To still prove the pipeline end to end,
+`npm run audio:demo` (`scripts/produce-audio-demo.ts`) falls back to short
+ffmpeg-generated tones wherever a real asset is missing — a placeholder
+narration tone if no TTS key is configured, a placeholder ambient loop if
+`public/music/` is empty, a placeholder click if `public/sfx/` is empty —
+clearly logged as such, then renders `AudioPipelineDemo` and verifies the
+output MP4 has an audio stream via `ffprobe`. Once a real key is in `.env`
+and real tracks are in `public/music/`/`public/sfx/`, the exact same
+functions produce the real thing.
+
 ## Workflow for a text request
 
 1. **Analyze the request** — figure out what the video needs to say (headline,

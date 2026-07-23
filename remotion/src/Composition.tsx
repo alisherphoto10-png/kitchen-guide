@@ -256,7 +256,7 @@ export const PromoVideo: React.FC<KitchenDeskProps> = ({
   return (
     <AbsoluteFill style={{ backgroundColor: "#0b0f0d" }}>
       <GreenGlow />
-      <Sequence from={0} durationInFrames={70}>
+      <Sequence  durationInFrames={70}>
         <LogoScene title={title} tagline={tagline} />
       </Sequence>
       <Sequence from={60} durationInFrames={100}>

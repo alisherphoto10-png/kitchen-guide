@@ -6,16 +6,22 @@
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
+    "@remotion/bundler": "^4.0.496",
     "@remotion/cli": "4.0.496",
+    "@remotion/media-utils": "^4.0.496",
+    "@remotion/renderer": "^4.0.496",
     "@remotion/tailwind-v4": "4.0.496",
     "@remotion/transitions": "^4.0.496",
+    "dotenv": "^17.4.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "remotion": "4.0.496",
-    "tailwindcss": "4.0.0"
+    "tailwindcss": "4.0.0",
+    "tsx": "^4.23.1"
   },
   "devDependencies": {
     "@remotion/eslint-config-flat": "4.0.496",
+    "@types/node": "^26.1.1",
     "@types/react": "19.2.7",
     "@types/web": "0.0.166",
     "eslint": "9.19.0",
@@ -28,6 +34,7 @@
     "render": "remotion render KitchenDeskPromo renders/output.mp4",
     "render:vertical-promo": "remotion render KitchenDeskVerticalPromo renders/kitchendesk-vertical-promo.mp4",
     "render:checklist-reel": "remotion render KitchenDeskChecklistReel renders/kitchendesk-checklist-reel.mp4",
+    "audio:demo": "tsx scripts/produce-audio-demo.ts",
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc"
   },
