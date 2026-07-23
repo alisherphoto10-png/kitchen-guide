@@ -27,6 +27,7 @@
     "build": "remotion bundle",
     "render": "remotion render KitchenDeskPromo renders/output.mp4",
     "render:vertical-promo": "remotion render KitchenDeskVerticalPromo renders/kitchendesk-vertical-promo.mp4",
+    "render:checklist-reel": "remotion render KitchenDeskChecklistReel renders/kitchendesk-checklist-reel.mp4",
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc"
   },
