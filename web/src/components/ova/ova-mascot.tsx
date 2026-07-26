@@ -11,6 +11,7 @@ import {
   useReducedMotion,
 } from "framer-motion";
 import heroSprite from "@/assets/ova/ova-hero.png";
+import { OvaSpeechBubble } from "./ova-speech-bubble";
 
 const BLINK_INTERVAL_MS = 4200;
 const BLINK_INTERVAL_JITTER_MS = 2600;
@@ -111,6 +112,7 @@ export function OvaMascot() {
             transformOrigin: "center",
           }}
         />
+        <OvaSpeechBubble anchorRef={containerRef} />
       </motion.div>
     </motion.div>
   );
