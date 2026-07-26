@@ -2,37 +2,15 @@
 
 import { useEffect, useRef } from "react";
 import Image from "next/image";
-import {
-  motion,
-  useMotionValue,
-  useSpring,
-  useTransform,
-  animate,
-  useReducedMotion,
-} from "framer-motion";
+import { motion, useMotionValue, useSpring, useTransform, useReducedMotion } from "framer-motion";
 import heroSprite from "@/assets/ova/ova-hero.png";
 import { OvaSpeechBubble } from "./ova-speech-bubble";
-
-const BLINK_INTERVAL_MS = 4200;
-const BLINK_INTERVAL_JITTER_MS = 2600;
-const BLINK_DURATION_SECONDS = 0.16;
-
-// Measured directly from the source PNG's pixel data (dark face-screen region,
-// see scratchpad analysis), not eyeballed — a manual guess here was off by ~6%
-// of the image width and caused the blink overlay to sit visibly off the face.
-const FACE_REGION = {
-  left: "40.2%",
-  top: "21.5%",
-  width: "41.7%",
-  height: "17%",
-};
 
 const TILT_RANGE_DEGREES = 6;
 
 export function OvaMascot() {
   const prefersReducedMotion = useReducedMotion();
   const containerRef = useRef<HTMLDivElement>(null);
-  const blinkScaleY = useMotionValue(0);
 
   const pointerX = useMotionValue(0);
   const pointerY = useMotionValue(0);
@@ -54,24 +32,6 @@ export function OvaMascot() {
     window.addEventListener("pointermove", handlePointerMove);
     return () => window.removeEventListener("pointermove", handlePointerMove);
   }, [pointerX, pointerY, prefersReducedMotion]);
-
-  useEffect(() => {
-    if (prefersReducedMotion) return;
-
-    let timeoutId: ReturnType<typeof setTimeout>;
-
-    function scheduleBlink() {
-      const delay = BLINK_INTERVAL_MS + Math.random() * BLINK_INTERVAL_JITTER_MS;
-      timeoutId = setTimeout(async () => {
-        await animate(blinkScaleY, 1, { duration: BLINK_DURATION_SECONDS / 2 });
-        await animate(blinkScaleY, 0, { duration: BLINK_DURATION_SECONDS / 2 });
-        scheduleBlink();
-      }, delay);
-    }
-
-    scheduleBlink();
-    return () => clearTimeout(timeoutId);
-  }, [blinkScaleY, prefersReducedMotion]);
 
   return (
     <motion.div
@@ -102,18 +62,6 @@ export function OvaMascot() {
           priority
           placeholder="blur"
           className="h-[clamp(400px,52vw,620px)] w-auto select-none"
-        />
-        <motion.span
-          aria-hidden
-          className="pointer-events-none absolute rounded-2xl bg-[#05070d]"
-          style={{
-            left: FACE_REGION.left,
-            top: FACE_REGION.top,
-            width: FACE_REGION.width,
-            height: FACE_REGION.height,
-            scaleY: blinkScaleY,
-            transformOrigin: "center",
-          }}
         />
         <OvaSpeechBubble anchorRef={containerRef} />
       </motion.div>
