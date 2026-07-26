@@ -1,6 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
+import Image from "next/image";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   CalendarClock,
   ClipboardList,
@@ -8,9 +9,13 @@ import {
   ShieldCheck,
   BellRing,
   Send,
+  BarChart3,
+  FileText,
+  CheckCircle2,
   type LucideIcon,
 } from "lucide-react";
 import { Badge, Card, Container, Heading, Section, Text } from "@/components/ui";
+import ovaPointing from "@/assets/ova/ova-pointing.png";
 
 interface Feature {
   icon: LucideIcon;
@@ -57,21 +62,98 @@ const FEATURES: Feature[] = [
   },
 ];
 
+interface FloatingChip {
+  icon: LucideIcon;
+  label: string;
+  className: string;
+  floatDuration: number;
+  floatDelay: number;
+}
+
+const FLOATING_CHIPS: FloatingChip[] = [
+  {
+    icon: BarChart3,
+    label: "График дежурств",
+    className: "left-[-30%] top-[2%]",
+    floatDuration: 5.5,
+    floatDelay: 0,
+  },
+  {
+    icon: FileText,
+    label: "ТТК",
+    className: "right-[-24%] top-[-4%]",
+    floatDuration: 4.8,
+    floatDelay: 0.4,
+  },
+  {
+    icon: Scissors,
+    label: "Акты разделки",
+    className: "right-[-32%] top-[52%]",
+    floatDuration: 6.2,
+    floatDelay: 0.9,
+  },
+  {
+    icon: CheckCircle2,
+    label: "Готово",
+    className: "left-[-22%] bottom-[8%]",
+    floatDuration: 5,
+    floatDelay: 1.3,
+  },
+];
+
 const CARD_REVEAL_DISTANCE_PX = 24;
 
 export function Features() {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
-    <Section id="features" spacing="lg" className="bg-bg">
+    <Section id="features" spacing="lg" className="bg-bg overflow-hidden">
       <Container>
-        <div className="text-center">
-          <Badge>Возможности</Badge>
-          <Heading as="h2" level="h1" className="mt-5">
-            Всё, что нужно кухне — в <span className="text-accent">одном месте</span>
-          </Heading>
-          <Text size="lg" className="mx-auto mt-5 max-w-[38ch]">
-            KitchenDesk заменяет тетради, разрозненные чаты и Excel-файлы одной
-            системой, которая знает, кто сегодня дежурит и что происходит на кухне.
-          </Text>
+        <div className="grid items-center gap-16 lg:grid-cols-[0.85fr_1.15fr]">
+          <div className="relative mx-auto w-fit">
+            <div
+              aria-hidden
+              className="absolute inset-0 -z-10 rounded-full bg-[radial-gradient(circle,var(--glow-accent-soft)_0%,transparent_70%)] blur-2xl"
+            />
+            <Image
+              src={ovaPointing}
+              alt="OVA показывает на возможности KitchenDesk"
+              className="h-[clamp(280px,34vw,420px)] w-auto select-none"
+            />
+            {FLOATING_CHIPS.map((chip) => (
+              <motion.div
+                key={chip.label}
+                className={`absolute hidden items-center gap-2 rounded-xl border border-border bg-card/90 px-3.5 py-2.5 text-xs font-medium text-text shadow-[0_16px_32px_-12px_rgba(0,0,0,0.5)] backdrop-blur sm:flex ${chip.className}`}
+                animate={prefersReducedMotion ? undefined : { y: [0, -12, 0] }}
+                transition={
+                  prefersReducedMotion
+                    ? undefined
+                    : {
+                        duration: chip.floatDuration,
+                        delay: chip.floatDelay,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }
+                }
+              >
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                  <chip.icon size={14} strokeWidth={2} />
+                </span>
+                {chip.label}
+              </motion.div>
+            ))}
+          </div>
+
+          <div>
+            <Badge>Возможности</Badge>
+            <Heading as="h2" level="h1" className="mt-5">
+              Всё, что нужно кухне — в <span className="text-accent">одном месте</span>
+            </Heading>
+            <Text size="lg" className="mt-5 max-w-[42ch]">
+              KitchenDesk заменяет тетради, разрозненные чаты и Excel-файлы одной
+              системой, которая знает, кто сегодня дежурит и что происходит на кухне.
+            </Text>
+          </div>
         </div>
 
         <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
