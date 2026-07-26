@@ -84,7 +84,7 @@ export function Hero() {
       />
 
       <Container className="relative z-10" ref={innerRef}>
-        <div className="grid items-center gap-16 lg:grid-cols-[1.05fr_0.95fr] lg:gap-8">
+        <div className="grid items-center gap-16 lg:grid-cols-[0.95fr_1.05fr] lg:gap-8">
           <div>
             <div ref={badgeRef}>
               <Badge icon={<SparklesIcon size={14} />}>AI для вашей кухни</Badge>
@@ -115,7 +115,7 @@ export function Hero() {
             </div>
           </div>
 
-          <div className="relative mx-auto aspect-square w-full max-w-[480px]">
+          <div className="relative mx-auto aspect-square w-full max-w-[620px]">
             <OvaSceneLoader />
             <div className="relative flex h-full items-center justify-center">
               <OvaMascot />
