@@ -18,10 +18,10 @@ const BLINK_INTERVAL_JITTER_MS = 2600;
 const BLINK_DURATION_SECONDS = 0.16;
 
 const FACE_REGION = {
-  left: "30.5%",
-  top: "21.5%",
+  left: "34.5%",
+  top: "23.5%",
   width: "41%",
-  height: "12%",
+  height: "14%",
 };
 
 const TILT_RANGE_DEGREES = 6;
