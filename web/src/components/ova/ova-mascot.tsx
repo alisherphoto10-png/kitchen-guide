@@ -17,11 +17,14 @@ const BLINK_INTERVAL_MS = 4200;
 const BLINK_INTERVAL_JITTER_MS = 2600;
 const BLINK_DURATION_SECONDS = 0.16;
 
+// Measured directly from the source PNG's pixel data (dark face-screen region,
+// see scratchpad analysis), not eyeballed — a manual guess here was off by ~6%
+// of the image width and caused the blink overlay to sit visibly off the face.
 const FACE_REGION = {
-  left: "34.5%",
-  top: "23.5%",
-  width: "41%",
-  height: "14%",
+  left: "40.2%",
+  top: "21.5%",
+  width: "41.7%",
+  height: "17%",
 };
 
 const TILT_RANGE_DEGREES = 6;
@@ -102,7 +105,7 @@ export function OvaMascot() {
         />
         <motion.span
           aria-hidden
-          className="pointer-events-none absolute rounded-[40%] bg-[#05070d]"
+          className="pointer-events-none absolute rounded-2xl bg-[#05070d]"
           style={{
             left: FACE_REGION.left,
             top: FACE_REGION.top,
