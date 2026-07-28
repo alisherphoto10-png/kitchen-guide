@@ -107,8 +107,16 @@ export function Features() {
   const prefersReducedMotion = useReducedMotion();
 
   return (
-    <Section id="features" spacing="lg" className="bg-bg overflow-hidden">
-      <Container>
+    <Section
+      id="features"
+      spacing="lg"
+      className="relative overflow-hidden border-t border-border bg-bg"
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-[linear-gradient(to_bottom,var(--glow-accent-soft),transparent)] opacity-40"
+      />
+      <Container className="relative">
         <div className="grid items-center gap-16 lg:grid-cols-[0.85fr_1.15fr]">
           <div className="relative mx-auto w-fit">
             <div
