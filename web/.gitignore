@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# graphify (local codebase-graph analysis output, not project source)
+/graphify-out/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
