@@ -70,27 +70,46 @@ export function Testimonials() {
   return (
     <Section id="testimonials" spacing="lg" className="border-t border-border bg-bg">
       <Container>
-        <div className="text-center">
-          <div className="relative mx-auto w-fit">
-            <div
-              aria-hidden
-              className="absolute inset-0 -z-10 rounded-full bg-[radial-gradient(circle,var(--glow-accent-soft)_0%,transparent_70%)] blur-2xl"
-            />
-            <Image
-              src={ovaHeart}
-              alt="OVA благодарит кухни, которые уже навели порядок"
-              className="h-[clamp(140px,16vw,200px)] w-auto select-none"
-            />
+        <div className="relative">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-0 z-0 hidden w-[48%] items-center justify-center lg:flex"
+          >
+            <div className="relative w-full">
+              <div
+                aria-hidden
+                className="absolute inset-0 rounded-full bg-[radial-gradient(circle,var(--glow-accent-soft)_0%,transparent_70%)] blur-2xl"
+              />
+              <Image
+                src={ovaHeart}
+                alt=""
+                className="mx-auto h-auto w-full max-w-[380px] select-none"
+              />
+            </div>
           </div>
 
-          <Badge className="mt-4">Отзывы</Badge>
-          <Heading as="h2" level="h1" className="mt-5">
-            Кухни, которые уже <span className="text-accent">навели порядок</span>
-          </Heading>
-          <Text size="lg" className="mx-auto mt-5 max-w-[46ch]">
-            Рестораны, кофейни и кухонные сети, которые заменили тетради и
-            разрозненные чаты одной системой.
-          </Text>
+          <div className="relative z-10 text-center lg:text-right">
+            <div className="relative mx-auto w-fit lg:hidden">
+              <div
+                aria-hidden
+                className="absolute inset-0 -z-10 rounded-full bg-[radial-gradient(circle,var(--glow-accent-soft)_0%,transparent_70%)] blur-2xl"
+              />
+              <Image
+                src={ovaHeart}
+                alt="OVA благодарит кухни, которые уже навели порядок"
+                className="h-[clamp(140px,16vw,200px)] w-auto select-none"
+              />
+            </div>
+
+            <Badge className="mt-4 lg:mt-0">Отзывы</Badge>
+            <Heading as="h2" level="h1" className="mx-auto mt-5 lg:ml-auto lg:mr-0 lg:max-w-[18ch]">
+              Кухни, которые уже <span className="text-accent">навели порядок</span>
+            </Heading>
+            <Text size="lg" className="mx-auto mt-5 max-w-[46ch] lg:ml-auto lg:mr-0">
+              Рестораны, кофейни и кухонные сети, которые заменили тетради и
+              разрозненные чаты одной системой.
+            </Text>
+          </div>
         </div>
 
         <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
