@@ -7,8 +7,10 @@ import { gsap, ScrollTrigger } from "@/lib/gsap";
 import { Badge, Button, ButtonLink, Container, Heading, Text } from "@/components/ui";
 import { OvaMascot } from "@/components/ova/ova-mascot";
 import { OvaSceneLoader } from "@/components/ova/ova-scene-loader";
+import { useRegisterModal } from "@/components/registration/register-modal-context";
 
 export function Hero() {
+  const { open } = useRegisterModal();
   const sectionRef = useRef<HTMLElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const badgeRef = useRef<HTMLDivElement>(null);
@@ -106,7 +108,13 @@ export function Hero() {
             </Text>
 
             <div ref={ctaRef} className="mt-10 flex flex-wrap items-center gap-4">
-              <Button variant="primary" size="lg" icon={<ArrowRight size={18} />} iconPosition="right">
+              <Button
+                variant="primary"
+                size="lg"
+                icon={<ArrowRight size={18} />}
+                iconPosition="right"
+                onClick={open}
+              >
                 Начать бесплатно
               </Button>
               <ButtonLink href="#how-it-works" variant="outline" size="lg" icon={<PlayCircle size={18} />}>

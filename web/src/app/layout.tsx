@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Unbounded, Inter } from "next/font/google";
 import { SmoothScrollProvider } from "@/components/providers/smooth-scroll-provider";
+import { RegisterModalProvider } from "@/components/registration/register-modal-context";
+import { RegisterModal } from "@/components/registration/register-modal";
 import "./globals.css";
 
 const displayFont = Unbounded({
@@ -38,7 +40,10 @@ export default function RootLayout({
       className={`${displayFont.variable} ${bodyFont.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-bg text-text font-body">
-        <SmoothScrollProvider>{children}</SmoothScrollProvider>
+        <RegisterModalProvider>
+          <SmoothScrollProvider>{children}</SmoothScrollProvider>
+          <RegisterModal />
+        </RegisterModalProvider>
       </body>
     </html>
   );
