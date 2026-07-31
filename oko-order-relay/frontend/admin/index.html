@@ -218,9 +218,18 @@
       body: JSON.stringify(config),
     });
     document.getElementById("saveStatus").innerText = res.ok ? "Сохранено ✅" : "Ошибка сохранения";
+    return res.ok;
   }
 
   async function pinButton(venueKey) {
+    // Save first — the backend reads the ID/routing config from disk, so an
+    // unsaved dropdown selection would otherwise look "empty" to it.
+    const saved = await save();
+    if (!saved) {
+      alert("Не удалось сохранить изменения — кнопка не отправлена. Проверьте соединение и попробуйте снова.");
+      return;
+    }
+
     const res = await fetch("/api/oko-order/admin/pin-button", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Admin-Password": password },
