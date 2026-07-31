@@ -1,6 +1,6 @@
 {
   "oblako": {
-    "label": "🥐 Облако",
+    "label": "Облако",
     "sourceGroupChatId": "",
     "sourceThreadId": "",
     "kitchenGroupChatId": "",
@@ -8,7 +8,7 @@
     "items": []
   },
   "myaso": {
-    "label": "🍖 Мясо",
+    "label": "ВМЯСО",
     "sourceGroupChatId": "",
     "sourceThreadId": "",
     "kitchenGroupChatId": "",

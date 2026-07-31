@@ -138,6 +138,11 @@
           <h2>${v.label} <span style="color:#8b949e;font-weight:400">(${venueKey})</span></h2>
 
           <div class="field">
+            <label>Название заведения</label>
+            <input type="text" value="${v.label}" data-venue="${venueKey}" data-field="label" oninput="onManualInput(this)">
+          </div>
+
+          <div class="field">
             <label>Исходная группа (где тема ${v.label})</label>
             ${idFieldHtml(venueKey, "sourceGroupChatId", v.sourceGroupChatId, "group")}
           </div>
@@ -171,7 +176,7 @@
 
           <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
             <button class="secondary" onclick="pinButton('${venueKey}')">Отправить и закрепить кнопку в теме</button>
-            <button class="secondary" onclick="confirmConnection('${venueKey}')">✅ Подтвердить подключение</button>
+            <button class="secondary" onclick="confirmConnection('${venueKey}')">Подтвердить подключение</button>
           </div>
         </div>
       `;
@@ -195,7 +200,7 @@
           <div style="display:flex;align-items:center;gap:8px">
             <strong>${chat.title}</strong>
             <span style="color:#8b949e;font-size:12px">(${chatId})</span>
-            <button class="secondary" style="padding:4px 10px;font-size:12px" onclick="testPing('${chatId}', null, this)">📍 Проверить группу</button>
+            <button class="secondary" style="padding:4px 10px;font-size:12px" onclick="testPing('${chatId}', null, this)">Проверить группу</button>
           </div>
           ${
             topicIds.length
@@ -205,7 +210,7 @@
             <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
               <input type="text" value="${chat.topics[threadId]}" data-chat="${chatId}" data-thread="${threadId}" style="flex:1;padding:6px;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:13px">
               <span style="color:#8b949e;font-size:12px;white-space:nowrap">#${threadId}</span>
-              <button class="secondary" onclick="testPing('${chatId}', '${threadId}', this)">📍 Проверить</button>
+              <button class="secondary" onclick="testPing('${chatId}', '${threadId}', this)">Проверить</button>
               <button class="secondary" onclick="renameTopic('${chatId}', '${threadId}', this)">Сохранить</button>
             </div>
           `,
@@ -231,7 +236,7 @@
     const data = await res.json().catch(() => ({}));
     buttonEl.disabled = false;
     if (res.ok) {
-      buttonEl.innerText = "Отправлено ✅";
+      buttonEl.innerText = "Отправлено";
       setTimeout(() => {
         buttonEl.innerText = original;
       }, 2000);
@@ -254,7 +259,7 @@
       knownChats[chatId].topics[threadId] = name;
       render();
       const original = buttonEl.innerText;
-      buttonEl.innerText = "Сохранено ✅";
+      buttonEl.innerText = "Сохранено";
       setTimeout(() => {
         buttonEl.innerText = original;
       }, 1500);
@@ -310,7 +315,7 @@
       headers: { "Content-Type": "application/json", "X-Admin-Password": password },
       body: JSON.stringify(config),
     });
-    document.getElementById("saveStatus").innerText = res.ok ? "Сохранено ✅" : "Ошибка сохранения";
+    document.getElementById("saveStatus").innerText = res.ok ? "Сохранено" : "Ошибка сохранения";
     return res.ok;
   }
 
@@ -329,7 +334,7 @@
       body: JSON.stringify({ venue: venueKey }),
     });
     const data = await res.json();
-    alert(res.ok ? "Кнопка отправлена и закреплена ✅" : "Ошибка: " + data.error);
+    alert(res.ok ? "Кнопка отправлена и закреплена" : "Ошибка: " + data.error);
   }
 
   async function confirmConnection(venueKey) {
@@ -345,7 +350,7 @@
       body: JSON.stringify({ venue: venueKey }),
     });
     const data = await res.json();
-    alert(res.ok ? "Уведомление отправлено в подключённые темы ✅" : "Ошибка: " + data.error);
+    alert(res.ok ? "Уведомление отправлено в подключённые темы" : "Ошибка: " + data.error);
   }
 
   if (password) {
