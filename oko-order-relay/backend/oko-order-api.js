@@ -90,16 +90,38 @@ function createOkoOrderRouter(bot) {
       return res.status(400).json({ error: "Для этого заведения не настроена поварская группа" });
     }
 
+    const orderMessage = buildOrderMessage(order, venueConfig);
+
     try {
-      const sendOptions = { parse_mode: "HTML" };
+      const kitchenOptions = { parse_mode: "HTML" };
       if (venueConfig.kitchenThreadId) {
-        sendOptions.message_thread_id = Number(venueConfig.kitchenThreadId);
+        kitchenOptions.message_thread_id = Number(venueConfig.kitchenThreadId);
       }
-      await bot.sendMessage(venueConfig.kitchenGroupChatId, buildOrderMessage(order, venueConfig), sendOptions);
-      res.json({ ok: true });
+      await bot.sendMessage(venueConfig.kitchenGroupChatId, orderMessage, kitchenOptions);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: err.message });
     }
+
+    // Best-effort confirmation back in the topic the order was placed from —
+    // a failure here shouldn't fail the request, the order already reached
+    // the kitchen group.
+    if (venueConfig.sourceGroupChatId) {
+      try {
+        const sourceOptions = { parse_mode: "HTML" };
+        if (venueConfig.sourceThreadId) {
+          sourceOptions.message_thread_id = Number(venueConfig.sourceThreadId);
+        }
+        await bot.sendMessage(
+          venueConfig.sourceGroupChatId,
+          `Заказ отправлен\n\n<blockquote>${orderMessage}</blockquote>`,
+          sourceOptions,
+        );
+      } catch {
+        // ignore — the order itself already went through
+      }
+    }
+
+    res.json({ ok: true });
   });
 
   // Admin — full config (routing IDs + items) for both venues.
