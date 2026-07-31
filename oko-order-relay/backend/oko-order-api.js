@@ -29,10 +29,10 @@ function buildOrderMessage(order, venueConfig) {
 
   return [
     `Новый заказ: ${venueConfig.label}`,
-    `На дату: ${order.date}`,
+    `📅 На дату: ${order.date}`,
     "",
     itemsText,
-    order.comment ? `\n${order.comment}` : "",
+    order.comment ? `\n💬 ${order.comment}` : "",
     "",
     order.name ? `Отправил: ${order.name}` : "",
   ]
@@ -124,7 +124,7 @@ function createOkoOrderRouter(bot) {
       const options = {};
       if (threadId) options.message_thread_id = Number(threadId);
       const label = threadId ? `теме с ID ${threadId}` : "этой группе (без темы)";
-      await bot.sendMessage(chatId, `Тест-пинг из админки OKO — если видите это сообщение здесь, значит вы смотрите на ${label}.`, options);
+      await bot.sendMessage(chatId, `🔎 Тест-пинг из админки OKO — если видите это сообщение здесь, значит вы смотрите на ${label}.`, options);
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -157,7 +157,7 @@ function createOkoOrderRouter(bot) {
         if (venueConfig.sourceThreadId) opts.message_thread_id = Number(venueConfig.sourceThreadId);
         await bot.sendMessage(
           venueConfig.sourceGroupChatId,
-          `Эта тема подключена в системе OKO как источник заказов для «${venueConfig.label}».`,
+          `✅ Эта тема подключена в системе OKO как источник заказов для «${venueConfig.label}».`,
           opts,
         );
         notified.push("source");
@@ -167,7 +167,7 @@ function createOkoOrderRouter(bot) {
         if (venueConfig.kitchenThreadId) opts.message_thread_id = Number(venueConfig.kitchenThreadId);
         await bot.sendMessage(
           venueConfig.kitchenGroupChatId,
-          `Эта группа/тема подключена в системе OKO — сюда будут приходить заказы для «${venueConfig.label}».`,
+          `✅ Эта группа/тема подключена в системе OKO — сюда будут приходить заказы для «${venueConfig.label}».`,
           opts,
         );
         notified.push("kitchen");
@@ -201,7 +201,7 @@ function createOkoOrderRouter(bot) {
           inline_keyboard: [
             [
               {
-                text: "Заполнить заказ",
+                text: "📝 Заполнить заказ",
                 url: `${process.env.OKO_ORDER_FORM_URL}?venue=${venue}`,
               },
             ],
@@ -214,7 +214,7 @@ function createOkoOrderRouter(bot) {
 
       const sent = await bot.sendMessage(
         venueConfig.sourceGroupChatId,
-        "Заполните заказ на нужную дату",
+        "Заполните заказ на нужную дату 👇",
         sendOptions,
       );
       await bot.pinChatMessage(venueConfig.sourceGroupChatId, sent.message_id);

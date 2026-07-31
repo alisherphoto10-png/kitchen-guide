@@ -94,9 +94,9 @@ function registerIdCommand(bot) {
     const chatId = msg.chat.id;
     const threadId = msg.message_thread_id;
 
-    const lines = [`ID этого чата: ${chatId}`];
+    const lines = [`🆔 ID этого чата: ${chatId}`];
     if (threadId) {
-      lines.push(`ID этой темы: ${threadId}`);
+      lines.push(`🆔 ID этой темы: ${threadId}`);
     } else {
       lines.push("Это общий поток группы (не отдельная тема).");
     }
