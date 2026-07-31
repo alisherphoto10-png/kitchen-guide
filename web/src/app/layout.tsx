@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { Unbounded, Inter } from "next/font/google";
 import { SmoothScrollProvider } from "@/components/providers/smooth-scroll-provider";
 import { RegisterModalProvider } from "@/components/registration/register-modal-context";
 import { RegisterModal } from "@/components/registration/register-modal";
+import { TelegramAutoRedirect } from "@/components/telegram/telegram-auto-redirect";
 import "./globals.css";
 
 const displayFont = Unbounded({
@@ -40,6 +42,8 @@ export default function RootLayout({
       className={`${displayFont.variable} ${bodyFont.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-bg text-text font-body">
+        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
+        <TelegramAutoRedirect />
         <RegisterModalProvider>
           <SmoothScrollProvider>{children}</SmoothScrollProvider>
           <RegisterModal />
