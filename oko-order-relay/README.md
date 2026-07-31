@@ -34,8 +34,10 @@ MVP с закрытой группой это приемлемо — как и �
 
 ```
 backend/
-  oko-order-api.js            — Express-роутер: items, submit, admin/config, admin/known-chats, admin/pin-button
+  oko-order-api.js            — Express-роутер: items, submit, admin/config, admin/known-chats, admin/pin-button;
+                                  плюс registerOrderAcceptHandler(bot) — обработчик кнопки «✅ Принято»
   oko-known-chats.js           — пассивный сбор ID групп/тем, которые видел бот (для выпадающих списков в админке)
+  oko-order-store.js           — хранит связку сообщений заказа (кухня ↔ источник) для кнопки «✅ Принято»
   data/oko-order-config.example.json — образец конфига (скопировать в oko-order-config.json и заполнить)
 frontend/
   order/index.html             — форма заказа (обычная страница, открывается кнопкой-ссылкой в теме)
@@ -62,6 +64,27 @@ frontend/
 намеренно называется `/okoid`, а не `/id`, чтобы не пересечься с
 какой-нибудь уже существующей командой бота.
 
+### Кнопка «✅ Принято» на кухне
+
+К каждому сообщению с заказом в поварской группе прикреплена кнопка
+«✅ Принято». Любой человек из этой группы может её нажать — доступ уже
+неявно ограничен тем, кто состоит в группе, так же как и с обычным текстовым
+заказом. После нажатия:
+
+- кнопка на сообщении в поварской группе пропадает, вместо неё дописывается
+  «✅ Принято: Имя, ЧЧ:ММ»;
+- в исходную группу (туда, где раньше появлялось «Заказ отправлен») тоже
+  прилетает обновление — «✅ Заказ принят кухней (ЧЧ:ММ)» — так источник видит
+  не просто факт отправки, а что заказ реально увидели;
+- повторное нажатие (второй повар случайно нажал ту же кнопку) не
+  перезаписывает первое — бот в ответ всплывающим окном покажет, кто уже
+  принял и во сколько.
+
+Технически связка «какое сообщение на кухне ↔ какое сообщение в источнике»
+хранится в `backend/data/oko-orders.json` (создаётся автоматически,
+`oko-order-store.js`) — это тот же принцип, что и хранение известных
+групп/тем, только для заказов.
+
 ### Подтверждение подключения
 
 Кнопка «Подтвердить подключение» на карточке заведения в админке сохраняет
@@ -86,10 +109,11 @@ Telegram не даёт ботам метод "покажи все чаты, гд
 
 ### 1. Backend
 
-Скопировать `backend/oko-order-api.js` и `backend/oko-known-chats.js` в папку
-существующего бэкенда бота (туда же, где `bot.js`). Файл
-`oko-order-bot-handler.js` из первой версии больше не используется — если он
-уже скопирован с прошлого деплоя, его require/регистрацию можно убрать.
+Скопировать `backend/oko-order-api.js`, `backend/oko-known-chats.js` и
+`backend/oko-order-store.js` в папку существующего бэкенда бота (туда же, где
+`bot.js`). Файл `oko-order-bot-handler.js` из первой версии больше не
+используется — если он уже скопирован с прошлого деплоя, его
+require/регистрацию можно убрать.
 
 Создать рабочий конфиг рядом с `oko-order-api.js`:
 ```
@@ -107,12 +131,13 @@ OKO_ORDER_FORM_URL=https://kitchendesk.chefplan.ru/oko-order/
 В точке входа бэкенда (там, где создаётся `bot` и монтируется express-app),
 подключить:
 ```js
-const { createOkoOrderRouter } = require("./oko-order-api");
+const { createOkoOrderRouter, registerOrderAcceptHandler } = require("./oko-order-api");
 const { registerChatDiscovery, registerIdCommand } = require("./oko-known-chats");
 
 app.use("/api/oko-order", createOkoOrderRouter(bot));
 registerChatDiscovery(bot);
 registerIdCommand(bot);
+registerOrderAcceptHandler(bot);
 ```
 Если раньше была строка `registerOkoOrderHandler(bot)` (и её require) —
 убрать, она относилась к первой версии на `web_app_data`.
@@ -120,6 +145,12 @@ registerIdCommand(bot);
 `/api/oko-order/submit` ожидает JSON-тело (`express.json()` middleware) —
 почти наверняка уже подключен глобально, раз остальные `/api/*` эндпоинты
 принимают JSON.
+
+**Важно для кнопки «✅ Принято»:** если бот работает через webhook с явно
+заданным `allowed_updates`, убедитесь, что туда входит `callback_query` —
+иначе Telegram не будет присылать боту нажатия на inline-кнопки вообще. При
+обычном long-polling (`bot.startPolling()` без ограничения `allowed_updates`)
+это не проблема — приходят все типы апдейтов по умолчанию.
 
 Перезапустить процесс бота через pm2.
 

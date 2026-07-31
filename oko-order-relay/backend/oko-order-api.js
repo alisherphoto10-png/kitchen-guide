@@ -2,6 +2,13 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const { readKnownChats, renameTopic } = require("./oko-known-chats");
+const { createOrderId, saveOrder, getOrder, markAccepted } = require("./oko-order-store");
+
+const ACCEPT_CALLBACK_PREFIX = "oko_accept:";
+
+function formatTime(ms) {
+  return new Date(ms).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+}
 
 const CONFIG_PATH = path.join(__dirname, "data", "oko-order-config.json");
 
@@ -105,13 +112,20 @@ function createOkoOrderRouter(bot) {
     }
 
     const orderMessage = buildOrderMessage(order, venueConfig);
+    const orderId = createOrderId();
 
+    let kitchenSent;
     try {
-      const kitchenOptions = { parse_mode: "HTML" };
+      const kitchenOptions = {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [[{ text: "✅ Принято", callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}` }]],
+        },
+      };
       if (venueConfig.kitchenThreadId) {
         kitchenOptions.message_thread_id = Number(venueConfig.kitchenThreadId);
       }
-      await bot.sendMessage(venueConfig.kitchenGroupChatId, orderMessage, kitchenOptions);
+      kitchenSent = await bot.sendMessage(venueConfig.kitchenGroupChatId, orderMessage, kitchenOptions);
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -119,13 +133,14 @@ function createOkoOrderRouter(bot) {
     // Best-effort confirmation back in the topic the order was placed from —
     // a failure here shouldn't fail the request, the order already reached
     // the kitchen group.
+    let sourceSent = null;
     if (venueConfig.sourceGroupChatId) {
       try {
         const sourceOptions = { parse_mode: "HTML" };
         if (venueConfig.sourceThreadId) {
           sourceOptions.message_thread_id = Number(venueConfig.sourceThreadId);
         }
-        await bot.sendMessage(
+        sourceSent = await bot.sendMessage(
           venueConfig.sourceGroupChatId,
           `Заказ отправлен\n\n<blockquote>${orderMessage}</blockquote>`,
           sourceOptions,
@@ -134,6 +149,20 @@ function createOkoOrderRouter(bot) {
         // ignore — the order itself already went through
       }
     }
+
+    // Persisted so the "✅ Принято" button (pressed later, from the kitchen
+    // group) knows which two messages to update.
+    saveOrder(orderId, {
+      venue: order.venue,
+      venueLabel: venueConfig.label,
+      orderMessage,
+      kitchenChatId: venueConfig.kitchenGroupChatId,
+      kitchenMessageId: kitchenSent.message_id,
+      sourceChatId: venueConfig.sourceGroupChatId || null,
+      sourceMessageId: sourceSent ? sourceSent.message_id : null,
+      createdAt: Date.now(),
+      accepted: null,
+    });
 
     res.json({ ok: true });
   });
@@ -276,4 +305,65 @@ function createOkoOrderRouter(bot) {
   return router;
 }
 
-module.exports = { createOkoOrderRouter, readConfig, writeConfig, CONFIG_PATH };
+/**
+ * Handles taps on the "✅ Принято" button attached to each order message in
+ * the kitchen group. Any member of that group can tap it — access is already
+ * implicitly limited to whoever the owner added there, same as with a plain
+ * text order today. First tap wins: the kitchen message loses its button and
+ * gets an "accepted by/at" note, and the source group's "Заказ отправлен"
+ * confirmation is updated the same way, so the source side can see the
+ * order wasn't just sent but actually seen.
+ *
+ * @param {import('node-telegram-bot-api')} bot
+ */
+function registerOrderAcceptHandler(bot) {
+  bot.on("callback_query", async (query) => {
+    const data = query.data || "";
+    if (!data.startsWith(ACCEPT_CALLBACK_PREFIX)) return;
+
+    const orderId = data.slice(ACCEPT_CALLBACK_PREFIX.length);
+    const order = getOrder(orderId);
+    if (!order) {
+      return bot.answerCallbackQuery(query.id, { text: "Заказ не найден (возможно, устарел)", show_alert: true }).catch(() => {});
+    }
+
+    if (order.accepted) {
+      const note = `Уже принято: ${order.accepted.name}, ${formatTime(order.accepted.at)}`;
+      return bot.answerCallbackQuery(query.id, { text: note, show_alert: true }).catch(() => {});
+    }
+
+    const acceptedByName = [query.from.first_name, query.from.last_name].filter(Boolean).join(" ");
+    const acceptedAt = Date.now();
+    const updated = markAccepted(orderId, { name: acceptedByName, at: acceptedAt });
+    const noteTime = formatTime(acceptedAt);
+
+    try {
+      await bot.editMessageText(
+        `${order.orderMessage}\n\n✅ <b>Принято:</b> ${escapeHtml(updated.accepted.name)}, ${noteTime}`,
+        {
+          chat_id: order.kitchenChatId,
+          message_id: order.kitchenMessageId,
+          parse_mode: "HTML",
+          reply_markup: { inline_keyboard: [] },
+        },
+      );
+    } catch {
+      // best effort — the accepted state is already persisted either way
+    }
+
+    if (order.sourceChatId && order.sourceMessageId) {
+      try {
+        await bot.editMessageText(
+          `✅ Заказ принят кухней (${noteTime})\n\n<blockquote>${order.orderMessage}</blockquote>`,
+          { chat_id: order.sourceChatId, message_id: order.sourceMessageId, parse_mode: "HTML" },
+        );
+      } catch {
+        // best effort
+      }
+    }
+
+    await bot.answerCallbackQuery(query.id, { text: "Принято!" }).catch(() => {});
+  });
+}
+
+module.exports = { createOkoOrderRouter, registerOrderAcceptHandler, readConfig, writeConfig, CONFIG_PATH };
