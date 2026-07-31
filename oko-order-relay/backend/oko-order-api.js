@@ -39,18 +39,24 @@ function buildOrderMessage(order, venueConfig) {
     .map((item) => `• ${escapeHtml(item.name)} — ${escapeHtml(item.qty)} шт.`)
     .join("\n");
 
-  return [
+  const lines = [
     `<b>Новый заказ — <code>${escapeHtml(venueConfig.label)}</code></b>`,
+    "",
     `📅 Дата: <code>${escapeHtml(order.date)}</code>`,
     "",
     "Позиции:",
     itemsText,
-    order.comment ? `\n💬 Комментарий:\n<code>${escapeHtml(order.comment)}</code>` : "",
-    "",
-    order.name ? `Отправил: ${escapeHtml(order.name)}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ];
+
+  if (order.comment) {
+    lines.push("", "", `💬 Комментарий:`, `<code>${escapeHtml(order.comment)}</code>`);
+  }
+
+  if (order.name) {
+    lines.push("", `Отправил: ${escapeHtml(order.name)}`);
+  }
+
+  return lines.join("\n");
 }
 
 /**
