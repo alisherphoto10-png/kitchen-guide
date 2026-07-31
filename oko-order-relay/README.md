@@ -42,6 +42,21 @@ frontend/
   admin/index.html              — админка (пароль, список позиций, выбор группы/темы из списка или вручную, кнопка pin)
 ```
 
+### Как узнать ID группы/темы, не заходя в админку
+
+Напишите `/okoid` прямо в нужной группе (в конкретной теме, если это тема) —
+бот ответит `chat_id` и `thread_id` этой темы сразу в чате. Команда
+намеренно называется `/okoid`, а не `/id`, чтобы не пересечься с
+какой-нибудь уже существующей командой бота.
+
+### Подтверждение подключения
+
+Кнопка «✅ Подтвердить подключение» на карточке заведения в админке сохраняет
+текущие настройки и сразу шлёт видимое сообщение-подтверждение в исходную
+тему и в поварскую группу/тему («Эта тема подключена как источник заказов
+для «Облако»» и т.п.) — чтобы сразу видеть в самом Telegram, что всё
+связалось правильно, без риска перепутать Облако и Мясо.
+
 ### Про автоматическое определение групп/тем
 
 Telegram не даёт ботам метод "покажи все чаты, где я состою" — это ограничение
@@ -80,10 +95,11 @@ OKO_ORDER_FORM_URL=https://kitchendesk.chefplan.ru/oko-order/
 подключить:
 ```js
 const { createOkoOrderRouter } = require("./oko-order-api");
-const { registerChatDiscovery } = require("./oko-known-chats");
+const { registerChatDiscovery, registerIdCommand } = require("./oko-known-chats");
 
 app.use("/api/oko-order", createOkoOrderRouter(bot));
 registerChatDiscovery(bot);
+registerIdCommand(bot);
 ```
 Если раньше была строка `registerOkoOrderHandler(bot)` (и её require) —
 убрать, она относилась к первой версии на `web_app_data`.

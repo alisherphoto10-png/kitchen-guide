@@ -81,11 +81,39 @@ function registerChatDiscovery(bot) {
   });
 }
 
+/**
+ * /okoid — typed directly in a group/topic, replies with that chat's ID and
+ * (if applicable) the current topic's thread_id, so IDs can be read off
+ * without ever opening the admin page. Namespaced as "okoid" rather than a
+ * bare "/id" to avoid colliding with any existing bot command.
+ *
+ * @param {import('node-telegram-bot-api')} bot
+ */
+function registerIdCommand(bot) {
+  bot.onText(/^\/okoid/, (msg) => {
+    const chatId = msg.chat.id;
+    const threadId = msg.message_thread_id;
+
+    const lines = [`🆔 ID этого чата: ${chatId}`];
+    if (threadId) {
+      lines.push(`🆔 ID этой темы: ${threadId}`);
+    } else {
+      lines.push("Это общий поток группы (не отдельная тема).");
+    }
+
+    const options = { reply_to_message_id: msg.message_id };
+    if (threadId) options.message_thread_id = threadId;
+
+    bot.sendMessage(chatId, lines.join("\n"), options);
+  });
+}
+
 module.exports = {
   readKnownChats,
   recordChat,
   recordTopic,
   renameTopic,
   registerChatDiscovery,
+  registerIdCommand,
   KNOWN_CHATS_PATH,
 };

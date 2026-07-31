@@ -140,6 +140,47 @@ function createOkoOrderRouter(bot) {
     res.json({ ok: true });
   });
 
+  // Admin — after wiring up a venue's source/kitchen IDs, post a visible
+  // confirmation into each so there's no doubt setup actually took.
+  router.post("/admin/confirm-connection", requireAdmin, async (req, res) => {
+    const { venue } = req.body || {};
+    const config = readConfig();
+    const venueConfig = config[venue];
+    if (!venueConfig) {
+      return res.status(404).json({ error: "Неизвестное заведение" });
+    }
+
+    const notified = [];
+    try {
+      if (venueConfig.sourceGroupChatId) {
+        const opts = {};
+        if (venueConfig.sourceThreadId) opts.message_thread_id = Number(venueConfig.sourceThreadId);
+        await bot.sendMessage(
+          venueConfig.sourceGroupChatId,
+          `✅ Эта тема подключена в системе OKO как источник заказов для «${venueConfig.label}».`,
+          opts,
+        );
+        notified.push("source");
+      }
+      if (venueConfig.kitchenGroupChatId) {
+        const opts = {};
+        if (venueConfig.kitchenThreadId) opts.message_thread_id = Number(venueConfig.kitchenThreadId);
+        await bot.sendMessage(
+          venueConfig.kitchenGroupChatId,
+          `✅ Эта группа/тема подключена в системе OKO — сюда будут приходить заказы для «${venueConfig.label}».`,
+          opts,
+        );
+        notified.push("kitchen");
+      }
+      if (!notified.length) {
+        return res.status(400).json({ error: "Не заполнены ни исходная, ни поварская группа" });
+      }
+      res.json({ ok: true, notified });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Admin — (re)send and pin the order-form button in a venue's source topic.
   // Must be a plain `url` button, not `web_app` — Telegram rejects web_app
   // buttons outside private chats (BUTTON_TYPE_INVALID).

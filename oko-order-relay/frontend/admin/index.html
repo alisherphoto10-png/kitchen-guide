@@ -169,8 +169,9 @@
             <button class="secondary" onclick="addItem('${venueKey}')">Добавить</button>
           </div>
 
-          <div style="margin-top:14px">
+          <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
             <button class="secondary" onclick="pinButton('${venueKey}')">Отправить и закрепить кнопку в теме</button>
+            <button class="secondary" onclick="confirmConnection('${venueKey}')">✅ Подтвердить подключение</button>
           </div>
         </div>
       `;
@@ -329,6 +330,22 @@
     });
     const data = await res.json();
     alert(res.ok ? "Кнопка отправлена и закреплена ✅" : "Ошибка: " + data.error);
+  }
+
+  async function confirmConnection(venueKey) {
+    const saved = await save();
+    if (!saved) {
+      alert("Не удалось сохранить изменения — уведомление не отправлено. Попробуйте снова.");
+      return;
+    }
+
+    const res = await fetch("/api/oko-order/admin/confirm-connection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Password": password },
+      body: JSON.stringify({ venue: venueKey }),
+    });
+    const data = await res.json();
+    alert(res.ok ? "Уведомление отправлено в подключённые темы ✅" : "Ошибка: " + data.error);
   }
 
   if (password) {
