@@ -14,11 +14,14 @@
   .field label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 4px; }
   .field select, .field input { width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 14px; }
   .field .manual-link { font-size: 12px; color: #58a6ff; cursor: pointer; margin-top: 4px; display: inline-block; }
-  .items-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .category-group { margin-bottom: 6px; }
+  .category-group-label { font-size: 12px; color: #58a6ff; margin: 10px 0 4px; }
+  .items-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0; }
   .item-chip { background: #21262d; padding: 6px 10px; border-radius: 6px; display: flex; align-items: center; gap: 6px; font-size: 13px; }
   .item-chip button { background: none; border: none; color: #f85149; cursor: pointer; font-size: 14px; padding: 0; }
   .add-item { display: flex; gap: 8px; margin-top: 8px; }
   .add-item input { flex: 1; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; }
+  .add-item input.category { flex: 0 0 40%; }
   button.action { background: #238636; color: white; border: none; border-radius: 6px; padding: 10px 14px; cursor: pointer; font-size: 14px; }
   button.secondary { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 8px 14px; cursor: pointer; font-size: 14px; }
   #gate { max-width: 320px; margin: 80px auto; text-align: center; }
@@ -78,6 +81,45 @@
     document.getElementById("app").style.display = "block";
     render();
     renderKnownChats();
+  }
+
+  function normalizeItem(item) {
+    if (typeof item === "string") return { name: item, category: null };
+    return { name: item.name, category: item.category || null };
+  }
+
+  function renderItemGroups(venueKey, v) {
+    const categoryOrder = [];
+    const byCategory = {};
+    v.items.forEach((rawItem, i) => {
+      const item = normalizeItem(rawItem);
+      const key = item.category || "";
+      if (!byCategory[key]) {
+        byCategory[key] = [];
+        categoryOrder.push(key);
+      }
+      byCategory[key].push({ item, i });
+    });
+    const showHeadings = categoryOrder.length > 1 || (categoryOrder.length === 1 && categoryOrder[0] !== "");
+
+    return categoryOrder
+      .map(
+        (key) => `
+      <div class="category-group">
+        ${showHeadings ? `<div class="category-group-label">${key || "Без категории"}</div>` : ""}
+        <div class="items-list">
+          ${byCategory[key]
+            .map(
+              ({ item, i }) => `
+            <span class="item-chip">${item.name} <button onclick="removeItem('${venueKey}', ${i})">✕</button></span>
+          `,
+            )
+            .join("")}
+        </div>
+      </div>
+    `,
+      )
+      .join("");
   }
 
   function groupOptionsHtml(selectedId) {
@@ -160,17 +202,11 @@
           </div>
 
           <label style="font-size:13px;color:#8b949e">Позиции меню</label>
-          <div class="items-list" id="items-${venueKey}">
-            ${v.items
-              .map(
-                (item, i) => `
-              <span class="item-chip">${item} <button onclick="removeItem('${venueKey}', ${i})">✕</button></span>
-            `,
-              )
-              .join("")}
-          </div>
+          <p class="hint" style="margin:2px 0 6px">Категория — по желанию, чтобы разбить длинный список на разделы в форме заказа. Чтобы поменять категорию позиции — удалите её и добавьте заново.</p>
+          <div id="items-${venueKey}">${renderItemGroups(venueKey, v)}</div>
           <div class="add-item">
             <input type="text" id="newItem-${venueKey}" placeholder="Название позиции" onkeydown="if(event.key==='Enter') addItem('${venueKey}')">
+            <input type="text" class="category" id="newItemCategory-${venueKey}" placeholder="Категория (необязательно)" onkeydown="if(event.key==='Enter') addItem('${venueKey}')">
             <button class="secondary" onclick="addItem('${venueKey}')">Добавить</button>
           </div>
 
@@ -297,10 +333,13 @@
 
   function addItem(venueKey) {
     const input = document.getElementById(`newItem-${venueKey}`);
+    const categoryInput = document.getElementById(`newItemCategory-${venueKey}`);
     const name = input.value.trim();
     if (!name) return;
-    config[venueKey].items.push(name);
+    const category = categoryInput.value.trim();
+    config[venueKey].items.push(category ? { name, category } : name);
     input.value = "";
+    categoryInput.value = "";
     render();
   }
 

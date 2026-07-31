@@ -22,6 +22,14 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// Menu items can be a plain string (legacy, no category) or an
+// { name, category } object — normalized here so the order form always gets
+// a consistent shape regardless of which one is stored in the config.
+function normalizeItem(item) {
+  if (typeof item === "string") return { name: item, category: null };
+  return { name: item.name, category: item.category || null };
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -74,7 +82,7 @@ function createOkoOrderRouter(bot) {
     if (!config[venue]) {
       return res.status(404).json({ error: "Неизвестное заведение" });
     }
-    res.json({ label: config[venue].label, items: config[venue].items });
+    res.json({ label: config[venue].label, items: config[venue].items.map(normalizeItem) });
   });
 
   // Public — the order form submits here directly. Telegram only allows

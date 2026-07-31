@@ -9,6 +9,8 @@
   body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f5; margin: 0; padding: 16px; color: #111; }
   h1 { font-size: 18px; margin: 0 0 16px; }
   label { font-size: 14px; color: #444; }
+  .category-heading { font-size: 13px; font-weight: 600; color: #666; margin: 16px 0 4px; }
+  .category-heading:first-child { margin-top: 6px; }
   .item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e0e0e0; }
   .item .name { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 15px; }
   .qty-stepper { display: flex; align-items: center; gap: 6px; }
@@ -87,19 +89,39 @@
       return;
     }
     list.className = "";
-    list.innerHTML = currentItems
-      .map(
-        (name, i) => `
-      <div class="item">
-        <span class="name"><input type="checkbox" id="check-${i}"> ${name}</span>
-        <div class="qty-stepper" id="qtywrap-${i}" style="display:none">
-          <button type="button" class="qty-btn" onclick="changeQty(${i}, -1)">−</button>
-          <span class="qty-value" id="qty-${i}">1</span>
-          <button type="button" class="qty-btn" onclick="changeQty(${i}, 1)">+</button>
-        </div>
-      </div>
-    `,
-      )
+
+    // Group by category, preserving each item's original index (needed for
+    // the check-i / qty-i element ids and the quantities[] array).
+    const categoryOrder = [];
+    const byCategory = {};
+    currentItems.forEach((item, i) => {
+      const key = item.category || "";
+      if (!byCategory[key]) {
+        byCategory[key] = [];
+        categoryOrder.push(key);
+      }
+      byCategory[key].push(i);
+    });
+    const showHeadings = categoryOrder.length > 1 || (categoryOrder.length === 1 && categoryOrder[0] !== "");
+
+    list.innerHTML = categoryOrder
+      .map((key) => `
+        ${showHeadings ? `<div class="category-heading">${key || "Без категории"}</div>` : ""}
+        ${byCategory[key]
+          .map(
+            (i) => `
+          <div class="item">
+            <span class="name"><input type="checkbox" id="check-${i}"> ${currentItems[i].name}</span>
+            <div class="qty-stepper" id="qtywrap-${i}" style="display:none">
+              <button type="button" class="qty-btn" onclick="changeQty(${i}, -1)">−</button>
+              <span class="qty-value" id="qty-${i}">1</span>
+              <button type="button" class="qty-btn" onclick="changeQty(${i}, 1)">+</button>
+            </div>
+          </div>
+        `,
+          )
+          .join("")}
+      `)
       .join("");
 
     currentItems.forEach((_, i) => {
@@ -116,10 +138,10 @@
 
   function collectItems() {
     const items = [];
-    currentItems.forEach((name, i) => {
+    currentItems.forEach((item, i) => {
       const checked = document.getElementById(`check-${i}`).checked;
       if (checked) {
-        items.push({ name, qty: quantities[i] || 1 });
+        items.push({ name: item.name, qty: quantities[i] || 1 });
       }
     });
     return items;
