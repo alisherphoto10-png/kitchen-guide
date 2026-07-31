@@ -22,19 +22,32 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// Telegram HTML parse_mode: venue name and the date are shown in a fixed-width
+// <code> span, comment gets its own <code> block. Every value that can come
+// from user input (comment, submitter name, item name) is HTML-escaped —
+// otherwise someone typing "<b>" into the form could break the message
+// formatting or inject tags.
 function buildOrderMessage(order, venueConfig) {
   const itemsText = (order.items || [])
-    .map((item) => `• ${item.name} — ${item.qty} шт.`)
+    .map((item) => `• ${escapeHtml(item.name)} — ${escapeHtml(item.qty)} шт.`)
     .join("\n");
 
   return [
-    `Новый заказ: ${venueConfig.label}`,
-    `📅 На дату: ${order.date}`,
+    `<b>Новый заказ — <code>${escapeHtml(venueConfig.label)}</code></b>`,
+    `📅 Дата: <code>${escapeHtml(order.date)}</code>`,
     "",
+    "Позиции:",
     itemsText,
-    order.comment ? `\n💬 ${order.comment}` : "",
+    order.comment ? `\n💬 Комментарий:\n<code>${escapeHtml(order.comment)}</code>` : "",
     "",
-    order.name ? `Отправил: ${order.name}` : "",
+    order.name ? `Отправил: ${escapeHtml(order.name)}` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -78,7 +91,7 @@ function createOkoOrderRouter(bot) {
     }
 
     try {
-      const sendOptions = {};
+      const sendOptions = { parse_mode: "HTML" };
       if (venueConfig.kitchenThreadId) {
         sendOptions.message_thread_id = Number(venueConfig.kitchenThreadId);
       }
