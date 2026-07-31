@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Заказ OKO</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f5; margin: 0; padding: 16px; color: #111; }
+  h1 { font-size: 18px; margin: 0 0 16px; }
+  label { font-size: 14px; color: #444; }
+  .item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e0e0e0; }
+  .item .name { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 15px; }
+  .item input[type="number"] { width: 56px; padding: 6px; border: 1px solid #ccc; border-radius: 6px; }
+  textarea { width: 100%; padding: 8px; margin-top: 12px; border: 1px solid #ccc; border-radius: 6px; font-family: inherit; }
+  input[type="date"] { padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px; }
+  button.submit { width: 100%; padding: 14px; margin-top: 16px; background: #2ea043; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; }
+  .empty { color: #888; font-size: 14px; padding: 16px 0; }
+</style>
+</head>
+<body>
+  <h1 id="venueLabel">Заказ</h1>
+
+  <label>Дата заказа</label><br>
+  <input type="date" id="orderDate"><br><br>
+
+  <label>Позиции</label>
+  <div id="itemsList" class="empty">Загрузка...</div>
+
+  <textarea id="comment" placeholder="Комментарий (необязательно)" rows="3"></textarea>
+  <button class="submit" onclick="submitOrder()">Отправить заказ</button>
+
+<script>
+  Telegram.WebApp.ready();
+  Telegram.WebApp.expand();
+
+  const params = new URLSearchParams(window.location.search);
+  const venue = params.get("venue");
+
+  const dateInput = document.getElementById("orderDate");
+  const tomorrow = new Date(Date.now() + 86400000);
+  dateInput.value = tomorrow.toISOString().split("T")[0];
+
+  let currentItems = [];
+
+  async function loadItems() {
+    if (!venue) {
+      document.getElementById("venueLabel").innerText = "Не указано заведение";
+      return;
+    }
+    try {
+      const res = await fetch(`/api/oko-order/items?venue=${encodeURIComponent(venue)}`);
+      if (!res.ok) {
+        document.getElementById("venueLabel").innerText = "Ошибка загрузки";
+        return;
+      }
+      const data = await res.json();
+      document.getElementById("venueLabel").innerText = data.label;
+      currentItems = data.items;
+      renderItems();
+    } catch {
+      document.getElementById("venueLabel").innerText = "Нет соединения";
+    }
+  }
+
+  function renderItems() {
+    const list = document.getElementById("itemsList");
+    if (!currentItems.length) {
+      list.className = "empty";
+      list.innerText = "Список позиций пуст — обратитесь к администратору.";
+      return;
+    }
+    list.className = "";
+    list.innerHTML = currentItems
+      .map(
+        (name, i) => `
+      <div class="item">
+        <span class="name"><input type="checkbox" id="check-${i}"> ${name}</span>
+        <input type="number" id="qty-${i}" min="1" value="1" disabled>
+      </div>
+    `,
+      )
+      .join("");
+
+    currentItems.forEach((_, i) => {
+      document.getElementById(`check-${i}`).addEventListener("change", (e) => {
+        document.getElementById(`qty-${i}`).disabled = !e.target.checked;
+      });
+    });
+  }
+
+  function collectItems() {
+    const items = [];
+    currentItems.forEach((name, i) => {
+      const checked = document.getElementById(`check-${i}`).checked;
+      if (checked) {
+        const qty = parseInt(document.getElementById(`qty-${i}`).value, 10) || 1;
+        items.push({ name, qty });
+      }
+    });
+    return items;
+  }
+
+  function submitOrder() {
+    const items = collectItems();
+    if (!items.length) {
+      alert("Добавьте хотя бы одну позицию");
+      return;
+    }
+    const payload = {
+      venue: venue,
+      date: dateInput.value,
+      items: items,
+      comment: document.getElementById("comment").value || "",
+    };
+    Telegram.WebApp.sendData(JSON.stringify(payload));
+    Telegram.WebApp.close();
+  }
+
+  loadItems();
+</script>
+</body>
+</html>

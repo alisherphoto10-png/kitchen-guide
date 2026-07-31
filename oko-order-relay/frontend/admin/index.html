@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OKO — админка заказов</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 16px; }
+  h1 { font-size: 20px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .venue { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 4px; }
+  .field input { width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 14px; }
+  .items-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .item-chip { background: #21262d; padding: 6px 10px; border-radius: 6px; display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .item-chip button { background: none; border: none; color: #f85149; cursor: pointer; font-size: 14px; padding: 0; }
+  .add-item { display: flex; gap: 8px; margin-top: 8px; }
+  .add-item input { flex: 1; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; }
+  button.action { background: #238636; color: white; border: none; border-radius: 6px; padding: 10px 14px; cursor: pointer; font-size: 14px; }
+  button.secondary { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 8px 14px; cursor: pointer; font-size: 14px; }
+  #gate { max-width: 320px; margin: 80px auto; text-align: center; }
+  #gate input { width: 100%; padding: 10px; margin: 10px 0; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; }
+  #app { display: none; }
+  .status { font-size: 13px; margin-top: 8px; min-height: 16px; }
+  .save-bar { position: sticky; bottom: 0; background: #0d1117; padding: 12px 0; }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <h2>OKO — вход в админку</h2>
+  <input type="password" id="passwordInput" placeholder="Пароль" onkeydown="if(event.key==='Enter') tryLogin()">
+  <button class="action" onclick="tryLogin()" style="width:100%">Войти</button>
+  <div class="status" id="gateStatus"></div>
+</div>
+
+<div id="app">
+  <h1>OKO — управление заказами</h1>
+  <div id="venues"></div>
+  <div class="save-bar">
+    <button class="action" onclick="save()">Сохранить все изменения</button>
+    <div class="status" id="saveStatus"></div>
+  </div>
+</div>
+
+<script>
+  let password = sessionStorage.getItem("oko_admin_password") || "";
+  let config = null;
+
+  async function tryLogin() {
+    password = document.getElementById("passwordInput").value;
+    const res = await fetch("/api/oko-order/admin/config", {
+      headers: { "X-Admin-Password": password },
+    });
+    if (!res.ok) {
+      document.getElementById("gateStatus").innerText = "Неверный пароль";
+      return;
+    }
+    sessionStorage.setItem("oko_admin_password", password);
+    config = await res.json();
+    document.getElementById("gate").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    render();
+  }
+
+  function render() {
+    const container = document.getElementById("venues");
+    container.innerHTML = Object.keys(config)
+      .map((venueKey) => {
+        const v = config[venueKey];
+        return `
+        <div class="venue">
+          <h2>${v.label} <span style="color:#8b949e;font-weight:400">(${venueKey})</span></h2>
+
+          <div class="field">
+            <label>ID исходной группы (где тема ${v.label})</label>
+            <input data-venue="${venueKey}" data-field="sourceGroupChatId" value="${v.sourceGroupChatId || ""}">
+          </div>
+          <div class="field">
+            <label>ID темы в исходной группе (thread_id)</label>
+            <input data-venue="${venueKey}" data-field="sourceThreadId" value="${v.sourceThreadId || ""}">
+          </div>
+          <div class="field">
+            <label>ID поварской группы (куда прилетит заказ)</label>
+            <input data-venue="${venueKey}" data-field="kitchenGroupChatId" value="${v.kitchenGroupChatId || ""}">
+          </div>
+          <div class="field">
+            <label>ID темы в поварской группе (необязательно)</label>
+            <input data-venue="${venueKey}" data-field="kitchenThreadId" value="${v.kitchenThreadId || ""}">
+          </div>
+
+          <label style="font-size:13px;color:#8b949e">Позиции меню</label>
+          <div class="items-list" id="items-${venueKey}">
+            ${v.items
+              .map(
+                (item, i) => `
+              <span class="item-chip">${item} <button onclick="removeItem('${venueKey}', ${i})">✕</button></span>
+            `,
+              )
+              .join("")}
+          </div>
+          <div class="add-item">
+            <input type="text" id="newItem-${venueKey}" placeholder="Название позиции" onkeydown="if(event.key==='Enter') addItem('${venueKey}')">
+            <button class="secondary" onclick="addItem('${venueKey}')">Добавить</button>
+          </div>
+
+          <div style="margin-top:14px">
+            <button class="secondary" onclick="pinButton('${venueKey}')">Отправить и закрепить кнопку в теме</button>
+          </div>
+        </div>
+      `;
+      })
+      .join("");
+
+    container.querySelectorAll("input[data-field]").forEach((input) => {
+      input.addEventListener("input", (e) => {
+        const venueKey = e.target.dataset.venue;
+        const field = e.target.dataset.field;
+        config[venueKey][field] = e.target.value;
+      });
+    });
+  }
+
+  function addItem(venueKey) {
+    const input = document.getElementById(`newItem-${venueKey}`);
+    const name = input.value.trim();
+    if (!name) return;
+    config[venueKey].items.push(name);
+    input.value = "";
+    render();
+  }
+
+  function removeItem(venueKey, index) {
+    config[venueKey].items.splice(index, 1);
+    render();
+  }
+
+  async function save() {
+    const res = await fetch("/api/oko-order/admin/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Password": password },
+      body: JSON.stringify(config),
+    });
+    document.getElementById("saveStatus").innerText = res.ok ? "Сохранено ✅" : "Ошибка сохранения";
+  }
+
+  async function pinButton(venueKey) {
+    const res = await fetch("/api/oko-order/admin/pin-button", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Password": password },
+      body: JSON.stringify({ venue: venueKey }),
+    });
+    const data = await res.json();
+    alert(res.ok ? "Кнопка отправлена и закреплена ✅" : "Ошибка: " + data.error);
+  }
+
+  if (password) {
+    document.getElementById("passwordInput").value = password;
+    tryLogin();
+  }
+</script>
+</body>
+</html>
