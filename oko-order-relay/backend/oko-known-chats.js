@@ -27,6 +27,31 @@ function recordChat(chatId, title, type) {
   writeKnownChats(chats);
 }
 
+/**
+ * Passively remembers people seen posting in a group — same rationale as
+ * recordChat/recordTopic: Telegram gives bots no way to list a chat's
+ * members, so the only way to offer a "pick a cook to @mention" list in the
+ * admin panel is to remember whoever has actually posted there. Needed
+ * specifically for people without a public @username, where the only way to
+ * @mention them at all is a numeric-id text-mention — which requires having
+ * seen their user id at least once.
+ */
+function recordPerson(chatId, user) {
+  if (!user || user.is_bot) return;
+  const chats = readKnownChats();
+  const key = String(chatId);
+  if (!chats[key]) {
+    chats[key] = { title: key, type: "unknown", topics: {} };
+  }
+  if (!chats[key].people) chats[key].people = {};
+  chats[key].people[String(user.id)] = {
+    firstName: user.first_name || "",
+    lastName: user.last_name || "",
+    username: user.username || null,
+  };
+  writeKnownChats(chats);
+}
+
 function recordTopic(chatId, threadId, name) {
   if (!threadId) return;
   const chats = readKnownChats();
@@ -78,6 +103,7 @@ function registerChatDiscovery(bot) {
       const topicName = msg.forum_topic_created ? msg.forum_topic_created.name : null;
       recordTopic(msg.chat.id, msg.message_thread_id, topicName);
     }
+    recordPerson(msg.chat.id, msg.from);
   });
 }
 
@@ -111,6 +137,7 @@ function registerIdCommand(bot) {
 module.exports = {
   readKnownChats,
   recordChat,
+  recordPerson,
   recordTopic,
   renameTopic,
   registerChatDiscovery,

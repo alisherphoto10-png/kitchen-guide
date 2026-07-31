@@ -122,6 +122,51 @@
       .join("");
   }
 
+  function knownPeopleOptionsHtml(venueKey, v) {
+    const chatId = v.kitchenGroupChatId;
+    const chat = chatId ? knownChats[chatId] : null;
+    const people = chat && chat.people ? chat.people : {};
+    const existingIds = new Set((v.cookMentions || []).filter((m) => m.userId).map((m) => String(m.userId)));
+    return Object.keys(people)
+      .filter((userId) => !existingIds.has(userId))
+      .map((userId) => {
+        const p = people[userId];
+        const label = [p.firstName, p.lastName].filter(Boolean).join(" ") || `ID ${userId}`;
+        const note = p.username ? `@${p.username}` : "без username";
+        return `<option value="${userId}">${label} (${note})</option>`;
+      })
+      .join("");
+  }
+
+  function addMentionFromPick(venueKey) {
+    const select = document.getElementById(`mentionPick-${venueKey}`);
+    const userId = select.value;
+    if (!userId) return;
+    const chatId = config[venueKey].kitchenGroupChatId;
+    const person = knownChats[chatId] && knownChats[chatId].people ? knownChats[chatId].people[userId] : null;
+    if (!person) return;
+    const label = [person.firstName, person.lastName].filter(Boolean).join(" ") || `ID ${userId}`;
+    if (!config[venueKey].cookMentions) config[venueKey].cookMentions = [];
+    config[venueKey].cookMentions.push(
+      person.username ? { label, username: person.username } : { label, userId: Number(userId) },
+    );
+    render();
+  }
+
+  function addMentionByUsername(venueKey) {
+    const input = document.getElementById(`mentionUsername-${venueKey}`);
+    const username = input.value.trim().replace(/^@/, "");
+    if (!username) return;
+    if (!config[venueKey].cookMentions) config[venueKey].cookMentions = [];
+    config[venueKey].cookMentions.push({ label: username, username });
+    render();
+  }
+
+  function removeMention(venueKey, index) {
+    config[venueKey].cookMentions.splice(index, 1);
+    render();
+  }
+
   function groupOptionsHtml(selectedId) {
     const ids = Object.keys(knownChats);
     let options = '<option value="">— выбрать группу —</option>';
@@ -208,6 +253,29 @@
             <input type="text" id="newItem-${venueKey}" placeholder="Название позиции" onkeydown="if(event.key==='Enter') addItem('${venueKey}')">
             <input type="text" class="category" id="newItemCategory-${venueKey}" placeholder="Категория (необязательно)" onkeydown="if(event.key==='Enter') addItem('${venueKey}')">
             <button class="secondary" onclick="addItem('${venueKey}')">Добавить</button>
+          </div>
+
+          <label style="font-size:13px;color:#8b949e;margin-top:14px;display:block">Кого тегать через @ в поварской группе (необязательно)</label>
+          <p class="hint" style="margin:2px 0 6px">Список ниже — те, кого бот уже видел пишущими в поварской группе. Если у человека нет публичного username — тег всё равно сработает по имени, но бот должен был хоть раз увидеть от него сообщение в этой группе.</p>
+          <div class="items-list" id="mentions-${venueKey}">
+            ${(v.cookMentions || [])
+              .map(
+                (m, i) => `
+              <span class="item-chip">${m.username ? "@" + m.username : m.label} <button onclick="removeMention('${venueKey}', ${i})">✕</button></span>
+            `,
+              )
+              .join("")}
+          </div>
+          <div class="add-item">
+            <select id="mentionPick-${venueKey}">
+              <option value="">— выбрать из тех, кого бот видел в поварской группе —</option>
+              ${knownPeopleOptionsHtml(venueKey, v)}
+            </select>
+            <button class="secondary" onclick="addMentionFromPick('${venueKey}')">Добавить</button>
+          </div>
+          <div class="add-item">
+            <input type="text" id="mentionUsername-${venueKey}" placeholder="или впишите @username вручную" onkeydown="if(event.key==='Enter') addMentionByUsername('${venueKey}')">
+            <button class="secondary" onclick="addMentionByUsername('${venueKey}')">Добавить</button>
           </div>
 
           <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">

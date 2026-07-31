@@ -71,6 +71,20 @@ function buildOrderMessage(order, venueConfig) {
     lines.push("", `Отправил: ${escapeHtml(order.name)}`);
   }
 
+  if (venueConfig.cookMentions && venueConfig.cookMentions.length) {
+    // @username mentions work as plain text; people without a public
+    // username are tagged via a tg://user text-mention link instead, which
+    // needs their numeric id (captured earlier by recordPerson()).
+    const mentions = venueConfig.cookMentions
+      .map((m) =>
+        m.username
+          ? `@${m.username}`
+          : `<a href="tg://user?id=${m.userId}">${escapeHtml(m.label || "Повар")}</a>`,
+      )
+      .join(" ");
+    lines.push("", `Поварам: ${mentions}`);
+  }
+
   return lines.join("\n");
 }
 
