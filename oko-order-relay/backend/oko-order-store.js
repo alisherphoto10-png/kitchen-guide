@@ -45,4 +45,40 @@ function markAccepted(orderId, accepted) {
   return order;
 }
 
-module.exports = { createOrderId, saveOrder, getOrder, markAccepted, ORDERS_PATH };
+/**
+ * Same first-tap-wins rule as markAccepted(), but scoped to one category
+ * within the order's per-category breakdown (order.categories[catIndex]).
+ */
+function markCategoryAccepted(orderId, catIndex, accepted) {
+  const orders = readOrders();
+  const order = orders[orderId];
+  if (!order || !order.categories || !order.categories[catIndex]) return null;
+  if (order.categories[catIndex].accepted) return order;
+  order.categories[catIndex].accepted = accepted;
+  writeOrders(orders);
+  return order;
+}
+
+/**
+ * Marks that the "all categories accepted" final message was already sent
+ * to the source group, so a race between near-simultaneous last-category
+ * taps can't send it twice.
+ */
+function markFinalNotified(orderId) {
+  const orders = readOrders();
+  const order = orders[orderId];
+  if (!order) return null;
+  order.finalNotified = true;
+  writeOrders(orders);
+  return order;
+}
+
+module.exports = {
+  createOrderId,
+  saveOrder,
+  getOrder,
+  markAccepted,
+  markCategoryAccepted,
+  markFinalNotified,
+  ORDERS_PATH,
+};

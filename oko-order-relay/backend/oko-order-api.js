@@ -2,7 +2,14 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const { readKnownChats, renameTopic } = require("./oko-known-chats");
-const { createOrderId, saveOrder, getOrder, markAccepted } = require("./oko-order-store");
+const {
+  createOrderId,
+  saveOrder,
+  getOrder,
+  markAccepted,
+  markCategoryAccepted,
+  markFinalNotified,
+} = require("./oko-order-store");
 
 const ACCEPT_CALLBACK_PREFIX = "oko_accept:";
 
@@ -71,21 +78,72 @@ function buildOrderMessage(order, venueConfig) {
     lines.push("", `Отправил: ${escapeHtml(order.name)}`);
   }
 
-  if (venueConfig.cookMentions && venueConfig.cookMentions.length) {
-    // @username mentions work as plain text; people without a public
-    // username are tagged via a tg://user text-mention link instead, which
-    // needs their numeric id (captured earlier by recordPerson()).
-    const mentions = venueConfig.cookMentions
-      .map((m) =>
-        m.username
-          ? `@${m.username}`
-          : `<a href="tg://user?id=${m.userId}">${escapeHtml(m.label || "Повар")}</a>`,
-      )
-      .join(" ");
-    lines.push("", `Поварам: ${mentions}`);
-  }
-
   return lines.join("\n");
+}
+
+// Which categories does this particular order actually touch? Cross-references
+// the ordered item names against the venue's menu (where categories live) —
+// the order payload itself only carries {name, qty}, not category.
+function getOrderCategories(order, venueConfig) {
+  const categoryByName = {};
+  (venueConfig.items || []).forEach((raw) => {
+    const item = normalizeItem(raw);
+    categoryByName[item.name] = item.category;
+  });
+  const categories = new Set();
+  (order.items || []).forEach((orderItem) => {
+    const category = categoryByName[orderItem.name];
+    if (category) categories.add(category);
+  });
+  return categories;
+}
+
+// @username mentions work as plain text; people without a public username
+// are tagged via a tg://user text-mention link instead, which needs their
+// numeric id (captured earlier by recordPerson()).
+function formatMention(cook) {
+  return cook.username
+    ? `@${cook.username}`
+    : `<a href="tg://user?id=${cook.userId}">${escapeHtml(cook.label || "Повар")}</a>`;
+}
+
+// "Поварам: ..." line for the kitchen copy only — only cooks whose category
+// actually appears in this order (plus cooks with no category, who are
+// tagged on every order). Returns null when nobody qualifies, so callers can
+// skip the line entirely instead of appending "Поварам: " with nothing after it.
+function buildCookMentionsLine(order, venueConfig) {
+  if (!venueConfig.cookMentions || !venueConfig.cookMentions.length) return null;
+  const presentCategories = getOrderCategories(order, venueConfig);
+  const relevant = venueConfig.cookMentions.filter((m) => !m.category || presentCategories.has(m.category));
+  if (!relevant.length) return null;
+  return `Поварам: ${relevant.map(formatMention).join(" ")}`;
+}
+
+// Groups this order's category-specific cook mentions by category, only for
+// categories actually present in the order — each group becomes its own
+// "✅ <категория>" accept button, tappable only by its assigned cook(s).
+// Cooks with no category (tagged on every order) don't get their own button
+// — they're a notification-only "Поварам:" mention, not a per-category gate.
+function getCategoryCookGroups(order, venueConfig) {
+  if (!venueConfig.cookMentions || !venueConfig.cookMentions.length) return [];
+  const presentCategories = getOrderCategories(order, venueConfig);
+  const categoryOrder = [];
+  const byCategory = {};
+  venueConfig.cookMentions.forEach((m) => {
+    if (!m.category || !presentCategories.has(m.category)) return;
+    if (!byCategory[m.category]) {
+      byCategory[m.category] = [];
+      categoryOrder.push(m.category);
+    }
+    byCategory[m.category].push(m);
+  });
+  return categoryOrder.map((category) => ({ category, cooks: byCategory[category] }));
+}
+
+function mentionMatchesUser(cook, from) {
+  if (cook.userId && String(cook.userId) === String(from.id)) return true;
+  if (cook.username && from.username && cook.username.toLowerCase() === from.username.toLowerCase()) return true;
+  return false;
 }
 
 /**
@@ -125,21 +183,41 @@ function createOkoOrderRouter(bot) {
       return res.status(400).json({ error: "Для этого заведения не настроена поварская группа" });
     }
 
-    const orderMessage = buildOrderMessage(order, venueConfig);
+    // coreMessage is what the source group sees (in the "Заказ отправлен"
+    // confirmation) — cook mentions are deliberately NOT part of it, they're
+    // only relevant to whoever is in the kitchen group.
+    const coreMessage = buildOrderMessage(order, venueConfig);
+    const mentionsLine = buildCookMentionsLine(order, venueConfig);
+    const kitchenMessage = coreMessage + (mentionsLine ? `\n\n${mentionsLine}` : "");
+    const categoryGroups = getCategoryCookGroups(order, venueConfig);
     const orderId = createOrderId();
+
+    // Two modes: if any category in this order has an assigned cook, each
+    // gets its own accept button (gated to that cook). Otherwise fall back
+    // to a single "✅ Принято" button anyone in the kitchen group can press —
+    // same behaviour as before category-based tagging existed.
+    let inlineKeyboard;
+    let categoriesRecord = null;
+    if (categoryGroups.length) {
+      inlineKeyboard = categoryGroups.map((g, i) => [
+        { text: `✅ ${g.category}`, callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}:${i}` },
+      ]);
+      categoriesRecord = categoryGroups.map((g) => ({
+        name: g.category,
+        cooks: g.cooks.map((c) => ({ label: c.label, username: c.username || null, userId: c.userId || null })),
+        accepted: null,
+      }));
+    } else {
+      inlineKeyboard = [[{ text: "✅ Принято", callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}` }]];
+    }
 
     let kitchenSent;
     try {
-      const kitchenOptions = {
-        parse_mode: "HTML",
-        reply_markup: {
-          inline_keyboard: [[{ text: "✅ Принято", callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}` }]],
-        },
-      };
+      const kitchenOptions = { parse_mode: "HTML", reply_markup: { inline_keyboard: inlineKeyboard } };
       if (venueConfig.kitchenThreadId) {
         kitchenOptions.message_thread_id = Number(venueConfig.kitchenThreadId);
       }
-      kitchenSent = await bot.sendMessage(venueConfig.kitchenGroupChatId, orderMessage, kitchenOptions);
+      kitchenSent = await bot.sendMessage(venueConfig.kitchenGroupChatId, kitchenMessage, kitchenOptions);
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -156,7 +234,7 @@ function createOkoOrderRouter(bot) {
         }
         sourceSent = await bot.sendMessage(
           venueConfig.sourceGroupChatId,
-          `Заказ отправлен\n\n<blockquote>${orderMessage}</blockquote>`,
+          `Заказ отправлен\n\n<blockquote>${coreMessage}</blockquote>`,
           sourceOptions,
         );
       } catch {
@@ -164,18 +242,21 @@ function createOkoOrderRouter(bot) {
       }
     }
 
-    // Persisted so the "✅ Принято" button (pressed later, from the kitchen
-    // group) knows which two messages to update.
+    // Persisted so the "✅ Принято" button(s) (pressed later, from the
+    // kitchen group) know which two messages to update, and — in category
+    // mode — who's actually allowed to press which button.
     saveOrder(orderId, {
       venue: order.venue,
       venueLabel: venueConfig.label,
-      orderMessage,
+      coreMessage,
       kitchenChatId: venueConfig.kitchenGroupChatId,
       kitchenMessageId: kitchenSent.message_id,
       sourceChatId: venueConfig.sourceGroupChatId || null,
       sourceMessageId: sourceSent ? sourceSent.message_id : null,
-      createdAt: Date.now(),
+      categories: categoriesRecord,
       accepted: null,
+      finalNotified: false,
+      createdAt: Date.now(),
     });
 
     res.json({ ok: true });
@@ -320,13 +401,17 @@ function createOkoOrderRouter(bot) {
 }
 
 /**
- * Handles taps on the "✅ Принято" button attached to each order message in
- * the kitchen group. Any member of that group can tap it — access is already
- * implicitly limited to whoever the owner added there, same as with a plain
- * text order today. First tap wins: the kitchen message loses its button and
- * gets an "accepted by/at" note, and the source group's "Заказ отправлен"
- * confirmation is updated the same way, so the source side can see the
- * order wasn't just sent but actually seen.
+ * Handles taps on the "✅ Принято" button(s) attached to each order message
+ * in the kitchen group. Two modes, depending on how the order was saved:
+ *
+ * - Generic (no category-specific cooks configured): one button, anyone in
+ *   the kitchen group can tap it — same as before category tagging existed.
+ * - Category mode: one button per category present in the order that has an
+ *   assigned cook. Only that cook (matched by Telegram id or username) can
+ *   accept it — anyone else gets a private "not for you" alert and nothing
+ *   changes. Once every category button in the order has been accepted, a
+ *   single final confirmation (with a per-category breakdown) is sent to the
+ *   source group — not one message per category, per explicit request.
  *
  * @param {import('node-telegram-bot-api')} bot
  */
@@ -335,49 +420,118 @@ function registerOrderAcceptHandler(bot) {
     const data = query.data || "";
     if (!data.startsWith(ACCEPT_CALLBACK_PREFIX)) return;
 
-    const orderId = data.slice(ACCEPT_CALLBACK_PREFIX.length);
+    const rest = data.slice(ACCEPT_CALLBACK_PREFIX.length);
+    const [orderId, catIndexStr] = rest.split(":");
     const order = getOrder(orderId);
     if (!order) {
       return bot.answerCallbackQuery(query.id, { text: "Заказ не найден (возможно, устарел)", show_alert: true }).catch(() => {});
     }
 
-    if (order.accepted) {
-      const note = `Уже принято: ${order.accepted.name}, ${formatTime(order.accepted.at)}`;
-      return bot.answerCallbackQuery(query.id, { text: note, show_alert: true }).catch(() => {});
+    if (catIndexStr === undefined) {
+      await handleGenericAccept(bot, orderId, order, query);
+      return;
     }
+    await handleCategoryAccept(bot, orderId, order, Number(catIndexStr), query);
+  });
+}
 
-    const acceptedByName = [query.from.first_name, query.from.last_name].filter(Boolean).join(" ");
-    const acceptedAt = Date.now();
-    const updated = markAccepted(orderId, { name: acceptedByName, at: acceptedAt });
-    const noteTime = formatTime(acceptedAt);
+async function handleGenericAccept(bot, orderId, order, query) {
+  if (order.accepted) {
+    const note = `Уже принято: ${order.accepted.name}, ${formatTime(order.accepted.at)}`;
+    return bot.answerCallbackQuery(query.id, { text: note, show_alert: true }).catch(() => {});
+  }
 
+  const acceptedByName = [query.from.first_name, query.from.last_name].filter(Boolean).join(" ");
+  const acceptedAt = Date.now();
+  const updated = markAccepted(orderId, { name: acceptedByName, at: acceptedAt });
+  const noteTime = formatTime(acceptedAt);
+
+  try {
+    await bot.editMessageText(
+      `${order.coreMessage}\n\n✅ <b>Принято:</b> ${escapeHtml(updated.accepted.name)}, ${noteTime}`,
+      {
+        chat_id: order.kitchenChatId,
+        message_id: order.kitchenMessageId,
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: [] },
+      },
+    );
+  } catch {
+    // best effort — the accepted state is already persisted either way
+  }
+
+  if (order.sourceChatId && order.sourceMessageId) {
     try {
       await bot.editMessageText(
-        `${order.orderMessage}\n\n✅ <b>Принято:</b> ${escapeHtml(updated.accepted.name)}, ${noteTime}`,
-        {
-          chat_id: order.kitchenChatId,
-          message_id: order.kitchenMessageId,
-          parse_mode: "HTML",
-          reply_markup: { inline_keyboard: [] },
-        },
+        `✅ Заказ принят кухней (${noteTime})\n\n<blockquote>${order.coreMessage}</blockquote>`,
+        { chat_id: order.sourceChatId, message_id: order.sourceMessageId, parse_mode: "HTML" },
       );
     } catch {
-      // best effort — the accepted state is already persisted either way
+      // best effort
     }
+  }
 
-    if (order.sourceChatId && order.sourceMessageId) {
-      try {
-        await bot.editMessageText(
-          `✅ Заказ принят кухней (${noteTime})\n\n<blockquote>${order.orderMessage}</blockquote>`,
-          { chat_id: order.sourceChatId, message_id: order.sourceMessageId, parse_mode: "HTML" },
-        );
-      } catch {
-        // best effort
-      }
+  await bot.answerCallbackQuery(query.id, { text: "Принято!" }).catch(() => {});
+}
+
+async function handleCategoryAccept(bot, orderId, order, catIndex, query) {
+  const category = order.categories && order.categories[catIndex];
+  if (!category) {
+    return bot.answerCallbackQuery(query.id, { text: "Категория не найдена (возможно, устарела)", show_alert: true }).catch(() => {});
+  }
+
+  if (category.accepted) {
+    const note = `Уже принято: ${category.accepted.name}, ${formatTime(category.accepted.at)}`;
+    return bot.answerCallbackQuery(query.id, { text: note, show_alert: true }).catch(() => {});
+  }
+
+  const authorized = category.cooks.some((cook) => mentionMatchesUser(cook, query.from));
+  if (!authorized) {
+    return bot.answerCallbackQuery(query.id, { text: "Эта кнопка не для вас", show_alert: true }).catch(() => {});
+  }
+
+  const acceptedByName = [query.from.first_name, query.from.last_name].filter(Boolean).join(" ");
+  const acceptedAt = Date.now();
+  const updated = markCategoryAccepted(orderId, catIndex, { name: acceptedByName, at: acceptedAt });
+  if (!updated) {
+    return bot.answerCallbackQuery(query.id, { text: "Не удалось сохранить, попробуйте ещё раз", show_alert: true }).catch(() => {});
+  }
+
+  // Rebuild the whole keyboard: accepted categories show who/when in the
+  // button label, pending ones are untouched — so progress is visible
+  // directly on the message without needing to open it.
+  const inlineKeyboard = updated.categories.map((cat, i) => [
+    {
+      text: cat.accepted ? `✅ ${cat.name} · ${cat.accepted.name}` : `✅ ${cat.name}`,
+      callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}:${i}`,
+    },
+  ]);
+  try {
+    await bot.editMessageReplyMarkup(
+      { inline_keyboard: inlineKeyboard },
+      { chat_id: order.kitchenChatId, message_id: order.kitchenMessageId },
+    );
+  } catch {
+    // best effort — acceptance is already persisted either way
+  }
+
+  const allAccepted = updated.categories.every((cat) => cat.accepted);
+  if (allAccepted && !updated.finalNotified && order.sourceChatId && order.sourceMessageId) {
+    const breakdown = updated.categories
+      .map((cat) => `${escapeHtml(cat.name)} — ${escapeHtml(cat.accepted.name)} (${formatTime(cat.accepted.at)})`)
+      .join("\n");
+    try {
+      await bot.editMessageText(
+        `✅ Заказ принят кухней:\n${breakdown}\n\n<blockquote>${order.coreMessage}</blockquote>`,
+        { chat_id: order.sourceChatId, message_id: order.sourceMessageId, parse_mode: "HTML" },
+      );
+      markFinalNotified(orderId);
+    } catch {
+      // best effort
     }
+  }
 
-    await bot.answerCallbackQuery(query.id, { text: "Принято!" }).catch(() => {});
-  });
+  await bot.answerCallbackQuery(query.id, { text: "Принято!" }).catch(() => {});
 }
 
 module.exports = { createOkoOrderRouter, registerOrderAcceptHandler, readConfig, writeConfig, CONFIG_PATH };
