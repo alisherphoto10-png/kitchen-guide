@@ -1,7 +1,7 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const { readKnownChats } = require("./oko-known-chats");
+const { readKnownChats, renameTopic } = require("./oko-known-chats");
 
 const CONFIG_PATH = path.join(__dirname, "data", "oko-order-config.json");
 
@@ -99,6 +99,17 @@ function createOkoOrderRouter(bot) {
   // complete as whatever activity has happened since discovery was deployed.
   router.get("/admin/known-chats", requireAdmin, (req, res) => {
     res.json(readKnownChats());
+  });
+
+  // Admin — manually label a topic Telegram never gave us a name for
+  // (it only reports a topic's name at creation time).
+  router.post("/admin/known-chats/rename-topic", requireAdmin, (req, res) => {
+    const { chatId, threadId, name } = req.body || {};
+    if (!chatId || !threadId || !name) {
+      return res.status(400).json({ error: "Нужны chatId, threadId и name" });
+    }
+    renameTopic(chatId, threadId, name);
+    res.json({ ok: true });
   });
 
   router.post("/admin/config", requireAdmin, (req, res) => {

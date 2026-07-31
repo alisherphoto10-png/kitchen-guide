@@ -42,6 +42,13 @@
   <h1>OKO — управление заказами</h1>
   <p class="hint">Списки групп/тем заполняются автоматически по мере того, как бот видит там сообщения. Если нужной группы/темы ещё нет в списке — отправьте туда любое сообщение и обновите страницу, либо введите ID вручную.</p>
   <div id="venues"></div>
+
+  <div class="venue">
+    <h2>Известные группы и темы</h2>
+    <p class="hint" style="margin-bottom:10px">Названия тем Telegram отдаёт только в момент их создания — для уже существующих тем видно только номер. Впишите понятное название сами, оно запомнится и появится в выпадающих списках выше.</p>
+    <div id="knownChatsList"></div>
+  </div>
+
   <div class="save-bar">
     <button class="action" onclick="save()">Сохранить все изменения</button>
     <div class="status" id="saveStatus"></div>
@@ -70,6 +77,7 @@
     document.getElementById("gate").style.display = "none";
     document.getElementById("app").style.display = "block";
     render();
+    renderKnownChats();
   }
 
   function groupOptionsHtml(selectedId) {
@@ -168,6 +176,63 @@
       `;
       })
       .join("");
+  }
+
+  function renderKnownChats() {
+    const container = document.getElementById("knownChatsList");
+    const chatIds = Object.keys(knownChats);
+    if (!chatIds.length) {
+      container.innerHTML = '<p class="hint">Пока ни одна группа не обнаружена — отправьте туда сообщение и обновите страницу.</p>';
+      return;
+    }
+    container.innerHTML = chatIds
+      .map((chatId) => {
+        const chat = knownChats[chatId];
+        const topicIds = Object.keys(chat.topics || {});
+        return `
+        <div style="margin-bottom:16px">
+          <div><strong>${chat.title}</strong> <span style="color:#8b949e;font-size:12px">(${chatId})</span></div>
+          ${
+            topicIds.length
+              ? topicIds
+                  .map(
+                    (threadId) => `
+            <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+              <input type="text" value="${chat.topics[threadId]}" data-chat="${chatId}" data-thread="${threadId}" style="flex:1;padding:6px;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:13px">
+              <span style="color:#8b949e;font-size:12px;white-space:nowrap">#${threadId}</span>
+              <button class="secondary" onclick="renameTopic('${chatId}', '${threadId}', this)">Сохранить</button>
+            </div>
+          `,
+                  )
+                  .join("")
+              : '<div class="hint" style="margin:4px 0 0">Тем пока нет</div>'
+          }
+        </div>
+      `;
+      })
+      .join("");
+  }
+
+  async function renameTopic(chatId, threadId, buttonEl) {
+    const input = document.querySelector(`input[data-chat="${chatId}"][data-thread="${threadId}"]`);
+    const name = input.value.trim();
+    if (!name) return;
+    const res = await fetch("/api/oko-order/admin/known-chats/rename-topic", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Password": password },
+      body: JSON.stringify({ chatId, threadId, name }),
+    });
+    if (res.ok) {
+      knownChats[chatId].topics[threadId] = name;
+      render();
+      const original = buttonEl.innerText;
+      buttonEl.innerText = "Сохранено ✅";
+      setTimeout(() => {
+        buttonEl.innerText = original;
+      }, 1500);
+    } else {
+      alert("Не удалось сохранить название темы");
+    }
   }
 
   function onIdSelectChange(selectEl) {

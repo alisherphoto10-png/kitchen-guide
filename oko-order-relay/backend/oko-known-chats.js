@@ -40,6 +40,22 @@ function recordTopic(chatId, threadId, name) {
 }
 
 /**
+ * Explicit admin override — always overwrites, unlike recordTopic() which
+ * only fills in a name when one wasn't already known. Telegram only reports
+ * a topic's real name at the moment it's created, so pre-existing topics
+ * have no way to be discovered automatically; this lets an admin label them.
+ */
+function renameTopic(chatId, threadId, customName) {
+  const chats = readKnownChats();
+  const key = String(chatId);
+  if (!chats[key]) {
+    chats[key] = { title: key, type: "unknown", topics: {} };
+  }
+  chats[key].topics[String(threadId)] = customName;
+  writeKnownChats(chats);
+}
+
+/**
  * Telegram has no "list my chats" API for bots — this is the only way:
  * remember every group/topic the bot has ever seen activity in, going
  * forward. A group/topic only shows up here after at least one message
@@ -65,4 +81,11 @@ function registerChatDiscovery(bot) {
   });
 }
 
-module.exports = { readKnownChats, recordChat, recordTopic, registerChatDiscovery, KNOWN_CHATS_PATH };
+module.exports = {
+  readKnownChats,
+  recordChat,
+  recordTopic,
+  renameTopic,
+  registerChatDiscovery,
+  KNOWN_CHATS_PATH,
+};
