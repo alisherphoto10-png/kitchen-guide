@@ -22,9 +22,28 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function buildOrderMessage(order, venueConfig) {
+  const itemsText = (order.items || [])
+    .map((item) => `• ${item.name} — ${item.qty} шт.`)
+    .join("\n");
+
+  return [
+    `Новый заказ: ${venueConfig.label}`,
+    `📅 На дату: ${order.date}`,
+    "",
+    itemsText,
+    order.comment ? `\n💬 ${order.comment}` : "",
+    "",
+    order.name ? `Отправил: ${order.name}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 /**
  * @param {import('node-telegram-bot-api')} bot existing bot instance, used to
- *   (re)send and pin the "Заполнить заказ" button from the admin page.
+ *   (re)send and pin the "Заполнить заказ" button, and to relay submitted
+ *   orders into the kitchen group.
  */
 function createOkoOrderRouter(bot) {
   const router = express.Router();
@@ -37,6 +56,37 @@ function createOkoOrderRouter(bot) {
       return res.status(404).json({ error: "Неизвестное заведение" });
     }
     res.json({ label: config[venue].label, items: config[venue].items });
+  });
+
+  // Public — the order form submits here directly. Telegram only allows
+  // web_app buttons (and their sendData() bridge) in private chats, not in
+  // groups, so a group-posted button can't rely on that path — the form
+  // instead POSTs straight to the backend, which relays into the kitchen
+  // group itself.
+  router.post("/submit", async (req, res) => {
+    const order = req.body;
+    const config = readConfig();
+    const venueConfig = config[order && order.venue];
+    if (!venueConfig) {
+      return res.status(404).json({ error: "Неизвестное заведение" });
+    }
+    if (!Array.isArray(order.items) || !order.items.length) {
+      return res.status(400).json({ error: "Добавьте хотя бы одну позицию" });
+    }
+    if (!venueConfig.kitchenGroupChatId) {
+      return res.status(400).json({ error: "Для этого заведения не настроена поварская группа" });
+    }
+
+    try {
+      const sendOptions = {};
+      if (venueConfig.kitchenThreadId) {
+        sendOptions.message_thread_id = Number(venueConfig.kitchenThreadId);
+      }
+      await bot.sendMessage(venueConfig.kitchenGroupChatId, buildOrderMessage(order, venueConfig), sendOptions);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Admin — full config (routing IDs + items) for both venues.
@@ -61,6 +111,8 @@ function createOkoOrderRouter(bot) {
   });
 
   // Admin — (re)send and pin the order-form button in a venue's source topic.
+  // Must be a plain `url` button, not `web_app` — Telegram rejects web_app
+  // buttons outside private chats (BUTTON_TYPE_INVALID).
   router.post("/admin/pin-button", requireAdmin, async (req, res) => {
     const { venue } = req.body;
     const config = readConfig();
@@ -79,7 +131,7 @@ function createOkoOrderRouter(bot) {
             [
               {
                 text: "📝 Заполнить заказ",
-                web_app: { url: `${process.env.OKO_ORDER_FORM_URL}?venue=${venue}` },
+                url: `${process.env.OKO_ORDER_FORM_URL}?venue=${venue}`,
               },
             ],
           ],

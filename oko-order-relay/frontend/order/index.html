@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Заказ OKO</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   * { box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f5; margin: 0; padding: 16px; color: #111; }
@@ -13,28 +12,41 @@
   .item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e0e0e0; }
   .item .name { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 15px; }
   .item input[type="number"] { width: 56px; padding: 6px; border: 1px solid #ccc; border-radius: 6px; }
-  textarea { width: 100%; padding: 8px; margin-top: 12px; border: 1px solid #ccc; border-radius: 6px; font-family: inherit; }
-  input[type="date"] { padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px; }
+  input[type="text"], input[type="date"], textarea { width: 100%; padding: 8px; margin-top: 4px; border: 1px solid #ccc; border-radius: 6px; font-family: inherit; }
+  textarea { margin-top: 12px; }
   button.submit { width: 100%; padding: 14px; margin-top: 16px; background: #2ea043; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; }
+  button.submit:disabled { opacity: 0.6; }
   .empty { color: #888; font-size: 14px; padding: 16px 0; }
+  .done { text-align: center; padding: 40px 16px; }
+  .done .check { font-size: 40px; }
+  .error { color: #c0392b; font-size: 14px; margin-top: 10px; }
 </style>
 </head>
 <body>
-  <h1 id="venueLabel">Заказ</h1>
+  <div id="formScreen">
+    <h1 id="venueLabel">Заказ</h1>
 
-  <label>Дата заказа</label><br>
-  <input type="date" id="orderDate"><br><br>
+    <label>Ваше имя</label>
+    <input type="text" id="submitterName" placeholder="Имя">
 
-  <label>Позиции</label>
-  <div id="itemsList" class="empty">Загрузка...</div>
+    <label style="margin-top:12px;display:block">Дата заказа</label>
+    <input type="date" id="orderDate">
 
-  <textarea id="comment" placeholder="Комментарий (необязательно)" rows="3"></textarea>
-  <button class="submit" onclick="submitOrder()">Отправить заказ</button>
+    <label style="margin-top:12px;display:block">Позиции</label>
+    <div id="itemsList" class="empty">Загрузка...</div>
+
+    <textarea id="comment" placeholder="Комментарий (необязательно)" rows="3"></textarea>
+    <div class="error" id="errorText"></div>
+    <button class="submit" id="submitBtn" onclick="submitOrder()">Отправить заказ</button>
+  </div>
+
+  <div id="doneScreen" class="done" style="display:none">
+    <div class="check">✅</div>
+    <h1>Заказ отправлен</h1>
+    <p>Можно закрыть эту страницу.</p>
+  </div>
 
 <script>
-  Telegram.WebApp.ready();
-  Telegram.WebApp.expand();
-
   const params = new URLSearchParams(window.location.search);
   const venue = params.get("venue");
 
@@ -102,20 +114,48 @@
     return items;
   }
 
-  function submitOrder() {
+  async function submitOrder() {
+    const errorEl = document.getElementById("errorText");
+    errorEl.innerText = "";
+
     const items = collectItems();
     if (!items.length) {
-      alert("Добавьте хотя бы одну позицию");
+      errorEl.innerText = "Добавьте хотя бы одну позицию";
       return;
     }
+
     const payload = {
       venue: venue,
+      name: document.getElementById("submitterName").value.trim(),
       date: dateInput.value,
       items: items,
       comment: document.getElementById("comment").value || "",
     };
-    Telegram.WebApp.sendData(JSON.stringify(payload));
-    Telegram.WebApp.close();
+
+    const submitBtn = document.getElementById("submitBtn");
+    submitBtn.disabled = true;
+    submitBtn.innerText = "Отправляем...";
+
+    try {
+      const res = await fetch("/api/oko-order/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        errorEl.innerText = data.error || "Не удалось отправить заказ";
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Отправить заказ";
+        return;
+      }
+      document.getElementById("formScreen").style.display = "none";
+      document.getElementById("doneScreen").style.display = "block";
+    } catch {
+      errorEl.innerText = "Нет соединения. Попробуйте ещё раз.";
+      submitBtn.disabled = false;
+      submitBtn.innerText = "Отправить заказ";
+    }
   }
 
   loadItems();
