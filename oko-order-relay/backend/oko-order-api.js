@@ -112,6 +112,25 @@ function createOkoOrderRouter(bot) {
     res.json({ ok: true });
   });
 
+  // Admin — send a visible test message into a specific chat/topic so the
+  // admin can look in Telegram and see exactly which real topic a numeric
+  // thread_id belongs to, instead of guessing from a bare number.
+  router.post("/admin/test-ping", requireAdmin, async (req, res) => {
+    const { chatId, threadId } = req.body || {};
+    if (!chatId) {
+      return res.status(400).json({ error: "Нужен chatId" });
+    }
+    try {
+      const options = {};
+      if (threadId) options.message_thread_id = Number(threadId);
+      const label = threadId ? `теме с ID ${threadId}` : "этой группе (без темы)";
+      await bot.sendMessage(chatId, `🔎 Тест-пинг из админки OKO — если видите это сообщение здесь, значит вы смотрите на ${label}.`, options);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   router.post("/admin/config", requireAdmin, (req, res) => {
     const next = req.body;
     if (!next || !next.oblako || !next.myaso) {

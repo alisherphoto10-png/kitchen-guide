@@ -191,7 +191,11 @@
         const topicIds = Object.keys(chat.topics || {});
         return `
         <div style="margin-bottom:16px">
-          <div><strong>${chat.title}</strong> <span style="color:#8b949e;font-size:12px">(${chatId})</span></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <strong>${chat.title}</strong>
+            <span style="color:#8b949e;font-size:12px">(${chatId})</span>
+            <button class="secondary" style="padding:4px 10px;font-size:12px" onclick="testPing('${chatId}', null, this)">📍 Проверить группу</button>
+          </div>
           ${
             topicIds.length
               ? topicIds
@@ -200,6 +204,7 @@
             <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
               <input type="text" value="${chat.topics[threadId]}" data-chat="${chatId}" data-thread="${threadId}" style="flex:1;padding:6px;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:13px">
               <span style="color:#8b949e;font-size:12px;white-space:nowrap">#${threadId}</span>
+              <button class="secondary" onclick="testPing('${chatId}', '${threadId}', this)">📍 Проверить</button>
               <button class="secondary" onclick="renameTopic('${chatId}', '${threadId}', this)">Сохранить</button>
             </div>
           `,
@@ -211,6 +216,28 @@
       `;
       })
       .join("");
+  }
+
+  async function testPing(chatId, threadId, buttonEl) {
+    const original = buttonEl.innerText;
+    buttonEl.innerText = "Отправляем...";
+    buttonEl.disabled = true;
+    const res = await fetch("/api/oko-order/admin/test-ping", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Password": password },
+      body: JSON.stringify({ chatId, threadId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    buttonEl.disabled = false;
+    if (res.ok) {
+      buttonEl.innerText = "Отправлено ✅";
+      setTimeout(() => {
+        buttonEl.innerText = original;
+      }, 2000);
+    } else {
+      buttonEl.innerText = original;
+      alert("Ошибка: " + (data.error || "не удалось отправить"));
+    }
   }
 
   async function renameTopic(chatId, threadId, buttonEl) {
