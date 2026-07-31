@@ -12,7 +12,8 @@
   .venue { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
   .field { margin-bottom: 10px; }
   .field label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 4px; }
-  .field input { width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 14px; }
+  .field select, .field input { width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 14px; }
+  .field .manual-link { font-size: 12px; color: #58a6ff; cursor: pointer; margin-top: 4px; display: inline-block; }
   .items-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
   .item-chip { background: #21262d; padding: 6px 10px; border-radius: 6px; display: flex; align-items: center; gap: 6px; font-size: 13px; }
   .item-chip button { background: none; border: none; color: #f85149; cursor: pointer; font-size: 14px; padding: 0; }
@@ -25,6 +26,7 @@
   #app { display: none; }
   .status { font-size: 13px; margin-top: 8px; min-height: 16px; }
   .save-bar { position: sticky; bottom: 0; background: #0d1117; padding: 12px 0; }
+  .hint { font-size: 12px; color: #8b949e; margin-bottom: 16px; }
 </style>
 </head>
 <body>
@@ -38,6 +40,7 @@
 
 <div id="app">
   <h1>OKO — управление заказами</h1>
+  <p class="hint">Списки групп/тем заполняются автоматически по мере того, как бот видит там сообщения. Если нужной группы/темы ещё нет в списке — отправьте туда любое сообщение и обновите страницу, либо введите ID вручную.</p>
   <div id="venues"></div>
   <div class="save-bar">
     <button class="action" onclick="save()">Сохранить все изменения</button>
@@ -48,21 +51,73 @@
 <script>
   let password = sessionStorage.getItem("oko_admin_password") || "";
   let config = null;
+  let knownChats = {};
 
   async function tryLogin() {
     password = document.getElementById("passwordInput").value;
-    const res = await fetch("/api/oko-order/admin/config", {
-      headers: { "X-Admin-Password": password },
-    });
-    if (!res.ok) {
+    const headers = { "X-Admin-Password": password };
+    const [configRes, chatsRes] = await Promise.all([
+      fetch("/api/oko-order/admin/config", { headers }),
+      fetch("/api/oko-order/admin/known-chats", { headers }),
+    ]);
+    if (!configRes.ok) {
       document.getElementById("gateStatus").innerText = "Неверный пароль";
       return;
     }
     sessionStorage.setItem("oko_admin_password", password);
-    config = await res.json();
+    config = await configRes.json();
+    knownChats = chatsRes.ok ? await chatsRes.json() : {};
     document.getElementById("gate").style.display = "none";
     document.getElementById("app").style.display = "block";
     render();
+  }
+
+  function groupOptionsHtml(selectedId) {
+    const ids = Object.keys(knownChats);
+    let options = '<option value="">— выбрать группу —</option>';
+    let selectedFound = false;
+    ids.forEach((id) => {
+      const chat = knownChats[id];
+      const sel = String(selectedId) === String(id) ? "selected" : "";
+      if (sel) selectedFound = true;
+      options += `<option value="${id}" ${sel}>${chat.title} (${id})</option>`;
+    });
+    if (selectedId && !selectedFound) {
+      options += `<option value="${selectedId}" selected>ID ${selectedId} (не из списка)</option>`;
+    }
+    options += '<option value="__manual__">Ввести ID вручную...</option>';
+    return options;
+  }
+
+  function topicOptionsHtml(chatId, selectedThreadId) {
+    const chat = knownChats[chatId];
+    const topics = chat ? chat.topics || {} : {};
+    let options = '<option value="">— без темы / выбрать —</option>';
+    let selectedFound = !selectedThreadId;
+    Object.keys(topics).forEach((threadId) => {
+      const sel = String(selectedThreadId) === String(threadId) ? "selected" : "";
+      if (sel) selectedFound = true;
+      options += `<option value="${threadId}" ${sel}>${topics[threadId]} (#${threadId})</option>`;
+    });
+    if (selectedThreadId && !selectedFound) {
+      options += `<option value="${selectedThreadId}" selected>Тема #${selectedThreadId} (не из списка)</option>`;
+    }
+    options += '<option value="__manual__">Ввести ID вручную...</option>';
+    return options;
+  }
+
+  function idFieldHtml(venueKey, field, currentValue, kind, groupFieldForTopic) {
+    const isTopic = kind === "topic";
+    const options = isTopic
+      ? topicOptionsHtml(config[venueKey][groupFieldForTopic], currentValue)
+      : groupOptionsHtml(currentValue);
+    return `
+      <select data-venue="${venueKey}" data-field="${field}" data-kind="${kind}" ${isTopic ? `data-group-field="${groupFieldForTopic}"` : ""} onchange="onIdSelectChange(this)">
+        ${options}
+      </select>
+      <input type="text" data-venue="${venueKey}" data-field="${field}" data-manual="true" value="${currentValue || ""}"
+        placeholder="ID вручную" style="display:none" oninput="onManualInput(this)">
+    `;
   }
 
   function render() {
@@ -75,20 +130,20 @@
           <h2>${v.label} <span style="color:#8b949e;font-weight:400">(${venueKey})</span></h2>
 
           <div class="field">
-            <label>ID исходной группы (где тема ${v.label})</label>
-            <input data-venue="${venueKey}" data-field="sourceGroupChatId" value="${v.sourceGroupChatId || ""}">
+            <label>Исходная группа (где тема ${v.label})</label>
+            ${idFieldHtml(venueKey, "sourceGroupChatId", v.sourceGroupChatId, "group")}
           </div>
           <div class="field">
-            <label>ID темы в исходной группе (thread_id)</label>
-            <input data-venue="${venueKey}" data-field="sourceThreadId" value="${v.sourceThreadId || ""}">
+            <label>Тема в исходной группе</label>
+            ${idFieldHtml(venueKey, "sourceThreadId", v.sourceThreadId, "topic", "sourceGroupChatId")}
           </div>
           <div class="field">
-            <label>ID поварской группы (куда прилетит заказ)</label>
-            <input data-venue="${venueKey}" data-field="kitchenGroupChatId" value="${v.kitchenGroupChatId || ""}">
+            <label>Поварская группа (куда прилетит заказ)</label>
+            ${idFieldHtml(venueKey, "kitchenGroupChatId", v.kitchenGroupChatId, "group")}
           </div>
           <div class="field">
-            <label>ID темы в поварской группе (необязательно)</label>
-            <input data-venue="${venueKey}" data-field="kitchenThreadId" value="${v.kitchenThreadId || ""}">
+            <label>Тема в поварской группе (необязательно)</label>
+            ${idFieldHtml(venueKey, "kitchenThreadId", v.kitchenThreadId, "topic", "kitchenGroupChatId")}
           </div>
 
           <label style="font-size:13px;color:#8b949e">Позиции меню</label>
@@ -113,14 +168,33 @@
       `;
       })
       .join("");
+  }
 
-    container.querySelectorAll("input[data-field]").forEach((input) => {
-      input.addEventListener("input", (e) => {
-        const venueKey = e.target.dataset.venue;
-        const field = e.target.dataset.field;
-        config[venueKey][field] = e.target.value;
-      });
-    });
+  function onIdSelectChange(selectEl) {
+    const venueKey = selectEl.dataset.venue;
+    const field = selectEl.dataset.field;
+    const kind = selectEl.dataset.kind;
+    const manualInput = selectEl.parentElement.querySelector('input[data-manual="true"]');
+
+    if (selectEl.value === "__manual__") {
+      selectEl.style.display = "none";
+      manualInput.style.display = "block";
+      manualInput.focus();
+      return;
+    }
+
+    config[venueKey][field] = selectEl.value;
+
+    if (kind === "group") {
+      // group changed — dependent topic select needs to refresh its options
+      render();
+    }
+  }
+
+  function onManualInput(inputEl) {
+    const venueKey = inputEl.dataset.venue;
+    const field = inputEl.dataset.field;
+    config[venueKey][field] = inputEl.value;
   }
 
   function addItem(venueKey) {

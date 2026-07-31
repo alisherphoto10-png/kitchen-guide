@@ -1,6 +1,7 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const { readKnownChats } = require("./oko-known-chats");
 
 const CONFIG_PATH = path.join(__dirname, "data", "oko-order-config.json");
 
@@ -41,6 +42,13 @@ function createOkoOrderRouter(bot) {
   // Admin — full config (routing IDs + items) for both venues.
   router.get("/admin/config", requireAdmin, (req, res) => {
     res.json(readConfig());
+  });
+
+  // Admin — groups/topics the bot has seen activity in (for the dropdown
+  // pickers). Telegram has no "list my chats" API, so this is only ever as
+  // complete as whatever activity has happened since discovery was deployed.
+  router.get("/admin/known-chats", requireAdmin, (req, res) => {
+    res.json(readKnownChats());
   });
 
   router.post("/admin/config", requireAdmin, (req, res) => {

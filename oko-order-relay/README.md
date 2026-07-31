@@ -12,20 +12,34 @@
 
 ```
 backend/
-  oko-order-api.js            — Express-роутер (items, admin/config, admin/pin-button)
+  oko-order-api.js            — Express-роутер (items, admin/config, admin/known-chats, admin/pin-button)
   oko-order-bot-handler.js     — обработчик message.web_app_data → сообщение в поварскую группу
+  oko-known-chats.js           — пассивный сбор ID групп/тем, которые видел бот (для выпадающих списков в админке)
   data/oko-order-config.example.json — образец конфига (скопировать в oko-order-config.json и заполнить)
 frontend/
   order/index.html             — форма заказа (открывается кнопкой web_app в теме)
-  admin/index.html              — админка (пароль, список позиций, ID групп/тем, кнопка pin)
+  admin/index.html              — админка (пароль, список позиций, выбор группы/темы из списка или вручную, кнопка pin)
 ```
+
+### Про автоматическое определение групп/тем
+
+Telegram не даёт ботам метод "покажи все чаты, где я состою" — это ограничение
+самого API, не наше. Поэтому `oko-known-chats.js` работает по-другому: бот
+запоминает каждую группу/тему, как только видит там любую активность
+(`my_chat_member` при добавлении бота, и любое сообщение с `message_thread_id`).
+Список пополняется само собой по мере обычной жизни бота — группа/тема
+появится в выпадающем списке админки только после того, как там произойдёт
+хоть какое-то событие уже ПОСЛЕ деплоя этого кода. Если нужной группы пока
+нет в списке — отправьте туда любое сообщение и обновите админку, либо
+выберите в селекте «Ввести ID вручную...».
 
 ## Шаги деплоя
 
 ### 1. Backend
 
-Скопировать `backend/oko-order-api.js` и `backend/oko-order-bot-handler.js` в
-папку существующего бэкенда бота (туда же, где `bot.js`).
+Скопировать `backend/oko-order-api.js`, `backend/oko-order-bot-handler.js` и
+`backend/oko-known-chats.js` в папку существующего бэкенда бота (туда же, где
+`bot.js`).
 
 Создать рабочий конфиг рядом с `oko-order-api.js`:
 ```
@@ -45,9 +59,11 @@ OKO_ORDER_FORM_URL=https://kitchendesk.chefplan.ru/oko-order/
 ```js
 const { createOkoOrderRouter } = require("./oko-order-api");
 const { registerOkoOrderHandler } = require("./oko-order-bot-handler");
+const { registerChatDiscovery } = require("./oko-known-chats");
 
 app.use("/api/oko-order", createOkoOrderRouter(bot));
 registerOkoOrderHandler(bot);
+registerChatDiscovery(bot);
 ```
 (Порядок регистрации `bot.on('message', ...)` относительно других обработчиков
 сообщений не важен — обработчик сам выходит через `return`, если это не
