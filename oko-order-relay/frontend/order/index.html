@@ -11,7 +11,10 @@
   label { font-size: 14px; color: #444; }
   .item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e0e0e0; }
   .item .name { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 15px; }
-  .item input[type="number"] { width: 56px; padding: 6px; border: 1px solid #ccc; border-radius: 6px; }
+  .qty-stepper { display: flex; align-items: center; gap: 6px; }
+  .qty-btn { width: 34px; height: 34px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font-size: 20px; line-height: 1; display: flex; align-items: center; justify-content: center; color: #111; touch-action: manipulation; }
+  .qty-btn:active { background: #eee; }
+  .qty-value { min-width: 22px; text-align: center; font-size: 15px; font-variant-numeric: tabular-nums; }
   input[type="text"], input[type="date"], textarea { width: 100%; padding: 8px; margin-top: 4px; border: 1px solid #ccc; border-radius: 6px; font-family: inherit; }
   textarea { margin-top: 12px; }
   button.submit { width: 100%; padding: 14px; margin-top: 16px; background: #2ea043; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; }
@@ -53,6 +56,7 @@
   dateInput.value = tomorrow.toISOString().split("T")[0];
 
   let currentItems = [];
+  let quantities = [];
 
   async function loadItems() {
     if (!venue) {
@@ -68,6 +72,7 @@
       const data = await res.json();
       document.getElementById("venueLabel").innerText = data.label;
       currentItems = data.items;
+      quantities = currentItems.map(() => 1);
       renderItems();
     } catch {
       document.getElementById("venueLabel").innerText = "Нет соединения";
@@ -87,7 +92,11 @@
         (name, i) => `
       <div class="item">
         <span class="name"><input type="checkbox" id="check-${i}"> ${name}</span>
-        <input type="number" id="qty-${i}" min="1" value="1" disabled>
+        <div class="qty-stepper" id="qtywrap-${i}" style="display:none">
+          <button type="button" class="qty-btn" onclick="changeQty(${i}, -1)">−</button>
+          <span class="qty-value" id="qty-${i}">1</span>
+          <button type="button" class="qty-btn" onclick="changeQty(${i}, 1)">+</button>
+        </div>
       </div>
     `,
       )
@@ -95,9 +104,14 @@
 
     currentItems.forEach((_, i) => {
       document.getElementById(`check-${i}`).addEventListener("change", (e) => {
-        document.getElementById(`qty-${i}`).disabled = !e.target.checked;
+        document.getElementById(`qtywrap-${i}`).style.display = e.target.checked ? "flex" : "none";
       });
     });
+  }
+
+  function changeQty(i, delta) {
+    quantities[i] = Math.max(1, (quantities[i] || 1) + delta);
+    document.getElementById(`qty-${i}`).innerText = quantities[i];
   }
 
   function collectItems() {
@@ -105,8 +119,7 @@
     currentItems.forEach((name, i) => {
       const checked = document.getElementById(`check-${i}`).checked;
       if (checked) {
-        const qty = parseInt(document.getElementById(`qty-${i}`).value, 10) || 1;
-        items.push({ name, qty });
+        items.push({ name, qty: quantities[i] || 1 });
       }
     });
     return items;
