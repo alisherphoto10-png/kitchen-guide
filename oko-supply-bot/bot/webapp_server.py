@@ -14,6 +14,9 @@
   PUT    /api/catalog/suppliers/{idx} — изменить поставщика (переименование
                                          каскадно обновляет supplier у товаров)
   DELETE /api/catalog/suppliers/{idx} — удалить поставщика вместе с его товарами
+  GET    /api/chats                  — последние диалоги Telethon-клиента
+                                        (id, имя, тип) для выбора chat_id
+                                        прямо в карточке поставщика
 
 Один процесс держит один долгоживущий авторизованный TelegramClient —
 логиниться заново не нужно, session уже создана (см. README).
@@ -54,6 +57,18 @@ async def index(request: web.Request) -> web.FileResponse:
 @routes.get("/api/catalog")
 async def api_catalog(request: web.Request) -> web.Response:
     return web.json_response(load_catalog())
+
+
+@routes.get("/api/chats")
+async def api_chats(request: web.Request) -> web.Response:
+    """Последние диалоги Telethon-клиента — чтобы выбрать chat_id из формы,
+    не вызывая list_chats.py в терминале."""
+    client = request.app["tg_client"]
+    chats = []
+    async for dialog in client.iter_dialogs(limit=50):
+        kind = "группа" if dialog.is_group else ("канал" if dialog.is_channel else "личный чат")
+        chats.append({"id": dialog.id, "name": dialog.name, "type": kind})
+    return web.json_response(chats)
 
 
 @routes.post("/api/order")

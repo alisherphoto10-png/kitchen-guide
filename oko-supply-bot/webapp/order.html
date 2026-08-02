@@ -332,6 +332,7 @@
       <div class="card-field">
         <label>Chat ID (если уже есть чат в Telegram)</label>
         <input id="supChatId" type="text" placeholder="например 5593095944 или -100…">
+        <button type="button" class="add-row-btn" style="width:100%;margin:8px 0 0;" onclick="openChatPicker()">Выбрать из чатов Telegram</button>
       </div>
       <div class="card-field">
         <label>Товары поставщика</label>
@@ -341,6 +342,22 @@
       <button class="save-card" onclick="saveSupplierCard()">Сохранить</button>
       <button class="delete-card" onclick="deleteSupplierCard()">Удалить поставщика</button>
     </main>
+  </div>
+
+  <!-- SCREEN 7: chat picker -->
+  <div class="screen" id="screen-chat-picker">
+    <header>
+      <div class="back-row" onclick="showScreen('screen-supplier-card')">← Назад к поставщику</div>
+      <h1>Выбрать чат</h1>
+      <div class="sub">Последние диалоги и группы из твоего Telegram</div>
+    </header>
+    <div class="search-wrap">
+      <div class="search-box">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="chatSearch" type="text" placeholder="Найти чат...">
+      </div>
+    </div>
+    <main id="chatPickerList"></main>
   </div>
 
 </div>
@@ -820,6 +837,50 @@ async function deleteSupplierCard(){
   editingSupplierIdx = null;
   await refreshCatalog();
   showCatalogEdit();
+}
+
+// ---- Chat picker (screen 7) ----
+
+let chatPickerData = [];
+
+async function openChatPicker(){
+  showScreen("screen-chat-picker");
+  document.getElementById("chatSearch").value = "";
+  document.getElementById("chatPickerList").innerHTML = '<div class="empty-hint">Загрузка чатов…</div>';
+  try{
+    const res = await fetch("/api/chats");
+    chatPickerData = await res.json();
+    renderChatPicker();
+  } catch(err){
+    document.getElementById("chatPickerList").innerHTML = '<div class="empty-hint">Не удалось загрузить чаты</div>';
+  }
+}
+
+function renderChatPicker(filter=""){
+  const list = document.getElementById("chatPickerList");
+  const f = filter.trim().toLowerCase();
+  const filtered = chatPickerData.filter(c => c.name.toLowerCase().includes(f));
+  if(filtered.length === 0){
+    list.innerHTML = '<div class="empty-hint">Ничего не найдено</div>';
+    return;
+  }
+  const icon = {"группа": "👥", "канал": "📢", "личный чат": "👤"};
+  list.innerHTML = filtered.map(c => `
+    <div class="cat-row" onclick="pickChat(${c.id})">
+      <div class="cat-thumb placeholder">${icon[c.type] || "💬"}</div>
+      <div class="cat-row-text">
+        <div class="cat-row-name">${c.name}</div>
+        <div class="cat-row-sub">${c.type} · ${c.id}</div>
+      </div>
+    </div>
+  `).join("");
+}
+
+document.getElementById("chatSearch").addEventListener("input", e => renderChatPicker(e.target.value));
+
+function pickChat(id){
+  document.getElementById("supChatId").value = id;
+  showScreen("screen-supplier-card");
 }
 
 refreshCatalog();
