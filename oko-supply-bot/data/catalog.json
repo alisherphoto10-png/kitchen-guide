@@ -1,15 +1,185 @@
 {
   "suppliers": [
     {
-      "name": "Тестовый поставщик 1",
+      "name": "Новагрин",
       "phone": "",
       "telegram": "",
+      "note": "",
       "chat_id": null
     },
     {
-      "name": "Тестовый поставщик 2",
+      "name": "New Team (доброе деревенское утро)",
+      "phone": "+998 97 115 15 13",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Allmakon",
+      "phone": "+998 90 927 15 68",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Barra group pro",
+      "phone": "+998 91 003 09 00",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Казбиф",
+      "phone": "+998 91 785 03 00",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Parkent gold chicken",
+      "phone": "+998 97 134 00 43",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Afsona makon",
+      "phone": "+998 94 777 09 41",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Simoff",
+      "phone": "+998 94 711 91 11",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Aura trade 18",
+      "phone": "+998 90 132 57 00",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Golden fish group",
+      "phone": "+998 95 151 68 00",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "La maree",
+      "phone": "+998 90 949 00 49",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Balton trading",
+      "phone": "+998 93 590 05 62",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Ecocoal energy",
+      "phone": "+998 97 759 71 88",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Horeca distribution",
+      "phone": "+998 99 766 40 48",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Oli castello",
+      "phone": "",
+      "telegram": "@olicastellouz",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Без названия (грибы эноки)",
+      "phone": "+998 99 313 33 11",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Без названия (сливочное масло)",
+      "phone": "+998 90 121 07 70",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Заказ соусов",
+      "phone": "+998 97 115 70 10",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Рыбное местечко",
       "phone": "",
       "telegram": "",
+      "note": "Группа",
+      "chat_id": null
+    },
+    {
+      "name": "Без названия (батат)",
+      "phone": "+998 97 037 90 00",
+      "telegram": "",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Инвентис",
+      "phone": "",
+      "telegram": "",
+      "note": "Группа",
+      "chat_id": null
+    },
+    {
+      "name": "Juicy garden",
+      "phone": "",
+      "telegram": "",
+      "note": "Группа",
+      "chat_id": null
+    },
+    {
+      "name": "Принт торт",
+      "phone": "",
+      "telegram": "@printortuz",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Без названия (шоколад)",
+      "phone": "",
+      "telegram": "@katy_g7",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Без названия (салями)",
+      "phone": "",
+      "telegram": "@Katya2891",
+      "note": "",
+      "chat_id": null
+    },
+    {
+      "name": "Без названия (зефир)",
+      "phone": "+998 99 188 99 00",
+      "telegram": "",
+      "note": "",
       "chat_id": null
     }
   ],
@@ -17,19 +187,415 @@
     {
       "name": "Романо",
       "unit": "кг",
-      "supplier": "Тестовый поставщик 1",
+      "supplier": "Новагрин",
       "photo": null
     },
     {
-      "name": "Шпинат",
+      "name": "шпинат",
       "unit": "кг",
-      "supplier": "Тестовый поставщик 1",
+      "supplier": "Новагрин",
       "photo": null
     },
     {
-      "name": "Креветки",
+      "name": "Греческий йогурт",
       "unit": "кг",
-      "supplier": "Тестовый поставщик 2",
+      "supplier": "New Team (доброе деревенское утро)",
+      "photo": null
+    },
+    {
+      "name": "моцарелла для пиццы",
+      "unit": "кг",
+      "supplier": "New Team (доброе деревенское утро)",
+      "photo": null
+    },
+    {
+      "name": "сметана",
+      "unit": "кг",
+      "supplier": "New Team (доброе деревенское утро)",
+      "photo": null
+    },
+    {
+      "name": "сыр лабне",
+      "unit": "кг",
+      "supplier": "New Team (доброе деревенское утро)",
+      "photo": null
+    },
+    {
+      "name": "Картофель фри с кожурой",
+      "unit": "кг",
+      "supplier": "Allmakon",
+      "photo": null
+    },
+    {
+      "name": "картофель фри решетки",
+      "unit": "кг",
+      "supplier": "Allmakon",
+      "photo": null
+    },
+    {
+      "name": "фритюрное масло",
+      "unit": "л",
+      "supplier": "Allmakon",
+      "photo": null
+    },
+    {
+      "name": "кетчуп Heinz",
+      "unit": "шт",
+      "supplier": "Allmakon",
+      "photo": null
+    },
+    {
+      "name": "горчичный соус Heinz",
+      "unit": "шт",
+      "supplier": "Allmakon",
+      "photo": null
+    },
+    {
+      "name": "Рибай Мираторг",
+      "unit": "кг",
+      "supplier": "Barra group pro",
+      "photo": null
+    },
+    {
+      "name": "фарш Рибай Мираторг",
+      "unit": "кг",
+      "supplier": "Barra group pro",
+      "photo": null
+    },
+    {
+      "name": "Стейк мачете (скёрт)",
+      "unit": "кг",
+      "supplier": "Казбиф",
+      "photo": null
+    },
+    {
+      "name": "Куриные яйца",
+      "unit": "шт",
+      "supplier": "Parkent gold chicken",
+      "photo": null
+    },
+    {
+      "name": "Сливки President",
+      "unit": "л",
+      "supplier": "Afsona makon",
+      "photo": null
+    },
+    {
+      "name": "Молоко Nestle 3,2%",
+      "unit": "л",
+      "supplier": "Afsona makon",
+      "photo": null
+    },
+    {
+      "name": "Сыр страчателла",
+      "unit": "кг",
+      "supplier": "Simoff",
+      "photo": null
+    },
+    {
+      "name": "Мутти пилатти",
+      "unit": "шт",
+      "supplier": "Aura trade 18",
+      "photo": null
+    },
+    {
+      "name": "паста казаречче",
+      "unit": "кг",
+      "supplier": "Aura trade 18",
+      "photo": null
+    },
+    {
+      "name": "паста пачери",
+      "unit": "кг",
+      "supplier": "Aura trade 18",
+      "photo": null
+    },
+    {
+      "name": "мука 00",
+      "unit": "кг",
+      "supplier": "Aura trade 18",
+      "photo": null
+    },
+    {
+      "name": "оливки каламата",
+      "unit": "кг",
+      "supplier": "Aura trade 18",
+      "photo": null
+    },
+    {
+      "name": "Форель филе местная",
+      "unit": "кг",
+      "supplier": "Golden fish group",
+      "photo": null
+    },
+    {
+      "name": "Сибас охлаждённый",
+      "unit": "кг",
+      "supplier": "La maree",
+      "photo": null
+    },
+    {
+      "name": "угорь без соуса",
+      "unit": "кг",
+      "supplier": "La maree",
+      "photo": null
+    },
+    {
+      "name": "тунец свежезамороженный",
+      "unit": "кг",
+      "supplier": "La maree",
+      "photo": null
+    },
+    {
+      "name": "Мука Макфа (по предоплате)",
+      "unit": "кг",
+      "supplier": "Balton trading",
+      "photo": null
+    },
+    {
+      "name": "Уголь брикет",
+      "unit": "кг",
+      "supplier": "Ecocoal energy",
+      "photo": null
+    },
+    {
+      "name": "уголь древесный",
+      "unit": "кг",
+      "supplier": "Ecocoal energy",
+      "photo": null
+    },
+    {
+      "name": "Горчица зернистая Махеев",
+      "unit": "шт",
+      "supplier": "Horeca distribution",
+      "photo": null
+    },
+    {
+      "name": "томатная паста Идеал",
+      "unit": "шт",
+      "supplier": "Horeca distribution",
+      "photo": null
+    },
+    {
+      "name": "каперсы Микадо",
+      "unit": "шт",
+      "supplier": "Horeca distribution",
+      "photo": null
+    },
+    {
+      "name": "Оливковое масло экстра верджин",
+      "unit": "л",
+      "supplier": "Oli castello",
+      "photo": null
+    },
+    {
+      "name": "Грибы эноки обычные",
+      "unit": "кг",
+      "supplier": "Без названия (грибы эноки)",
+      "photo": null
+    },
+    {
+      "name": "Масло сливочное Ольденбург",
+      "unit": "кг",
+      "supplier": "Без названия (сливочное масло)",
+      "photo": null
+    },
+    {
+      "name": "Устричный соус",
+      "unit": "шт",
+      "supplier": "Заказ соусов",
+      "photo": null
+    },
+    {
+      "name": "кунжутное масло",
+      "unit": "л",
+      "supplier": "Заказ соусов",
+      "photo": null
+    },
+    {
+      "name": "паста Том Ям",
+      "unit": "шт",
+      "supplier": "Заказ соусов",
+      "photo": null
+    },
+    {
+      "name": "соус унаги",
+      "unit": "шт",
+      "supplier": "Заказ соусов",
+      "photo": null
+    },
+    {
+      "name": "соус кимчи",
+      "unit": "шт",
+      "supplier": "Заказ соусов",
+      "photo": null
+    },
+    {
+      "name": "Фитаки (синяя упаковка)",
+      "unit": "кг",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "креветки",
+      "unit": "кг",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "мидии",
+      "unit": "кг",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "кольца кальмара",
+      "unit": "кг",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "соус свит чили",
+      "unit": "шт",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "рисовая бумага",
+      "unit": "шт",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "сибас",
+      "unit": "кг",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "вишня замороженная",
+      "unit": "кг",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "сыр дор блю",
+      "unit": "кг",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "сыр бри (синяя упаковка)",
+      "unit": "кг",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "имбирь белый маринованный",
+      "unit": "кг",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "эдамаме в кожуре",
+      "unit": "кг",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "эдамаме без кожуры",
+      "unit": "кг",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "угорь с соусом",
+      "unit": "кг",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "кикоман",
+      "unit": "л",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "кокосовое молоко Aroy-D",
+      "unit": "шт",
+      "supplier": "Рыбное местечко",
+      "photo": null
+    },
+    {
+      "name": "Батат (картофель)",
+      "unit": "кг",
+      "supplier": "Без названия (батат)",
+      "photo": null
+    },
+    {
+      "name": "Бон филе",
+      "unit": "кг",
+      "supplier": "Инвентис",
+      "photo": null
+    },
+    {
+      "name": "куриные бёдра чищенные",
+      "unit": "кг",
+      "supplier": "Инвентис",
+      "photo": null
+    },
+    {
+      "name": "говяжьи рёбра",
+      "unit": "кг",
+      "supplier": "Инвентис",
+      "photo": null
+    },
+    {
+      "name": "куриные лапки",
+      "unit": "кг",
+      "supplier": "Инвентис",
+      "photo": null
+    },
+    {
+      "name": "куриные каркасы",
+      "unit": "кг",
+      "supplier": "Инвентис",
+      "photo": null
+    },
+    {
+      "name": "Авокадо",
+      "unit": "шт",
+      "supplier": "Juicy garden",
+      "photo": null
+    },
+    {
+      "name": "ягоды",
+      "unit": "кг",
+      "supplier": "Juicy garden",
+      "photo": null
+    },
+    {
+      "name": "Принт ОКО",
+      "unit": "шт",
+      "supplier": "Принт торт",
+      "photo": null
+    },
+    {
+      "name": "Шоколад тёмный 54%",
+      "unit": "кг",
+      "supplier": "Без названия (шоколад)",
+      "photo": null
+    },
+    {
+      "name": "Салями на пепперони",
+      "unit": "кг",
+      "supplier": "Без названия (салями)",
+      "photo": null
+    },
+    {
+      "name": "Зефир",
+      "unit": "кг",
+      "supplier": "Без названия (зефир)",
       "photo": null
     }
   ]

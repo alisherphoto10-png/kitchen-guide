@@ -15,7 +15,7 @@ from message import group_by_supplier, render_message
 
 TEST_ORDER = [
     {"product": "Романо", "qty": 2},
-    {"product": "Шпинат", "qty": 1},
+    {"product": "шпинат", "qty": 1},
 ]
 
 
