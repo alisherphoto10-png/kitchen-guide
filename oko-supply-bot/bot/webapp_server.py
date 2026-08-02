@@ -17,6 +17,12 @@
   GET    /api/chats                  — последние диалоги Telethon-клиента
                                         (id, имя, тип) для выбора chat_id
                                         прямо в карточке поставщика
+  GET    /api/autoresponder                — шаблоны автоответчика + активный id
+  POST   /api/autoresponder/templates       — добавить шаблон
+  PUT    /api/autoresponder/templates/{id}  — изменить шаблон
+  DELETE /api/autoresponder/templates/{id}  — удалить шаблон (снимает с активных)
+  POST   /api/autoresponder/activate        — {"id": "..."} включить шаблон,
+                                               {"id": null} выключить автоответчик
 
 Один процесс держит один долгоживущий авторизованный TelegramClient —
 логиниться заново не нужно, session уже создана (см. README).
@@ -24,12 +30,14 @@
 
 import asyncio
 import os
+import uuid
 from datetime import date, timedelta
 from pathlib import Path
 
 from aiohttp import web
 from dotenv import load_dotenv
 
+import autoresponder_store
 from catalog import get_product, get_supplier, load_catalog, save_catalog
 from client import SESSION_NAME, get_client, start_client
 from message import group_by_supplier, render_message
@@ -45,6 +53,7 @@ WEBAPP_SESSION_NAME = os.environ.get("WEBAPP_SESSION_NAME", f"{SESSION_NAME}_web
 # read-modify-write в лок, чтобы два почти одновременных сохранения не
 # затёрли друг друга.
 catalog_lock = asyncio.Lock()
+autoresponder_lock = asyncio.Lock()
 
 routes = web.RouteTableDef()
 
@@ -225,6 +234,70 @@ async def delete_supplier(request: web.Request) -> web.Response:
         catalog["suppliers"].pop(idx)
         catalog["products"] = [p for p in catalog["products"] if p["supplier"] != name]
         save_catalog(catalog)
+    return web.json_response({"ok": True})
+
+
+@routes.get("/api/autoresponder")
+async def api_autoresponder_get(request: web.Request) -> web.Response:
+    return web.json_response(autoresponder_store.load_config())
+
+
+@routes.post("/api/autoresponder/templates")
+async def api_autoresponder_create(request: web.Request) -> web.Response:
+    body = await request.json()
+    name = body.get("name", "").strip()
+    text = body.get("text", "").strip()
+    if not name or not text:
+        raise web.HTTPBadRequest(text="Название и текст шаблона обязательны")
+    async with autoresponder_lock:
+        config = autoresponder_store.load_config()
+        template = {"id": uuid.uuid4().hex[:8], "name": name, "text": text}
+        config["templates"].append(template)
+        autoresponder_store.save_config(config)
+    return web.json_response(template)
+
+
+@routes.put("/api/autoresponder/templates/{tid}")
+async def api_autoresponder_update(request: web.Request) -> web.Response:
+    tid = request.match_info["tid"]
+    body = await request.json()
+    name = body.get("name", "").strip()
+    text = body.get("text", "").strip()
+    if not name or not text:
+        raise web.HTTPBadRequest(text="Название и текст шаблона обязательны")
+    async with autoresponder_lock:
+        config = autoresponder_store.load_config()
+        template = next((t for t in config["templates"] if t["id"] == tid), None)
+        if not template:
+            raise web.HTTPNotFound()
+        template["name"] = name
+        template["text"] = text
+        autoresponder_store.save_config(config)
+    return web.json_response({"ok": True})
+
+
+@routes.delete("/api/autoresponder/templates/{tid}")
+async def api_autoresponder_delete(request: web.Request) -> web.Response:
+    tid = request.match_info["tid"]
+    async with autoresponder_lock:
+        config = autoresponder_store.load_config()
+        config["templates"] = [t for t in config["templates"] if t["id"] != tid]
+        if config.get("active_template_id") == tid:
+            config["active_template_id"] = None
+        autoresponder_store.save_config(config)
+    return web.json_response({"ok": True})
+
+
+@routes.post("/api/autoresponder/activate")
+async def api_autoresponder_activate(request: web.Request) -> web.Response:
+    body = await request.json()
+    tid = body.get("id")
+    async with autoresponder_lock:
+        config = autoresponder_store.load_config()
+        if tid is not None and not any(t["id"] == tid for t in config["templates"]):
+            raise web.HTTPNotFound()
+        config["active_template_id"] = tid
+        autoresponder_store.save_config(config)
     return web.json_response({"ok": True})
 
 
