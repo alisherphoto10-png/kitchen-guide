@@ -1,0 +1,36 @@
+{
+  "suppliers": [
+    {
+      "name": "Тестовый поставщик 1",
+      "phone": "",
+      "telegram": "",
+      "chat_id": null
+    },
+    {
+      "name": "Тестовый поставщик 2",
+      "phone": "",
+      "telegram": "",
+      "chat_id": null
+    }
+  ],
+  "products": [
+    {
+      "name": "Романо",
+      "unit": "кг",
+      "supplier": "Тестовый поставщик 1",
+      "photo": null
+    },
+    {
+      "name": "Шпинат",
+      "unit": "кг",
+      "supplier": "Тестовый поставщик 1",
+      "photo": null
+    },
+    {
+      "name": "Креветки",
+      "unit": "кг",
+      "supplier": "Тестовый поставщик 2",
+      "photo": null
+    }
+  ]
+}
