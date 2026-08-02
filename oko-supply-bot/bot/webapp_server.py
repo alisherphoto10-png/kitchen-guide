@@ -19,10 +19,15 @@ from aiohttp import web
 from dotenv import load_dotenv
 
 from catalog import get_product, get_supplier, load_catalog
-from client import get_client, start_client
+from client import SESSION_NAME, get_client, start_client
 from message import group_by_supplier, render_message
 
 WEBAPP_DIR = Path(__file__).resolve().parent.parent / "webapp"
+
+# Отдельный session-файл от autoresponder.py — один и тот же .session не
+# рассчитан на одновременную запись из двух процессов (SQLite "database is
+# locked", вплоть до фатального краха апдейт-лупа Telethon).
+WEBAPP_SESSION_NAME = os.environ.get("WEBAPP_SESSION_NAME", f"{SESSION_NAME}_webapp")
 
 routes = web.RouteTableDef()
 
@@ -79,7 +84,7 @@ async def api_order(request: web.Request) -> web.Response:
 
 
 async def on_startup(app: web.Application) -> None:
-    app["tg_client"] = await start_client(get_client())
+    app["tg_client"] = await start_client(get_client(WEBAPP_SESSION_NAME))
 
 
 async def on_cleanup(app: web.Application) -> None:
