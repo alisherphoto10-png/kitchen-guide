@@ -13,7 +13,7 @@ import asyncio
 
 from telethon import events
 
-from client import get_client
+from client import get_client, start_client
 
 AUTO_REPLY_TEXT = "Алишер сейчас занят, ответит как освободится."
 BUSY_COMMAND = "/busy"
@@ -24,8 +24,7 @@ already_replied: set[int] = set()
 
 
 async def main() -> None:
-    client = get_client()
-    await client.start()
+    client = await start_client(get_client())
     me = await client.get_me()
 
     @client.on(events.NewMessage(outgoing=True, chats="me"))

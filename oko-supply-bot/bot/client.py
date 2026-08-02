@@ -13,3 +13,12 @@ SESSION_NAME = os.environ.get("TG_SESSION_NAME", "oko_supply_bot")
 
 def get_client() -> TelegramClient:
     return TelegramClient(SESSION_NAME, API_ID, API_HASH)
+
+
+async def start_client(client: TelegramClient) -> TelegramClient:
+    """client.start() ignores TG_PHONE and always asks interactively — pass it explicitly."""
+    if PHONE:
+        await client.start(phone=PHONE)
+    else:
+        await client.start()
+    return client

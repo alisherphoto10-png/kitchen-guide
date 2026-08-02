@@ -10,7 +10,7 @@ import asyncio
 from datetime import date, timedelta
 
 from catalog import get_product, get_supplier, load_catalog
-from client import get_client
+from client import get_client, start_client
 from message import group_by_supplier, render_message
 
 TEST_ORDER = [
@@ -32,7 +32,8 @@ async def main() -> None:
 
     grouped = group_by_supplier(order_lines)
 
-    async with get_client() as client:
+    client = await start_client(get_client())
+    async with client:
         for supplier_name, lines in grouped.items():
             supplier = get_supplier(catalog, supplier_name)
             if not supplier or not supplier.get("chat_id"):
