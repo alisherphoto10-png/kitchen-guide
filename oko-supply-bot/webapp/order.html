@@ -168,6 +168,51 @@
   }
   .item-list-thumb{width:38px;height:38px;border-radius:8px;object-fit:cover;flex:none;}
   .item-thumb{width:26px;height:26px;border-radius:6px;object-fit:cover;margin-right:6px;flex:none;}
+
+  /* Catalog management */
+  .gear-btn{cursor:pointer;color:var(--tg-accent);flex:none;padding-left:10px;}
+  .tabs{display:flex;padding:0 16px;gap:6px;border-bottom:1px solid var(--tg-border);}
+  .tab{
+    padding:9px 4px;font-size:14px;color:var(--tg-hint);cursor:pointer;
+    border-bottom:2px solid transparent;font-weight:500;margin-right:14px;
+  }
+  .tab.active{color:var(--tg-accent);border-bottom-color:var(--tg-accent);}
+  .cat-row{
+    display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--tg-border);cursor:pointer;
+  }
+  .cat-thumb{
+    width:44px;height:44px;border-radius:8px;object-fit:cover;flex:none;background:var(--tg-secondary-bg);
+  }
+  .cat-thumb.placeholder{display:flex;align-items:center;justify-content:center;font-size:18px;}
+  .cat-row-text{flex:1;min-width:0;}
+  .cat-row-name{font-size:15px;font-weight:500;}
+  .cat-row-sub{font-size:12.5px;color:var(--tg-hint);margin-top:1px;}
+  .chev{color:var(--tg-hint);font-size:20px;flex:none;}
+  .add-row-btn{
+    margin:12px 16px;padding:11px;border:1px dashed var(--tg-border);border-radius:10px;
+    text-align:center;color:var(--tg-accent);font-size:14px;cursor:pointer;background:none;width:calc(100% - 32px);
+  }
+  .card-photo-wrap{padding:16px;display:flex;justify-content:center;}
+  .card-photo{
+    width:140px;height:140px;border-radius:16px;background:var(--tg-secondary-bg);
+    display:flex;align-items:center;justify-content:center;color:var(--tg-hint);font-size:13px;
+    cursor:pointer;overflow:hidden;text-align:center;border:1px dashed var(--tg-border);
+  }
+  .card-photo img{width:100%;height:100%;object-fit:cover;}
+  .card-field{padding:0 16px 14px;}
+  .card-field label{font-size:12px;color:var(--tg-hint);text-transform:uppercase;letter-spacing:.03em;display:block;margin-bottom:5px;}
+  .card-field input, .card-field select{
+    width:100%;border:1px solid var(--tg-border);border-radius:10px;padding:10px 12px;
+    font-size:15px;font-family:inherit;color:var(--tg-text);background:var(--tg-bg);
+  }
+  .save-card{
+    margin:8px 16px;width:calc(100% - 32px);background:var(--tg-accent);color:#fff;border:none;
+    border-radius:12px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;
+  }
+  .delete-card{
+    margin:8px 16px 24px;width:calc(100% - 32px);background:none;color:#ff3b30;border:1px solid var(--tg-border);
+    border-radius:12px;padding:13px;font-size:15px;cursor:pointer;
+  }
 </style>
 </head>
 <body>
@@ -175,9 +220,14 @@
 
   <!-- SCREEN 1: product list -->
   <div class="screen active" id="screen-list">
-    <header>
-      <h1>Заказ поставщикам</h1>
-      <div class="sub">Тапни товар — система сама найдёт поставщика</div>
+    <header style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <h1>Заказ поставщикам</h1>
+        <div class="sub">Тапни товар — система сама найдёт поставщика</div>
+      </div>
+      <div class="gear-btn" onclick="showCatalogEdit()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </div>
     </header>
     <div class="search-wrap">
       <div class="search-box">
@@ -217,14 +267,96 @@
     <button class="restart" onclick="resetAll()">Сделать новый заказ</button>
   </div>
 
+  <!-- SCREEN 4: catalog management -->
+  <div class="screen" id="screen-catalog">
+    <header>
+      <div class="back-row" onclick="showList()">← К заказу</div>
+      <h1>Товары и поставщики</h1>
+      <div class="sub">Здесь редактируется каталог, а не сам заказ</div>
+    </header>
+    <div class="tabs">
+      <div class="tab active" id="tab-products" onclick="switchCatalogTab('products')">Товары</div>
+      <div class="tab" id="tab-suppliers" onclick="switchCatalogTab('suppliers')">Поставщики</div>
+    </div>
+    <main id="catalogList"></main>
+    <button class="add-row-btn" id="addRowBtn" onclick="addCatalogRow()">+ Добавить товар</button>
+  </div>
+
+  <!-- SCREEN 5: product card -->
+  <div class="screen" id="screen-product-card">
+    <header>
+      <div class="back-row" onclick="showCatalogEdit()">← К списку</div>
+      <h1>Карточка товара</h1>
+    </header>
+    <main>
+      <div class="card-photo-wrap">
+        <label for="cardPhotoInput" class="card-photo" id="cardPhotoPreview">Добавить фото</label>
+        <input id="cardPhotoInput" type="file" accept="image/*" style="display:none" onchange="cardPhotoSelected(this.files)">
+      </div>
+      <div class="card-field">
+        <label>Название товара</label>
+        <input id="cardName" type="text">
+      </div>
+      <div class="card-field">
+        <label>Единица измерения</label>
+        <input id="cardUnit" type="text" placeholder="кг / шт / л">
+      </div>
+      <div class="card-field">
+        <label>Поставщик</label>
+        <select id="cardSupplier"></select>
+      </div>
+      <button class="save-card" onclick="saveProductCard()">Сохранить</button>
+      <button class="delete-card" onclick="deleteProductCard()">Удалить товар</button>
+    </main>
+  </div>
+
+  <!-- SCREEN 6: supplier card -->
+  <div class="screen" id="screen-supplier-card">
+    <header>
+      <div class="back-row" onclick="showCatalogEdit()">← К списку</div>
+      <h1>Карточка поставщика</h1>
+    </header>
+    <main>
+      <div class="card-field" style="margin-top:16px;">
+        <label>Название поставщика</label>
+        <input id="supName" type="text">
+      </div>
+      <div class="card-field">
+        <label>Номер телефона</label>
+        <input id="supPhone" type="text" placeholder="+998 90 000 00 00">
+      </div>
+      <div class="card-field">
+        <label>Telegram (если есть)</label>
+        <input id="supTelegram" type="text" placeholder="@username">
+      </div>
+      <div class="card-field">
+        <label>Chat ID (если уже есть чат в Telegram)</label>
+        <input id="supChatId" type="text" placeholder="например 5593095944 или -100…">
+      </div>
+      <div class="card-field">
+        <label>Товары поставщика</label>
+        <div id="supProductsList"></div>
+        <button class="add-row-btn" style="width:100%;margin:8px 0 0;" onclick="addProductFromSupplierCard()">+ Добавить товар этому поставщику</button>
+      </div>
+      <button class="save-card" onclick="saveSupplierCard()">Сохранить</button>
+      <button class="delete-card" onclick="deleteSupplierCard()">Удалить поставщика</button>
+    </main>
+  </div>
+
 </div>
 
 <script>
-let catalog = [];      // [{name, unit, supplier, photo}]
-let suppliers = {};    // name -> {name, phone, telegram, note, chat_id}
-let cart = {};          // name -> {qty, ...item}
+let catalog = [];       // [{name, unit, supplier, photo}] — тот же порядок, что в data/catalog.json
+let suppliersList = []; // [{name, phone, telegram, note, chat_id}] — тот же порядок
+let suppliers = {};     // name -> supplier, для быстрого поиска
+let cart = {};           // name -> {qty, ...item}
 let commentsBySupplier = {};
 let dateBySupplier = {};
+let catalogTab = "products";
+let editingProductIdx = null;
+let editingSupplierIdx = null;
+let editingSupplierNote = "";
+let cardPhotoData = null;
 
 function cssSafe(s){ return s.replace(/[^a-zA-Zа-яА-Я0-9]/g,"_"); }
 
@@ -245,13 +377,15 @@ function formatDateHuman(iso){
   return `${d}.${m}.${y}`;
 }
 
-async function init(){
+async function refreshCatalog(){
   const res = await fetch("/api/catalog");
   const data = await res.json();
   catalog = data.products;
+  suppliersList = data.suppliers;
   suppliers = {};
-  data.suppliers.forEach(s => { suppliers[s.name] = s; });
-  renderList();
+  suppliersList.forEach(s => { suppliers[s.name] = s; });
+  renderList(document.getElementById("search").value);
+  updateCartBar();
 }
 
 function renderList(filter=""){
@@ -473,7 +607,222 @@ function resetAll(){
   showList();
 }
 
-init();
+// ---- Catalog management (screens 4-6) ----
+
+function showCatalogEdit(){
+  switchCatalogTab(catalogTab);
+  showScreen("screen-catalog");
+}
+
+function switchCatalogTab(tab){
+  catalogTab = tab;
+  document.getElementById("tab-products").classList.toggle("active", tab === "products");
+  document.getElementById("tab-suppliers").classList.toggle("active", tab === "suppliers");
+  document.getElementById("addRowBtn").textContent = tab === "products" ? "+ Добавить товар" : "+ Добавить поставщика";
+  renderCatalogList();
+}
+
+function renderCatalogList(){
+  const container = document.getElementById("catalogList");
+  container.innerHTML = "";
+  if(catalogTab === "products"){
+    catalog.forEach((p, idx) => {
+      const row = document.createElement("div");
+      row.className = "cat-row";
+      row.onclick = () => openProductCard(idx);
+      const thumb = p.photo ? `<img class="cat-thumb" src="${p.photo}">` : `<div class="cat-thumb placeholder">📦</div>`;
+      row.innerHTML = `
+        ${thumb}
+        <div class="cat-row-text">
+          <div class="cat-row-name">${p.name}</div>
+          <div class="cat-row-sub">${p.supplier} · ${p.unit}</div>
+        </div>
+        <div class="chev">›</div>
+      `;
+      container.appendChild(row);
+    });
+  } else {
+    suppliersList.forEach((s, idx) => {
+      const row = document.createElement("div");
+      row.className = "cat-row";
+      row.onclick = () => openSupplierCard(idx);
+      const productCount = catalog.filter(p => p.supplier === s.name).length;
+      const chatBadge = s.chat_id ? " · chat_id есть" : " · chat_id не задан";
+      row.innerHTML = `
+        <div class="cat-thumb placeholder">🏪</div>
+        <div class="cat-row-text">
+          <div class="cat-row-name">${s.name}</div>
+          <div class="cat-row-sub">${contactOf(s)} · ${productCount} товар(ов)${chatBadge}</div>
+        </div>
+        <div class="chev">›</div>
+      `;
+      container.appendChild(row);
+    });
+  }
+}
+
+async function addCatalogRow(){
+  if(catalogTab === "products"){
+    const defaultSupplier = suppliersList[0] ? suppliersList[0].name : "";
+    const res = await fetch("/api/catalog/products", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({name: "Новый товар", unit: "кг", supplier: defaultSupplier, photo: null}),
+    });
+    const data = await res.json();
+    await refreshCatalog();
+    openProductCard(data.index);
+  } else {
+    const res = await fetch("/api/catalog/suppliers", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({name: "Новый поставщик", phone: "", telegram: "", chat_id: null}),
+    });
+    const data = await res.json();
+    await refreshCatalog();
+    openSupplierCard(data.index);
+  }
+}
+
+function supplierOptionsHtml(selected){
+  return suppliersList.map(s => `<option value="${s.name}" ${s.name===selected?"selected":""}>${s.name}</option>`).join("");
+}
+
+function openProductCard(idx){
+  editingProductIdx = idx;
+  const p = catalog[idx];
+  cardPhotoData = p.photo || null;
+  document.getElementById("cardName").value = p.name;
+  document.getElementById("cardUnit").value = p.unit;
+  document.getElementById("cardSupplier").innerHTML = supplierOptionsHtml(p.supplier);
+  renderCardPhotoPreview();
+  showScreen("screen-product-card");
+}
+
+function renderCardPhotoPreview(){
+  const el = document.getElementById("cardPhotoPreview");
+  el.innerHTML = cardPhotoData ? `<img src="${cardPhotoData}">` : "Добавить фото";
+}
+
+function cardPhotoSelected(files){
+  if(!files || !files.length) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    cardPhotoData = e.target.result;
+    renderCardPhotoPreview();
+  };
+  reader.readAsDataURL(files[0]);
+}
+
+async function saveProductCard(){
+  if(editingProductIdx === null) return;
+  const body = {
+    name: document.getElementById("cardName").value.trim(),
+    unit: document.getElementById("cardUnit").value.trim(),
+    supplier: document.getElementById("cardSupplier").value,
+    photo: cardPhotoData,
+  };
+  await fetch(`/api/catalog/products/${editingProductIdx}`, {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body),
+  });
+  editingProductIdx = null;
+  await refreshCatalog();
+  showCatalogEdit();
+}
+
+async function deleteProductCard(){
+  if(editingProductIdx === null) return;
+  if(!confirm("Удалить товар?")) return;
+  await fetch(`/api/catalog/products/${editingProductIdx}`, {method: "DELETE"});
+  editingProductIdx = null;
+  await refreshCatalog();
+  showCatalogEdit();
+}
+
+function openSupplierCard(idx){
+  editingSupplierIdx = idx;
+  const s = suppliersList[idx];
+  editingSupplierNote = s.note || "";
+  document.getElementById("supName").value = s.name;
+  document.getElementById("supPhone").value = s.phone || "";
+  document.getElementById("supTelegram").value = s.telegram || "";
+  document.getElementById("supChatId").value = s.chat_id != null ? s.chat_id : "";
+  renderSupplierProducts();
+  showScreen("screen-supplier-card");
+}
+
+function renderSupplierProducts(){
+  const s = suppliersList[editingSupplierIdx];
+  const list = document.getElementById("supProductsList");
+  const products = catalog
+    .map((p, idx) => ({p, idx}))
+    .filter(x => x.p.supplier === s.name);
+  if(products.length === 0){
+    list.innerHTML = '<div class="empty-hint">У этого поставщика пока нет товаров</div>';
+  } else {
+    list.innerHTML = products.map(({p, idx}) => {
+      const thumb = p.photo ? `<img class="cat-thumb" src="${p.photo}">` : `<div class="cat-thumb placeholder">📦</div>`;
+      return `
+        <div class="cat-row" onclick="openProductCard(${idx})">
+          ${thumb}
+          <div class="cat-row-text">
+            <div class="cat-row-name">${p.name}</div>
+            <div class="cat-row-sub">${p.unit}</div>
+          </div>
+          <div class="chev">›</div>
+        </div>`;
+    }).join("");
+  }
+}
+
+async function addProductFromSupplierCard(){
+  const s = suppliersList[editingSupplierIdx];
+  const res = await fetch("/api/catalog/products", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({name: "Новый товар", unit: "кг", supplier: s.name, photo: null}),
+  });
+  const data = await res.json();
+  await refreshCatalog();
+  openProductCard(data.index);
+}
+
+async function saveSupplierCard(){
+  if(editingSupplierIdx === null) return;
+  const chatIdRaw = document.getElementById("supChatId").value.trim();
+  const body = {
+    name: document.getElementById("supName").value.trim(),
+    phone: document.getElementById("supPhone").value.trim(),
+    telegram: document.getElementById("supTelegram").value.trim(),
+    note: editingSupplierNote,
+    chat_id: chatIdRaw === "" ? null : chatIdRaw,
+  };
+  const res = await fetch(`/api/catalog/suppliers/${editingSupplierIdx}`, {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body),
+  });
+  if(!res.ok){
+    alert("Не удалось сохранить: " + await res.text());
+    return;
+  }
+  editingSupplierIdx = null;
+  await refreshCatalog();
+  showCatalogEdit();
+}
+
+async function deleteSupplierCard(){
+  if(editingSupplierIdx === null) return;
+  if(!confirm("Удалить поставщика вместе со всеми его товарами?")) return;
+  await fetch(`/api/catalog/suppliers/${editingSupplierIdx}`, {method: "DELETE"});
+  editingSupplierIdx = null;
+  await refreshCatalog();
+  showCatalogEdit();
+}
+
+refreshCatalog();
 </script>
 </body>
 </html>

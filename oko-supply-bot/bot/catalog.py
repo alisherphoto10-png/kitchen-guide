@@ -9,6 +9,12 @@ def load_catalog(path: Path = CATALOG_PATH) -> dict:
         return json.load(f)
 
 
+def save_catalog(catalog: dict, path: Path = CATALOG_PATH) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(catalog, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
 def get_supplier(catalog: dict, name: str) -> dict | None:
     return next((s for s in catalog["suppliers"] if s["name"] == name), None)
 
