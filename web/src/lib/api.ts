@@ -65,3 +65,22 @@ export async function getLandingFaq(): Promise<FaqEntry[]> {
   }
   return Array.isArray(data) ? data : (data.items ?? []);
 }
+
+export interface TestimonialEntry {
+  id: number;
+  author_name: string;
+  author_role: string | null;
+  restaurant_name: string | null;
+  quote: string;
+  avatar_url: string | null;
+  sort_order: number;
+}
+
+export async function getLandingTestimonials(): Promise<TestimonialEntry[]> {
+  const res = await fetch(`${API_BASE_URL}/api/landing/testimonials`);
+  const data = await parseJson(res);
+  if (!res.ok) {
+    throw new ApiError(data.error ?? "Не удалось загрузить отзывы");
+  }
+  return Array.isArray(data) ? data : (data.items ?? []);
+}
