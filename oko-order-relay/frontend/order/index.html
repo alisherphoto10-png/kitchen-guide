@@ -5,46 +5,246 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Заказ OKO</title>
 <style>
+  :root {
+    --bg: #F6F7F5;
+    --surface: #FFFFFF;
+    --line: #E7E9E4;
+    --ink: #16211B;
+    --ink-soft: #667066;
+    --ink-faint: #99A398;
+    --accent: #16A34A;
+    --accent-soft: #E9F7EF;
+    --accent-ink: #0F7A38;
+    --danger: #C0392B;
+    --radius: 14px;
+  }
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f5; margin: 0; padding: 16px; color: #111; }
-  h1 { font-size: 18px; margin: 0 0 16px; }
-  label { font-size: 14px; color: #444; }
-  .category-heading { font-size: 13px; font-weight: 600; color: #666; margin: 16px 0 4px; }
-  .category-heading:first-child { margin-top: 6px; }
-  .item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e0e0e0; }
-  .item .name { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 15px; }
-  .qty-stepper { display: flex; align-items: center; gap: 6px; }
-  .qty-btn { width: 34px; height: 34px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font-size: 20px; line-height: 1; display: flex; align-items: center; justify-content: center; color: #111; touch-action: manipulation; }
-  .qty-btn:active { background: #eee; }
-  .qty-value { min-width: 22px; text-align: center; font-size: 15px; font-variant-numeric: tabular-nums; }
-  input[type="text"], input[type="date"], textarea { width: 100%; padding: 8px; margin-top: 4px; border: 1px solid #ccc; border-radius: 6px; font-family: inherit; }
-  textarea { margin-top: 12px; }
-  button.submit { width: 100%; padding: 14px; margin-top: 16px; background: #2ea043; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; }
-  button.submit:disabled { opacity: 0.6; }
-  .empty { color: #888; font-size: 14px; padding: 16px 0; }
-  .done { text-align: center; padding: 40px 16px; }
-  .error { color: #c0392b; font-size: 14px; margin-top: 10px; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    margin: 0;
+    padding: 20px 16px 40px;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+  }
+  .brand::before {
+    content: '';
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+  }
+  h1 { font-size: 22px; font-weight: 800; margin: 0 0 18px; letter-spacing: -.01em; }
+
+  .field-label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin: 18px 0 6px;
+    display: block;
+  }
+  .field-label:first-of-type { margin-top: 0; }
+
+  input[type="text"], input[type="date"], textarea {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    font-family: inherit;
+    font-size: 15px;
+    background: var(--surface);
+    color: var(--ink);
+  }
+  input[type="text"]:focus, input[type="date"]:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  textarea { margin-top: 4px; resize: vertical; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .category-heading {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    padding: 14px 14px 6px;
+  }
+  .category-heading:first-child { padding-top: 14px; }
+
+  .item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 11px 14px;
+    border-top: 1px solid var(--line);
+  }
+  .card > .item:first-child,
+  .card > .category-heading:first-child + .item { border-top: none; }
+
+  .item .name {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    min-width: 0;
+  }
+  .item .name span.txt { overflow-wrap: anywhere; }
+
+  input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    flex: none;
+    width: 21px; height: 21px;
+    border: 1.5px solid var(--line);
+    border-radius: 7px;
+    background: var(--surface);
+    position: relative;
+    cursor: pointer;
+  }
+  input[type="checkbox"]:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 6px; top: 2px;
+    width: 6px; height: 11px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(40deg);
+  }
+
+  .qty-stepper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+  }
+  .qty-btn {
+    width: 30px; height: 30px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--surface);
+    font-size: 18px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink);
+    touch-action: manipulation;
+    padding: 0;
+  }
+  .qty-btn:active { background: var(--accent-soft); border-color: var(--accent); }
+
+  .qty-input {
+    width: 42px;
+    height: 30px;
+    text-align: center;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+    padding: 0 2px;
+    -moz-appearance: textfield;
+  }
+  .qty-input::-webkit-outer-spin-button,
+  .qty-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .qty-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  button.submit {
+    width: 100%;
+    padding: 15px;
+    margin-top: 20px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 16px;
+    font-weight: 700;
+    touch-action: manipulation;
+  }
+  button.submit:active { background: var(--accent-ink); }
+  button.submit:disabled { opacity: 0.55; }
+
+  .empty {
+    color: var(--ink-faint);
+    font-size: 14px;
+    padding: 18px 14px;
+  }
+  .error { color: var(--danger); font-size: 13.5px; margin-top: 10px; min-height: 1px; }
+
+  .done {
+    text-align: center;
+    padding: 60px 16px 40px;
+  }
+  .done .check {
+    width: 56px; height: 56px;
+    margin: 0 auto 18px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .done .check svg { width: 26px; height: 26px; }
+  .done h1 { margin-bottom: 6px; }
+  .done p { color: var(--ink-soft); font-size: 14.5px; margin: 0; }
 </style>
 </head>
 <body>
   <div id="formScreen">
+    <div class="brand">OKO</div>
     <h1 id="venueLabel">Заказ</h1>
 
-    <label>Ваше имя</label>
+    <label class="field-label">Ваше имя</label>
     <input type="text" id="submitterName" placeholder="Имя">
 
-    <label style="margin-top:12px;display:block">Дата заказа</label>
+    <label class="field-label">Дата заказа</label>
     <input type="date" id="orderDate">
 
-    <label style="margin-top:12px;display:block">Позиции</label>
-    <div id="itemsList" class="empty">Загрузка...</div>
+    <label class="field-label">Позиции</label>
+    <div id="itemsList" class="card empty">Загрузка...</div>
 
-    <textarea id="comment" placeholder="Комментарий (необязательно)" rows="3"></textarea>
+    <label class="field-label">Комментарий</label>
+    <textarea id="comment" placeholder="Необязательно" rows="3"></textarea>
+
     <div class="error" id="errorText"></div>
     <button class="submit" id="submitBtn" onclick="submitOrder()">Отправить заказ</button>
   </div>
 
   <div id="doneScreen" class="done" style="display:none">
+    <div class="check">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+    </div>
     <h1>Заказ отправлен</h1>
     <p>Можно закрыть эту страницу.</p>
   </div>
@@ -81,14 +281,20 @@
     }
   }
 
+  function clampQty(v) {
+    const n = parseInt(v, 10);
+    if (isNaN(n) || n < 1) return 1;
+    return n;
+  }
+
   function renderItems() {
     const list = document.getElementById("itemsList");
     if (!currentItems.length) {
-      list.className = "empty";
+      list.className = "card empty";
       list.innerText = "Список позиций пуст — обратитесь к администратору.";
       return;
     }
-    list.className = "";
+    list.className = "card";
 
     // Group by category, preserving each item's original index (needed for
     // the check-i / qty-i element ids and the quantities[] array).
@@ -111,10 +317,10 @@
           .map(
             (i) => `
           <div class="item">
-            <span class="name"><input type="checkbox" id="check-${i}"> ${currentItems[i].name}</span>
+            <span class="name"><input type="checkbox" id="check-${i}"><span class="txt">${currentItems[i].name}</span></span>
             <div class="qty-stepper" id="qtywrap-${i}" style="display:none">
               <button type="button" class="qty-btn" onclick="changeQty(${i}, -1)">−</button>
-              <span class="qty-value" id="qty-${i}">1</span>
+              <input type="number" class="qty-input" id="qty-${i}" value="1" min="1" inputmode="numeric">
               <button type="button" class="qty-btn" onclick="changeQty(${i}, 1)">+</button>
             </div>
           </div>
@@ -128,12 +334,16 @@
       document.getElementById(`check-${i}`).addEventListener("change", (e) => {
         document.getElementById(`qtywrap-${i}`).style.display = e.target.checked ? "flex" : "none";
       });
+      document.getElementById(`qty-${i}`).addEventListener("change", (e) => {
+        quantities[i] = clampQty(e.target.value);
+        e.target.value = quantities[i];
+      });
     });
   }
 
   function changeQty(i, delta) {
-    quantities[i] = Math.max(1, (quantities[i] || 1) + delta);
-    document.getElementById(`qty-${i}`).innerText = quantities[i];
+    quantities[i] = clampQty((quantities[i] || 1) + delta);
+    document.getElementById(`qty-${i}`).value = quantities[i];
   }
 
   function collectItems() {
