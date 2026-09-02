@@ -21,6 +21,13 @@ const store = require("./oko-inventory-store");
 
 const FORCE = process.argv.includes("--force");
 
+// Dataset qty = "Остаток на конец ИЮЛЯ" (end-of-July count) from the source
+// file — so the opening-balance movement is dated as of that day, not
+// today. Otherwise a period export starting Aug 1 or later would see the
+// item's whole stock show up as "приход" during the export period instead
+// of as its starting balance (0 movements exist before "today" = wrong).
+const SEED_DATE = "2026-07-31";
+
 function loadDataUri(photoFile) {
   if (!photoFile) return null;
   const p = path.join(__dirname, "photos", photoFile);
@@ -66,6 +73,7 @@ function main() {
       note: row.note,
       photo,
       initialQty: row.qty,
+      initialQtyDate: SEED_DATE,
     });
     imported += 1;
   }

@@ -74,11 +74,17 @@ function photoPath(filename) {
 
 /**
  * Adds a new catalog item. `initialQty` (if > 0) becomes the item's opening
- * balance — recorded as an ordinary "приход" movement dated today, not a
- * special field on the item — so the running balance is always just
- * "sum of this item's movements", with no separate bookkeeping path.
+ * balance — recorded as an ordinary "приход" movement, not a special field
+ * on the item — so the running balance is always just "sum of this item's
+ * movements", with no separate bookkeeping path. Dated today by default
+ * (the normal case: adding a brand-new item via the admin page — its stock
+ * really did arrive today); pass `initialQtyDate` to backdate it instead
+ * (used by the one-off spreadsheet import, where the opening balance is
+ * "as of" a past date, not today — otherwise any period export starting
+ * before today would wrongly show 0 as the starting balance and count the
+ * whole opening stock as "приход" within the period).
  */
-function addItem({ name, size, unit, note, photo, initialQty }) {
+function addItem({ name, size, unit, note, photo, initialQty, initialQtyDate }) {
   const items = readItems();
   const nextNumber = items.reduce((max, it) => Math.max(max, it.number || 0), 0) + 1;
   const item = {
@@ -101,7 +107,7 @@ function addItem({ name, size, unit, note, photo, initialQty }) {
       itemId: item.id,
       type: "приход",
       qty,
-      date: new Date().toISOString().slice(0, 10),
+      date: initialQtyDate || new Date().toISOString().slice(0, 10),
       note: "начальный остаток",
     });
   }
