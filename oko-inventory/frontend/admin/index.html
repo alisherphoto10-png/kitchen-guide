@@ -113,7 +113,7 @@
   </div>
 
   <div class="card">
-    <h2>Экспорт в Excel</h2>
+    <h2>Экспорт</h2>
     <div class="export-row">
       <div class="field">
         <label>С даты</label>
@@ -123,8 +123,14 @@
         <label>По дату</label>
         <input type="date" id="exportTo">
       </div>
-      <button class="action" onclick="exportExcel()">📥 Скачать таблицу</button>
+      <button class="action" onclick="exportExcel()">📥 Excel</button>
+      <button class="action" onclick="exportPdf()">📄 PDF</button>
     </div>
+    <p class="hint" style="margin:8px 0 0">
+      Если пересылаете копию через Google Таблицы (открыть → «Отправить копию») — фото в
+      картинках может потеряться, это ограничение самих Google Таблиц. Кнопка «PDF» собирает файл
+      с фото прямо здесь, без Google Таблиц — надёжнее для пересылки.
+    </p>
     <div class="status" id="exportStatus"></div>
   </div>
 
@@ -350,7 +356,7 @@
     await reload();
   }
 
-  async function exportExcel() {
+  async function runExport(endpoint, extension) {
     const from = document.getElementById("exportFrom").value;
     const to = document.getElementById("exportTo").value;
     const statusEl = document.getElementById("exportStatus");
@@ -362,7 +368,7 @@
     statusEl.className = "status";
     statusEl.innerText = "Собираю файл...";
 
-    const res = await fetch(`/api/oko-inventory/export?from=${from}&to=${to}`, {
+    const res = await fetch(`/api/oko-inventory/${endpoint}?from=${from}&to=${to}`, {
       headers: authHeaders(),
     });
     if (!res.ok) {
@@ -374,13 +380,21 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `inventory-${from}_${to}.xlsx`;
+    a.download = `inventory-${from}_${to}.${extension}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
     statusEl.className = "status ok";
     statusEl.innerText = "Готово";
+  }
+
+  function exportExcel() {
+    return runExport("export", "xlsx");
+  }
+
+  function exportPdf() {
+    return runExport("export-pdf", "pdf");
   }
 
   if (password) {

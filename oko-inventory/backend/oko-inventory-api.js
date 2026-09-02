@@ -1,7 +1,12 @@
 const express = require("express");
 const fs = require("fs");
+const path = require("path");
 const ExcelJS = require("exceljs");
+const PDFDocument = require("pdfkit");
 const store = require("./oko-inventory-store");
+
+const FONT_REGULAR = path.join(__dirname, "fonts", "DejaVuSans.ttf");
+const FONT_BOLD = path.join(__dirname, "fonts", "DejaVuSans-Bold.ttf");
 
 function requireAdmin(req, res, next) {
   const password = req.header("X-Admin-Password");
@@ -172,6 +177,93 @@ function createOkoInventoryRouter() {
     );
     await workbook.xlsx.write(res);
     res.end();
+  });
+
+  // PDF export — a self-contained alternative to the Excel one. Built
+  // because Google Sheets can silently drop floating/embedded images when
+  // re-exporting a spreadsheet as PDF (or "send a copy") — a Google-side
+  // limitation, not something wrong with the .xlsx this backend produces
+  // (its own images are valid; confirmed by unzipping and inspecting the
+  // OOXML drawing parts). Generating the PDF here, straight from the same
+  // photo files on disk, means photos always come through regardless of
+  // what any spreadsheet app's own export pipeline does with them.
+  router.get("/export-pdf", (req, res) => {
+    const { from, to } = req.query;
+    if (!from || !to) {
+      return res.status(400).json({ error: "Укажите from и to (YYYY-MM-DD)" });
+    }
+
+    const report = store.reportForPeriod(from, to);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="inventory-${from}_${to}.pdf"`);
+
+    const doc = new PDFDocument({ size: "A4", margin: 36 });
+    doc.pipe(res);
+    doc.registerFont("body", FONT_REGULAR);
+    doc.registerFont("bold", FONT_BOLD);
+
+    doc.font("bold").fontSize(15).fillColor("#000")
+      .text(`Инвентаризация — ${formatRuDate(from)} – ${formatRuDate(to)}`);
+    doc.moveDown(0.6);
+
+    const left = doc.page.margins.left;
+    const right = doc.page.width - doc.page.margins.right;
+    const photoSize = 46;
+    const textX = left + photoSize + 12;
+    const textWidth = right - textX;
+    const pageBottom = doc.page.height - doc.page.margins.bottom;
+
+    for (const row of report) {
+      const note = buildExportNote(row.item, row.movements);
+      const statsLine = `Было: ${row.startBalance}   →   Приход: +${row.income || 0}   Списание: −${row.writeOff || 0}   →   Стало: ${row.endBalance} ${row.item.unit}`;
+
+      // Estimate this row's height before drawing anything, so we can
+      // decide to start a fresh page first — pdfkit doesn't auto-paginate
+      // text drawn past the bottom margin, it just draws off-page.
+      doc.font("bold").fontSize(11);
+      const nameHeight = doc.heightOfString(`№${row.item.number} ${row.item.name}`, { width: textWidth });
+      doc.font("body").fontSize(9);
+      const metaText = [row.item.size, row.item.unit].filter(Boolean).join(" · ");
+      const metaHeight = metaText ? doc.heightOfString(metaText, { width: textWidth }) + 2 : 0;
+      const statsHeight = doc.heightOfString(statsLine, { width: textWidth }) + 2;
+      doc.fontSize(8);
+      const noteHeight = note ? doc.heightOfString(note, { width: textWidth }) + 2 : 0;
+      const rowHeight = Math.max(photoSize, nameHeight + metaHeight + statsHeight + noteHeight) + 10;
+
+      if (doc.y + rowHeight > pageBottom) {
+        doc.addPage();
+      }
+
+      const startY = doc.y;
+      if (row.item.photo) {
+        try {
+          doc.image(store.photoPath(row.item.photo), left, startY, { fit: [photoSize, photoSize] });
+        } catch {
+          // missing/corrupt photo file — skip the image, keep the row
+        }
+      }
+
+      doc.font("bold").fontSize(11).fillColor("#000")
+        .text(`№${row.item.number} ${row.item.name}`, textX, startY, { width: textWidth });
+      if (metaText) {
+        doc.font("body").fontSize(9).fillColor("#555")
+          .text(metaText, textX, doc.y, { width: textWidth });
+      }
+      doc.font("body").fontSize(9).fillColor("#000")
+        .text(statsLine, textX, doc.y, { width: textWidth });
+      if (note) {
+        doc.font("body").fontSize(8).fillColor("#777")
+          .text(note, textX, doc.y, { width: textWidth });
+      }
+
+      const consumedHeight = Math.max(photoSize, doc.y - startY);
+      doc.y = startY + consumedHeight + 8;
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor("#dddddd").lineWidth(0.5).stroke();
+      doc.moveDown(0.5);
+    }
+
+    doc.end();
   });
 
   return router;
