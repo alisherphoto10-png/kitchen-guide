@@ -229,6 +229,10 @@ function reportForPeriod(from, to) {
       income,
       writeOff,
       endBalance: startBalance + income - writeOff,
+      // Individual движения within the period, oldest first — the export
+      // uses this to list причины (приход/списание reasons) per item, not
+      // just the aggregated sums above.
+      movements: inRange.slice().sort((a, b) => (a.date < b.date ? -1 : 1)),
     };
   });
 }

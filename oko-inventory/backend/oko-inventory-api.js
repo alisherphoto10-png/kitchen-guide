@@ -17,6 +17,21 @@ function formatRuDate(isoDate) {
   return `${d}.${m}.${y}`;
 }
 
+// Combines the item's own static note (e.g. "на складе") with the причина
+// of every приход/списание recorded within the exported period — the
+// admin page's per-item "История" shows these already, this is what makes
+// the Excel carry the same information instead of just the totals.
+function buildExportNote(item, movements) {
+  const lines = [];
+  if (item.note) lines.push(item.note);
+  for (const m of movements) {
+    if (!m.note) continue;
+    const sign = m.type === "приход" ? "+" : "−";
+    lines.push(`${sign}${m.qty} (${formatRuDate(m.date)}): ${m.note}`);
+  }
+  return lines.join("\n");
+}
+
 function createOkoInventoryRouter() {
   const router = express.Router();
 
@@ -102,7 +117,7 @@ function createOkoInventoryRouter() {
       { header: "размер", key: "size", width: 12 },
       { header: `Остаток на начало\n${formatRuDate(from)}`, key: "start", width: 14 },
       { header: "Ед. изм", key: "unit", width: 8 },
-      { header: "Примечание", key: "note", width: 20 },
+      { header: "Примечание", key: "note", width: 28 },
       { header: "Приход", key: "income", width: 10 },
       { header: "Списание", key: "writeOff", width: 10 },
       { header: `Остаток на конец\n${formatRuDate(to)}`, key: "end", width: 14 },
@@ -119,12 +134,14 @@ function createOkoInventoryRouter() {
         size: row.item.size,
         start: row.startBalance,
         unit: row.item.unit,
-        note: row.item.note,
+        note: buildExportNote(row.item, row.movements),
         income: row.income || "",
         writeOff: row.writeOff || "",
         end: row.endBalance,
       });
-      sheet.getRow(rowIndex).height = 54;
+      const noteLines = 1 + row.movements.filter((m) => m.note).length;
+      sheet.getRow(rowIndex).height = Math.max(54, noteLines * 14 + 10);
+      sheet.getCell(rowIndex, 7).alignment = { wrapText: true, vertical: "top" };
 
       if (row.item.photo) {
         try {
