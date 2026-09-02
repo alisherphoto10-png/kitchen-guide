@@ -33,10 +33,24 @@
 
   main { max-width: 720px; margin: 0 auto; padding: 8px 14px 60px; }
 
-  section.menu-section { padding: 26px 0 6px; }
-  section.menu-section h2 {
-    font-size: 12.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-    color: #34c17a; border-bottom: 1px solid #223026; padding-bottom: 10px; margin: 0 0 14px;
+  /* Section = its own zone: full-bleed alternating tint (so a boundary reads
+     even at a glance, no reading required) + a header band with the name
+     and a dish count (so you always know how far into the section you are). */
+  section.menu-section { margin: 0 -14px; padding: 28px 14px 22px; }
+  section.menu-section:nth-of-type(odd) { background: #0a0f0c; }
+  section.menu-section:nth-of-type(even) { background: #10141a; }
+
+  .section-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    border-bottom: 1px solid #223026; padding-bottom: 12px; margin: 0 0 16px;
+  }
+  .section-head h2 {
+    font-size: 17px; font-weight: 800; letter-spacing: -0.01em; margin: 0;
+  }
+  .section-head .count {
+    font-size: 11px; font-weight: 600; color: #9fac9e; background: #121912;
+    border: 1px solid #223026; border-radius: 100px; padding: 3px 10px;
+    flex: none; white-space: nowrap;
   }
 
   .dish {
@@ -140,10 +154,20 @@
     guide.forEach((s) => s.dishes.forEach(loadPhoto));
   }
 
+  function pluralDishes(n) {
+    const mod10 = n % 10, mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return "блюдо";
+    if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return "блюда";
+    return "блюд";
+  }
+
   function renderSection(section) {
     return `
       <section class="menu-section" id="${slug(section.id)}">
-        <h2>${escapeHtml(section.name)}</h2>
+        <div class="section-head">
+          <h2>${escapeHtml(section.name)}</h2>
+          <span class="count">${section.dishes.length} ${pluralDishes(section.dishes.length)}</span>
+        </div>
         ${section.dishes.map(renderDish).join("")}
       </section>`;
   }
