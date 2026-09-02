@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OKO — инвентаризация</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .hint { font-size: 12px; color: #8b949e; margin: 0 0 16px; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 4px; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d;
+    color: #e6edf3; border-radius: 6px; font-size: 14px; font-family: inherit;
+  }
+  button.action { background: #238636; color: white; border: none; border-radius: 6px; padding: 9px 14px; cursor: pointer; font-size: 14px; }
+  button.secondary { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
+  button.danger { background: #21262d; color: #f85149; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 12px; }
+  button:disabled { opacity: .5; cursor: default; }
+  #gate { max-width: 320px; margin: 80px auto; text-align: center; }
+  #gate input { width: 100%; padding: 10px; margin: 10px 0; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; }
+  #app { display: none; max-width: 780px; margin: 0 auto; }
+  .status { font-size: 13px; margin-top: 8px; min-height: 16px; }
+  .status.error { color: #f85149; }
+  .status.ok { color: #3fb950; }
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .toolbar input[type="search"] { flex: 1; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; }
+
+  .item-row {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 12px 0; border-bottom: 1px solid #21262d;
+  }
+  .item-row:last-child { border-bottom: none; }
+  .item-photo {
+    width: 48px; height: 48px; border-radius: 8px; background: #0d1117;
+    border: 1px solid #30363d; flex: none; object-fit: cover;
+    display: flex; align-items: center; justify-content: center; font-size: 18px; color: #484f58;
+  }
+  .item-main { flex: 1; min-width: 0; }
+  .item-name { font-size: 14.5px; font-weight: 600; }
+  .item-meta { font-size: 12px; color: #8b949e; margin-top: 2px; }
+  .item-balance { font-size: 13px; font-family: ui-monospace, monospace; margin-top: 4px; }
+  .item-balance b { font-size: 16px; }
+  .item-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .item-actions button { font-size: 12px; padding: 5px 9px; }
+
+  .move-form { display: none; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px; }
+  .move-form.open { display: flex; }
+  .move-form input { width: 90px; padding: 6px; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; }
+  .move-form input.note { width: 160px; }
+
+  .history { display: none; margin-top: 8px; font-size: 12.5px; color: #8b949e; }
+  .history.open { display: block; }
+  .history-row { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px dashed #21262d; }
+  .history-row .plus { color: #3fb950; }
+  .history-row .minus { color: #f85149; }
+
+  .add-form { display: flex; flex-wrap: wrap; gap: 8px; }
+  .add-form .field { flex: 1; min-width: 130px; }
+  .add-form .field.wide { flex: 2; min-width: 200px; }
+
+  .export-row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+  .export-row .field { flex: 1; min-width: 140px; margin-bottom: 0; }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <h2>OKO — инвентаризация</h2>
+  <input type="password" id="passwordInput" placeholder="Пароль" onkeydown="if(event.key==='Enter') tryLogin()">
+  <button class="action" onclick="tryLogin()" style="width:100%">Войти</button>
+  <div class="status error" id="gateStatus"></div>
+</div>
+
+<div id="app">
+  <h1>Инвентаризация кухни</h1>
+  <p class="hint">Каталог утвари: добавляй позиции, отмечай приход/списание, смотри остатки. Экспорт — Excel-таблица за выбранный период.</p>
+
+  <div class="card">
+    <h2>Добавить позицию</h2>
+    <div class="add-form">
+      <div class="field wide">
+        <label>Название</label>
+        <input type="text" id="newName" placeholder="Например: Сковородка">
+      </div>
+      <div class="field">
+        <label>Размер (необязательно)</label>
+        <input type="text" id="newSize" placeholder="22 см">
+      </div>
+      <div class="field">
+        <label>Ед. изм</label>
+        <input type="text" id="newUnit" placeholder="шт" value="шт">
+      </div>
+      <div class="field">
+        <label>Начальное кол-во</label>
+        <input type="number" id="newQty" placeholder="0" min="0">
+      </div>
+      <div class="field wide">
+        <label>Примечание (необязательно)</label>
+        <input type="text" id="newNote" placeholder="на складе / сломано и т.п.">
+      </div>
+      <div class="field wide">
+        <label>Фото (необязательно)</label>
+        <input type="file" id="newPhoto" accept="image/*">
+      </div>
+    </div>
+    <button class="action" onclick="addItem()">+ Добавить</button>
+    <div class="status" id="addStatus"></div>
+  </div>
+
+  <div class="card">
+    <h2>Экспорт в Excel</h2>
+    <div class="export-row">
+      <div class="field">
+        <label>С даты</label>
+        <input type="date" id="exportFrom">
+      </div>
+      <div class="field">
+        <label>По дату</label>
+        <input type="date" id="exportTo">
+      </div>
+      <button class="action" onclick="exportExcel()">📥 Скачать таблицу</button>
+    </div>
+    <div class="status" id="exportStatus"></div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <h2 style="margin:0">Позиции</h2>
+      <input type="search" id="search" placeholder="Поиск по названию..." oninput="render()">
+    </div>
+    <div id="itemsList"></div>
+  </div>
+</div>
+
+<script>
+  let password = sessionStorage.getItem("oko_inv_password") || "";
+  let items = [];
+  const photoUrls = {}; // itemId -> blob: URL, fetched with the admin header
+
+  function authHeaders(extra) {
+    return Object.assign({ "X-Admin-Password": password }, extra || {});
+  }
+
+  async function tryLogin() {
+    password = document.getElementById("passwordInput").value;
+    const res = await fetch("/api/oko-inventory/items", { headers: authHeaders() });
+    if (!res.ok) {
+      document.getElementById("gateStatus").innerText = "Неверный пароль";
+      return;
+    }
+    sessionStorage.setItem("oko_inv_password", password);
+    items = await res.json();
+    document.getElementById("gate").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    setDefaultExportRange();
+    render();
+  }
+
+  function setDefaultExportRange() {
+    const now = new Date();
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    document.getElementById("exportFrom").value = first.toISOString().slice(0, 10);
+    document.getElementById("exportTo").value = now.toISOString().slice(0, 10);
+  }
+
+  async function reload() {
+    const res = await fetch("/api/oko-inventory/items", { headers: authHeaders() });
+    items = await res.json();
+    render();
+  }
+
+  async function loadPhoto(item) {
+    if (!item.photo || photoUrls[item.id]) return;
+    const res = await fetch(`/api/oko-inventory/photos/${item.photo}`, { headers: authHeaders() });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    photoUrls[item.id] = URL.createObjectURL(blob);
+    const img = document.getElementById(`photo-${item.id}`);
+    if (img) img.src = photoUrls[item.id];
+  }
+
+  function render() {
+    const q = (document.getElementById("search").value || "").trim().toLowerCase();
+    const list = document.getElementById("itemsList");
+    const filtered = items.filter((it) => !q || it.name.toLowerCase().includes(q));
+
+    if (!filtered.length) {
+      list.innerHTML = `<p class="hint" style="margin:0">Ничего нет.</p>`;
+      return;
+    }
+
+    list.innerHTML = filtered
+      .map((item) => {
+        const historyRows = item.movements
+          .slice(0, 15)
+          .map(
+            (m) => `
+          <div class="history-row">
+            <span>${m.date} ${m.note ? "— " + escapeHtml(m.note) : ""}</span>
+            <span class="${m.type === "приход" ? "plus" : "minus"}">${m.type === "приход" ? "+" : "−"}${m.qty} ${escapeHtml(item.unit)}
+              <button class="danger" onclick="removeMovement('${m.id}')" title="Удалить запись">×</button>
+            </span>
+          </div>`,
+          )
+          .join("");
+
+        return `
+        <div class="item-row">
+          <div class="item-photo" id="photo-wrap-${item.id}">
+            ${item.photo ? `<img class="item-photo" id="photo-${item.id}" style="width:48px;height:48px">` : "📦"}
+          </div>
+          <div class="item-main">
+            <div class="item-name">№${item.number} ${escapeHtml(item.name)}</div>
+            <div class="item-meta">${[item.size, item.note].filter(Boolean).map(escapeHtml).join(" · ") || "&nbsp;"}</div>
+            <div class="item-balance">Остаток: <b>${item.balance}</b> ${escapeHtml(item.unit)}</div>
+            <div class="item-actions">
+              <button class="secondary" onclick="toggleMoveForm('${item.id}', 'приход')">+ Приход</button>
+              <button class="secondary" onclick="toggleMoveForm('${item.id}', 'списание')">− Списание</button>
+              <button class="secondary" onclick="toggleHistory('${item.id}')">История</button>
+              <button class="danger" onclick="removeItem('${item.id}')">Удалить позицию</button>
+            </div>
+            <div class="move-form" id="move-${item.id}">
+              <input type="number" min="1" placeholder="Кол-во" id="moveQty-${item.id}">
+              <input type="date" id="moveDate-${item.id}" value="${new Date().toISOString().slice(0, 10)}">
+              <input type="text" class="note" placeholder="Причина (необязательно)" id="moveNote-${item.id}">
+              <button class="action" id="moveSubmit-${item.id}" onclick="submitMove('${item.id}')">Записать</button>
+            </div>
+            <div class="history" id="history-${item.id}">${historyRows || '<span class="hint">Движений ещё не было</span>'}</div>
+          </div>
+        </div>`;
+      })
+      .join("");
+
+    filtered.forEach(loadPhoto);
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  let openMoveType = {};
+  function toggleMoveForm(id, type) {
+    const form = document.getElementById(`move-${id}`);
+    const isOpen = form.classList.contains("open");
+    document.querySelectorAll(".move-form.open").forEach((f) => f.classList.remove("open"));
+    if (isOpen && openMoveType[id] === type) {
+      openMoveType[id] = null;
+      return;
+    }
+    openMoveType[id] = type;
+    form.classList.add("open");
+    document.getElementById(`moveSubmit-${id}`).innerText = type === "приход" ? "Записать приход" : "Записать списание";
+  }
+
+  function toggleHistory(id) {
+    document.getElementById(`history-${id}`).classList.toggle("open");
+  }
+
+  async function submitMove(id) {
+    const qty = document.getElementById(`moveQty-${id}`).value;
+    const date = document.getElementById(`moveDate-${id}`).value;
+    const note = document.getElementById(`moveNote-${id}`).value;
+    const type = openMoveType[id];
+    if (!qty || Number(qty) <= 0) return;
+    const res = await fetch(`/api/oko-inventory/items/${id}/movement`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ type, qty, date, note }),
+    });
+    if (res.ok) {
+      await reload();
+    }
+  }
+
+  async function removeMovement(movementId) {
+    if (!confirm("Удалить эту запись?")) return;
+    await fetch(`/api/oko-inventory/movements/${movementId}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    await reload();
+  }
+
+  async function removeItem(id) {
+    if (!confirm("Удалить позицию целиком, вместе с историей движений?")) return;
+    await fetch(`/api/oko-inventory/items/${id}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    await reload();
+  }
+
+  function fileToDataUri(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function addItem() {
+    const statusEl = document.getElementById("addStatus");
+    statusEl.className = "status";
+    statusEl.innerText = "";
+
+    const name = document.getElementById("newName").value.trim();
+    if (!name) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Укажите название";
+      return;
+    }
+
+    const photoFile = document.getElementById("newPhoto").files[0];
+    const photo = photoFile ? await fileToDataUri(photoFile) : null;
+
+    const res = await fetch("/api/oko-inventory/items", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        name,
+        size: document.getElementById("newSize").value,
+        unit: document.getElementById("newUnit").value || "шт",
+        note: document.getElementById("newNote").value,
+        initialQty: document.getElementById("newQty").value || 0,
+        photo,
+      }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      statusEl.className = "status error";
+      statusEl.innerText = data.error || "Не удалось добавить";
+      return;
+    }
+
+    ["newName", "newSize", "newUnit", "newQty", "newNote"].forEach((id) => (document.getElementById(id).value = ""));
+    document.getElementById("newUnit").value = "шт";
+    document.getElementById("newPhoto").value = "";
+    statusEl.className = "status ok";
+    statusEl.innerText = "Добавлено";
+    await reload();
+  }
+
+  async function exportExcel() {
+    const from = document.getElementById("exportFrom").value;
+    const to = document.getElementById("exportTo").value;
+    const statusEl = document.getElementById("exportStatus");
+    if (!from || !to) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Укажите обе даты";
+      return;
+    }
+    statusEl.className = "status";
+    statusEl.innerText = "Собираю файл...";
+
+    const res = await fetch(`/api/oko-inventory/export?from=${from}&to=${to}`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Не удалось собрать файл";
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `inventory-${from}_${to}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    statusEl.className = "status ok";
+    statusEl.innerText = "Готово";
+  }
+
+  if (password) {
+    fetch("/api/oko-inventory/items", { headers: authHeaders() }).then((res) => {
+      if (res.ok) {
+        res.json().then((data) => {
+          items = data;
+          document.getElementById("gate").style.display = "none";
+          document.getElementById("app").style.display = "block";
+          setDefaultExportRange();
+          render();
+        });
+      }
+    });
+  }
+</script>
+</body>
+</html>
