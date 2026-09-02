@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OKO — пособие официанта</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0a0f0c; color: #eef2ee; margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 5;
+    background: rgba(10,15,12,0.92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid #223026; padding: 10px 0;
+  }
+  .topbar-inner { display: flex; gap: 6px; overflow-x: auto; padding: 0 14px; scrollbar-width: none; }
+  .topbar-inner::-webkit-scrollbar { display: none; }
+  .topbar a {
+    flex: none; text-decoration: none; font-size: 12.5px; font-weight: 600;
+    color: #9fac9e; background: #121912; border: 1px solid #223026;
+    border-radius: 100px; padding: 7px 13px; white-space: nowrap;
+  }
+  .topbar a.active { color: #06140c; background: #34c17a; border-color: #34c17a; }
+
+  header.hero { padding: 22px 16px 8px; }
+  header.hero h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header.hero p { font-size: 13.5px; color: #9fac9e; margin: 0; }
+
+  main { max-width: 720px; margin: 0 auto; padding: 8px 14px 60px; }
+
+  section.menu-section { padding: 26px 0 6px; }
+  section.menu-section h2 {
+    font-size: 12.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: #34c17a; border-bottom: 1px solid #223026; padding-bottom: 10px; margin: 0 0 14px;
+  }
+
+  .dish {
+    background: #121912; border: 1px solid #1e2a20; border-radius: 14px;
+    padding: 14px 16px; margin-bottom: 12px;
+  }
+  .dish-top { display: flex; gap: 12px; }
+  .dish-photo { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; flex: none; background: #1a221a; }
+  .dish-name { font-size: 16px; font-weight: 700; margin: 0 0 2px; }
+  .dish-subtitle { font-size: 12.5px; font-style: italic; color: #9fac9e; margin: 0 0 6px; }
+  .dish-desc { font-size: 14px; line-height: 1.5; color: #d7ddd6; margin: 6px 0 0; white-space: pre-wrap; }
+
+  .dish-pitch {
+    margin-top: 10px; padding: 10px 12px; background: #0a0f0c; border-left: 3px solid #34c17a;
+    border-radius: 0 8px 8px 0; font-size: 13.5px; font-style: italic; color: #c9d4c9;
+  }
+
+  .dish-toggle {
+    margin-top: 10px; background: none; border: none; color: #34c17a;
+    font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 0;
+  }
+  .dish-extra { display: none; margin-top: 10px; }
+  .dish-extra.open { display: block; }
+  .dish-extra h4 {
+    font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #647063;
+    margin: 12px 0 4px;
+  }
+  .dish-extra h4:first-child { margin-top: 0; }
+  .dish-extra p { font-size: 13.5px; color: #c9d4c9; margin: 0; white-space: pre-wrap; }
+
+  table.calc { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 4px; }
+  table.calc caption { text-align: left; font-size: 12px; color: #9fac9e; margin-bottom: 4px; caption-side: top; }
+  table.calc th { text-align: left; color: #647063; font-weight: 500; padding: 4px 6px 4px 0; border-bottom: 1px solid #223026; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  table.calc td { padding: 5px 6px 5px 0; border-bottom: 1px solid #1a221a; }
+  table.calc td.amount { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .empty { text-align: center; color: #647063; padding: 60px 20px; font-size: 14px; }
+  .search-wrap { padding: 4px 0 4px; }
+  .search-wrap input {
+    width: 100%; padding: 10px 12px; background: #121912; border: 1px solid #223026;
+    color: #eef2ee; border-radius: 10px; font-size: 14px;
+  }
+</style>
+</head>
+<body>
+
+<nav class="topbar"><div class="topbar-inner" id="topbarLinks"></div></nav>
+
+<header class="hero">
+  <h1>Пособие официанта</h1>
+  <p>ОКО — состав блюд, история, как подать гостю</p>
+</header>
+
+<main>
+  <div class="search-wrap"><input type="search" id="search" placeholder="Поиск блюда..." oninput="render()"></div>
+  <div id="content"></div>
+</main>
+
+<script>
+  let guide = [];
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+  function slug(id) {
+    return "sec-" + id;
+  }
+
+  async function load() {
+    const res = await fetch("/api/oko-waiter-guide/guide");
+    guide = res.ok ? await res.json() : [];
+    render();
+  }
+
+  function matchesQuery(dish, q) {
+    if (!q) return true;
+    const hay = [dish.name, dish.subtitle, dish.description].join(" ").toLowerCase();
+    return hay.includes(q);
+  }
+
+  function render() {
+    const q = (document.getElementById("search").value || "").trim().toLowerCase();
+    const visibleSections = guide
+      .map((section) => ({ ...section, dishes: section.dishes.filter((d) => matchesQuery(d, q)) }))
+      .filter((section) => section.dishes.length);
+
+    document.getElementById("topbarLinks").innerHTML = guide
+      .map((s) => `<a href="#${slug(s.id)}">${escapeHtml(s.name)}</a>`)
+      .join("");
+
+    const content = document.getElementById("content");
+    if (!visibleSections.length) {
+      content.innerHTML = `<div class="empty">${q ? "Ничего не найдено" : "Пособие пока пустое"}</div>`;
+      return;
+    }
+
+    content.innerHTML = visibleSections.map(renderSection).join("");
+    guide.forEach((s) => s.dishes.forEach(loadPhoto));
+  }
+
+  function renderSection(section) {
+    return `
+      <section class="menu-section" id="${slug(section.id)}">
+        <h2>${escapeHtml(section.name)}</h2>
+        ${section.dishes.map(renderDish).join("")}
+      </section>`;
+  }
+
+  function renderDish(dish) {
+    const hasExtra = dish.history || (dish.calcTables && dish.calcTables.length);
+    return `
+      <article class="dish">
+        <div class="dish-top">
+          ${dish.photo ? `<img class="dish-photo" id="photo-${dish.id}" onclick="openPhoto('${dish.id}')">` : ""}
+          <div style="min-width:0">
+            <div class="dish-name">${escapeHtml(dish.name)}</div>
+            ${dish.subtitle ? `<div class="dish-subtitle">${escapeHtml(dish.subtitle)}</div>` : ""}
+          </div>
+        </div>
+        ${dish.description ? `<p class="dish-desc">${escapeHtml(dish.description)}</p>` : ""}
+        ${dish.howToServe ? `<div class="dish-pitch">«${escapeHtml(dish.howToServe)}»</div>` : ""}
+        ${hasExtra ? `<button class="dish-toggle" onclick="toggleExtra('${dish.id}')">Показать состав и историю ▾</button>` : ""}
+        <div class="dish-extra" id="extra-${dish.id}">
+          ${dish.history ? `<h4>История</h4><p>${escapeHtml(dish.history)}</p>` : ""}
+          ${(dish.calcTables || []).map(renderCalcTable).join("")}
+        </div>
+      </article>`;
+  }
+
+  function renderCalcTable(table) {
+    return `
+      <h4>Состав</h4>
+      <table class="calc">
+        ${table.label ? `<caption>${escapeHtml(table.label)}</caption>` : ""}
+        <tr><th>Ингредиент</th><th>Ед.</th><th>Кол-во</th></tr>
+        ${table.rows.map((r) => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.unit)}</td><td class="amount">${escapeHtml(r.amount)}</td></tr>`).join("")}
+      </table>`;
+  }
+
+  function toggleExtra(id) {
+    document.getElementById(`extra-${id}`).classList.toggle("open");
+  }
+
+  function openPhoto(id) {
+    const img = document.getElementById(`photo-${id}`);
+    if (img && img.src) window.open(img.src, "_blank");
+  }
+
+  const photoUrls = {};
+  async function loadPhoto(dish) {
+    if (!dish.photo || photoUrls[dish.id]) return;
+    const res = await fetch(`/api/oko-waiter-guide/photos/${dish.photo}`);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    photoUrls[dish.id] = URL.createObjectURL(blob);
+    const img = document.getElementById(`photo-${dish.id}`);
+    if (img) img.src = photoUrls[dish.id];
+  }
+
+  load();
+</script>
+</body>
+</html>

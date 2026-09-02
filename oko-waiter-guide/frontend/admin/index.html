@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OKO — пособие официанта (редактор)</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0; }
+  h3 { font-size: 14.5px; margin: 0; }
+  .hint { font-size: 12px; color: #8b949e; margin: 0 0 16px; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 4px; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d;
+    color: #e6edf3; border-radius: 6px; font-size: 14px; font-family: inherit;
+  }
+  .field textarea { resize: vertical; min-height: 54px; }
+  button.action { background: #238636; color: white; border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
+  button.secondary { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 7px 11px; cursor: pointer; font-size: 12.5px; }
+  button.danger { background: #21262d; color: #f85149; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 12px; }
+  button.icon { background: none; border: none; color: #8b949e; cursor: pointer; font-size: 14px; padding: 2px 6px; }
+  #gate { max-width: 320px; margin: 80px auto; text-align: center; }
+  #gate input { width: 100%; padding: 10px; margin: 10px 0; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; }
+  #app { display: none; max-width: 820px; margin: 0 auto; }
+  .status { font-size: 13px; margin-top: 8px; min-height: 16px; }
+  .status.error { color: #f85149; }
+  .status.ok { color: #3fb950; }
+
+  .section-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; }
+  .section-title { display: flex; align-items: center; gap: 8px; }
+  .section-count { font-size: 12px; color: #8b949e; font-weight: 400; }
+  .section-actions { display: flex; gap: 4px; }
+  .section-body { display: none; margin-top: 12px; }
+  .section-body.open { display: block; }
+
+  .dish-row { border: 1px solid #21262d; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; background: #0d1117; }
+  .dish-row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; }
+  .dish-row-head .name { font-size: 14px; font-weight: 600; }
+  .dish-thumb { width: 32px; height: 32px; border-radius: 6px; object-fit: cover; background: #161b22; flex: none; }
+  .dish-actions { display: flex; gap: 4px; }
+  .dish-edit { display: none; margin-top: 10px; border-top: 1px solid #21262d; padding-top: 10px; }
+  .dish-edit.open { display: block; }
+
+  .calc-table { border: 1px dashed #30363d; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+  .calc-row { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+  .calc-row input { flex: 1; padding: 6px; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 13px; }
+  .calc-row input.amount { flex: 0 0 70px; }
+  .calc-row input.unit { flex: 0 0 60px; }
+
+  .new-section-form { display: flex; gap: 8px; }
+  .new-section-form input { flex: 1; }
+
+  .orphans { border-color: #a6741a; }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <h2>OKO — пособие официанта</h2>
+  <input type="password" id="passwordInput" placeholder="Пароль" onkeydown="if(event.key==='Enter') tryLogin()">
+  <button class="action" onclick="tryLogin()" style="width:100%">Войти</button>
+  <div class="status error" id="gateStatus"></div>
+</div>
+
+<div id="app">
+  <h1>Пособие официанта — редактор</h1>
+  <p class="hint">
+    Разделы и блюда. Официанты читают готовый результат на отдельной странице (без пароля):
+    <code id="guideLinkText">/waiter-guide/</code>.
+  </p>
+
+  <div class="card">
+    <h2 style="margin-bottom:10px">Новый раздел</h2>
+    <div class="new-section-form">
+      <input type="text" id="newSectionName" placeholder="Например: Пасты">
+      <button class="action" onclick="addSection()">+ Добавить</button>
+    </div>
+    <div class="status" id="sectionStatus"></div>
+  </div>
+
+  <div id="sectionsList"></div>
+  <div id="orphansWrap"></div>
+</div>
+
+<script>
+  let password = sessionStorage.getItem("owg_admin_password") || "";
+  let sections = [];
+  let dishes = [];
+  let orphans = [];
+  const photoUrls = {};
+  const openSections = new Set();
+  const openDishes = new Set();
+
+  function authHeaders(extra) {
+    return Object.assign({ "X-Admin-Password": password }, extra || {});
+  }
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  async function tryLogin() {
+    password = document.getElementById("passwordInput").value;
+    const res = await fetch("/api/oko-waiter-guide/admin/sections", { headers: authHeaders() });
+    if (!res.ok) {
+      document.getElementById("gateStatus").innerText = "Неверный пароль";
+      return;
+    }
+    sessionStorage.setItem("owg_admin_password", password);
+    document.getElementById("gate").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    document.getElementById("guideLinkText").innerText = location.origin + "/waiter-guide/";
+    await reload();
+  }
+
+  async function reload() {
+    const [sRes, dRes, oRes] = await Promise.all([
+      fetch("/api/oko-waiter-guide/admin/sections", { headers: authHeaders() }),
+      fetch("/api/oko-waiter-guide/admin/dishes", { headers: authHeaders() }),
+      fetch("/api/oko-waiter-guide/admin/orphan-dishes", { headers: authHeaders() }),
+    ]);
+    sections = (await sRes.json()).sort((a, b) => (a.order || 0) - (b.order || 0));
+    dishes = await dRes.json();
+    orphans = await oRes.json();
+    render();
+  }
+
+  function dishesFor(sectionId) {
+    return dishes.filter((d) => d.sectionId === sectionId).sort((a, b) => (a.order || 0) - (b.order || 0));
+  }
+
+  function render() {
+    const wrap = document.getElementById("sectionsList");
+    wrap.innerHTML = sections.map((section, i) => renderSection(section, i)).join("");
+    document.getElementById("orphansWrap").innerHTML = orphans.length ? renderOrphans() : "";
+    orphans.forEach(loadPhoto);
+    dishes.forEach(loadPhoto);
+  }
+
+  function renderOrphans() {
+    return `
+      <div class="card orphans">
+        <h2>⚠ Без раздела (${orphans.length})</h2>
+        <p class="hint">Раздел этих блюд удалили — назначьте им раздел заново или удалите блюдо.</p>
+        ${orphans.map((d) => renderDishRow(d)).join("")}
+      </div>`;
+  }
+
+  function renderSection(section, index) {
+    const list = dishesFor(section.id);
+    const isOpen = openSections.has(section.id);
+    return `
+      <div class="card">
+        <div class="section-header" onclick="toggleSection('${section.id}')">
+          <div class="section-title">
+            <h2>${escapeHtml(section.name)}</h2>
+            <span class="section-count">${list.length} блюд</span>
+          </div>
+          <div class="section-actions" onclick="event.stopPropagation()">
+            <button class="icon" onclick="moveSection('${section.id}', -1)" title="Выше">↑</button>
+            <button class="icon" onclick="moveSection('${section.id}', 1)" title="Ниже">↓</button>
+            <button class="secondary" onclick="renameSection('${section.id}')">Переименовать</button>
+            <button class="danger" onclick="removeSection('${section.id}')">Удалить</button>
+          </div>
+        </div>
+        <div class="section-body ${isOpen ? "open" : ""}" id="section-body-${section.id}">
+          ${list.map((d) => renderDishRow(d)).join("")}
+          <button class="secondary" onclick="showNewDishForm('${section.id}')">+ Добавить блюдо</button>
+          <div id="new-dish-${section.id}"></div>
+        </div>
+      </div>`;
+  }
+
+  function toggleSection(id) {
+    if (openSections.has(id)) openSections.delete(id);
+    else openSections.add(id);
+    document.getElementById(`section-body-${id}`).classList.toggle("open");
+  }
+
+  async function renameSection(id) {
+    const section = sections.find((s) => s.id === id);
+    const name = prompt("Новое название раздела", section.name);
+    if (!name || !name.trim()) return;
+    await fetch(`/api/oko-waiter-guide/admin/sections/${id}`, {
+      method: "PATCH",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ name }),
+    });
+    await reload();
+  }
+
+  async function removeSection(id) {
+    if (!confirm("Удалить раздел? Блюда в нём не удалятся, попадут в «Без раздела».")) return;
+    await fetch(`/api/oko-waiter-guide/admin/sections/${id}`, { method: "DELETE", headers: authHeaders() });
+    await reload();
+  }
+
+  async function moveSection(id, delta) {
+    const ordered = sections.map((s) => s.id);
+    const i = ordered.indexOf(id);
+    const j = i + delta;
+    if (j < 0 || j >= ordered.length) return;
+    [ordered[i], ordered[j]] = [ordered[j], ordered[i]];
+    await fetch("/api/oko-waiter-guide/admin/sections/reorder", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ orderedIds: ordered }),
+    });
+    await reload();
+  }
+
+  async function addSection() {
+    const input = document.getElementById("newSectionName");
+    const statusEl = document.getElementById("sectionStatus");
+    if (!input.value.trim()) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Укажите название";
+      return;
+    }
+    const res = await fetch("/api/oko-waiter-guide/admin/sections", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ name: input.value }),
+    });
+    if (!res.ok) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Не удалось добавить";
+      return;
+    }
+    input.value = "";
+    statusEl.className = "status ok";
+    statusEl.innerText = "Добавлено";
+    await reload();
+  }
+
+  function renderDishRow(dish) {
+    const isOpen = openDishes.has(dish.id);
+    return `
+      <div class="dish-row">
+        <div class="dish-row-head" onclick="toggleDish('${dish.id}')">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0">
+            ${dish.photo ? `<img class="dish-thumb" id="photo-${dish.id}">` : `<div class="dish-thumb"></div>`}
+            <span class="name">${escapeHtml(dish.name) || "(без названия)"}</span>
+          </div>
+          <div class="dish-actions" onclick="event.stopPropagation()">
+            <button class="icon" onclick="moveDish('${dish.id}', -1)" title="Выше">↑</button>
+            <button class="icon" onclick="moveDish('${dish.id}', 1)" title="Ниже">↓</button>
+            <button class="danger" onclick="removeDish('${dish.id}')">Удалить</button>
+          </div>
+        </div>
+        <div class="dish-edit ${isOpen ? "open" : ""}" id="dish-edit-${dish.id}">
+          ${renderDishForm(dish)}
+        </div>
+      </div>`;
+  }
+
+  function toggleDish(id) {
+    const nowOpen = !openDishes.has(id);
+    if (nowOpen) openDishes.add(id);
+    else openDishes.delete(id);
+    document.getElementById(`dish-edit-${id}`).classList.toggle("open", nowOpen);
+    // The calc-tables editor starts as an empty placeholder in
+    // renderDishForm() — populate it from the dish's saved data the first
+    // time its edit panel is actually opened (skip if a local draft
+    // already exists, so re-toggling doesn't discard unsaved edits).
+    if (nowOpen) renderCalc(id);
+  }
+
+  function renderDishForm(dish) {
+    const d = dish.id;
+    return `
+      <div class="field"><label>Название</label><input type="text" id="name-${d}" value="${escapeHtml(dish.name)}"></div>
+      <div class="field"><label>Подзаголовок (курсив, необязательно)</label><input type="text" id="subtitle-${d}" value="${escapeHtml(dish.subtitle)}"></div>
+      <div class="field"><label>Описание</label><textarea id="description-${d}">${escapeHtml(dish.description)}</textarea></div>
+      <div class="field"><label>История (необязательно)</label><textarea id="history-${d}">${escapeHtml(dish.history)}</textarea></div>
+      <div class="field"><label>Как подать гостю (необязательно)</label><textarea id="howToServe-${d}">${escapeHtml(dish.howToServe)}</textarea></div>
+      <div class="field"><label>Раздел</label>
+        <select id="section-${d}">
+          <option value="">— без раздела —</option>
+          ${sections.map((s) => `<option value="${s.id}" ${s.id === dish.sectionId ? "selected" : ""}>${escapeHtml(s.name)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field"><label>Фото</label>
+        <input type="file" id="photo-input-${d}" accept="image/*">
+        ${dish.photo ? `<button class="secondary" style="margin-top:6px" onclick="removeDishPhoto('${d}')">Убрать текущее фото</button>` : ""}
+      </div>
+      <div class="field"><label>Калькуляция (таблицы ингредиентов)</label>
+        <div id="calc-${d}"></div>
+        <button class="secondary" onclick="addCalcTable('${d}')">+ Добавить таблицу</button>
+      </div>
+      <button class="action" onclick="saveDish('${d}')">Сохранить</button>
+      <div class="status" id="save-status-${d}"></div>
+    `;
+  }
+
+  // calcTables are edited in a local JS mirror per dish, synced to the DOM
+  // on every change, then sent as JSON on save.
+  const calcDraft = {};
+
+  function ensureCalcDraft(dishId) {
+    if (!calcDraft[dishId]) {
+      const dish = dishes.find((x) => x.id === dishId) || orphans.find((x) => x.id === dishId);
+      calcDraft[dishId] = JSON.parse(JSON.stringify((dish && dish.calcTables) || []));
+    }
+    return calcDraft[dishId];
+  }
+
+  function renderCalc(dishId) {
+    const tables = ensureCalcDraft(dishId);
+    document.getElementById(`calc-${dishId}`).innerHTML = tables
+      .map(
+        (t, ti) => `
+      <div class="calc-table">
+        <div class="field"><input type="text" placeholder="Название таблицы (необязательно)" value="${escapeHtml(t.label || "")}"
+          onchange="calcDraft['${dishId}'][${ti}].label = this.value"></div>
+        ${t.rows
+          .map(
+            (r, ri) => `
+          <div class="calc-row">
+            <input type="text" placeholder="Ингредиент" value="${escapeHtml(r.name || "")}"
+              onchange="calcDraft['${dishId}'][${ti}].rows[${ri}].name = this.value">
+            <input type="text" class="unit" placeholder="ед." value="${escapeHtml(r.unit || "")}"
+              onchange="calcDraft['${dishId}'][${ti}].rows[${ri}].unit = this.value">
+            <input type="text" class="amount" placeholder="кол-во" value="${escapeHtml(r.amount || "")}"
+              onchange="calcDraft['${dishId}'][${ti}].rows[${ri}].amount = this.value">
+            <button class="icon" onclick="removeCalcRow('${dishId}', ${ti}, ${ri})">✕</button>
+          </div>`,
+          )
+          .join("")}
+        <button class="secondary" onclick="addCalcRow('${dishId}', ${ti})">+ Ингредиент</button>
+        <button class="danger" onclick="removeCalcTable('${dishId}', ${ti})">Удалить таблицу</button>
+      </div>`,
+      )
+      .join("");
+  }
+
+  function addCalcTable(dishId) {
+    ensureCalcDraft(dishId).push({ label: "", rows: [{ name: "", unit: "кг", amount: "" }] });
+    renderCalc(dishId);
+  }
+  function removeCalcTable(dishId, ti) {
+    ensureCalcDraft(dishId).splice(ti, 1);
+    renderCalc(dishId);
+  }
+  function addCalcRow(dishId, ti) {
+    ensureCalcDraft(dishId)[ti].rows.push({ name: "", unit: "кг", amount: "" });
+    renderCalc(dishId);
+  }
+  function removeCalcRow(dishId, ti, ri) {
+    ensureCalcDraft(dishId)[ti].rows.splice(ri, 1);
+    renderCalc(dishId);
+  }
+
+  function fileToDataUri(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function removeDishPhoto(dishId) {
+    await fetch(`/api/oko-waiter-guide/admin/dishes/${dishId}`, {
+      method: "PATCH",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ removePhoto: true }),
+    });
+    await reload();
+  }
+
+  async function saveDish(dishId) {
+    const statusEl = document.getElementById(`save-status-${dishId}`);
+    const photoFile = document.getElementById(`photo-input-${dishId}`).files[0];
+    const photo = photoFile ? await fileToDataUri(photoFile) : undefined;
+
+    const body = {
+      name: document.getElementById(`name-${dishId}`).value,
+      subtitle: document.getElementById(`subtitle-${dishId}`).value,
+      description: document.getElementById(`description-${dishId}`).value,
+      history: document.getElementById(`history-${dishId}`).value,
+      howToServe: document.getElementById(`howToServe-${dishId}`).value,
+      sectionId: document.getElementById(`section-${dishId}`).value || null,
+      calcTables: ensureCalcDraft(dishId),
+    };
+    if (photo) body.photo = photo;
+
+    const res = await fetch(`/api/oko-waiter-guide/admin/dishes/${dishId}`, {
+      method: "PATCH",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Не удалось сохранить";
+      return;
+    }
+    statusEl.className = "status ok";
+    statusEl.innerText = "Сохранено";
+    openDishes.add(dishId);
+    await reload();
+    document.getElementById(`dish-edit-${dishId}`)?.classList.add("open");
+    renderCalc(dishId);
+  }
+
+  async function removeDish(id) {
+    if (!confirm("Удалить блюдо целиком?")) return;
+    await fetch(`/api/oko-waiter-guide/admin/dishes/${id}`, { method: "DELETE", headers: authHeaders() });
+    delete calcDraft[id];
+    await reload();
+  }
+
+  async function moveDish(id, delta) {
+    const dish = dishes.find((x) => x.id === id);
+    if (!dish) return;
+    const siblings = dishesFor(dish.sectionId).map((x) => x.id);
+    const i = siblings.indexOf(id);
+    const j = i + delta;
+    if (j < 0 || j >= siblings.length) return;
+    [siblings[i], siblings[j]] = [siblings[j], siblings[i]];
+    await fetch("/api/oko-waiter-guide/admin/dishes/reorder", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ orderedIds: siblings }),
+    });
+    await reload();
+  }
+
+  function showNewDishForm(sectionId) {
+    const el = document.getElementById(`new-dish-${sectionId}`);
+    el.innerHTML = `
+      <div class="dish-row">
+        <div class="field"><label>Название нового блюда</label><input type="text" id="quick-new-name-${sectionId}"></div>
+        <button class="action" onclick="createDish('${sectionId}')">Создать</button>
+        <div class="status" id="quick-new-status-${sectionId}"></div>
+      </div>`;
+  }
+
+  async function createDish(sectionId) {
+    const input = document.getElementById(`quick-new-name-${sectionId}`);
+    const statusEl = document.getElementById(`quick-new-status-${sectionId}`);
+    if (!input.value.trim()) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Укажите название";
+      return;
+    }
+    const res = await fetch("/api/oko-waiter-guide/admin/dishes", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ name: input.value, sectionId }),
+    });
+    if (!res.ok) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Не удалось создать";
+      return;
+    }
+    const created = await res.json();
+    openSections.add(sectionId);
+    openDishes.add(created.id);
+    await reload();
+    renderCalc(created.id);
+  }
+
+  async function loadPhoto(dish) {
+    if (!dish.photo || photoUrls[dish.id]) return;
+    const res = await fetch(`/api/oko-waiter-guide/photos/${dish.photo}`);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    photoUrls[dish.id] = URL.createObjectURL(blob);
+    const img = document.getElementById(`photo-${dish.id}`);
+    if (img) img.src = photoUrls[dish.id];
+  }
+
+  if (password) {
+    fetch("/api/oko-waiter-guide/admin/sections", { headers: authHeaders() }).then((res) => {
+      if (res.ok) {
+        document.getElementById("gate").style.display = "none";
+        document.getElementById("app").style.display = "block";
+        document.getElementById("guideLinkText").innerText = location.origin + "/waiter-guide/";
+        reload();
+      }
+    });
+  }
+</script>
+</body>
+</html>
