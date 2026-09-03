@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OKO — пособие официанта</title>
 <style>
+  html { font-size: 100%; } /* rem baseline — type scales with the reader's system text size */
   * { box-sizing: border-box; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -16,20 +17,33 @@
   .topbar {
     position: sticky; top: 0; z-index: 5;
     background: rgba(10,15,12,0.92); backdrop-filter: blur(8px);
-    border-bottom: 1px solid #223026; padding: 10px 0;
+    padding: 10px 0;
+  }
+  /* scroll-edge fade instead of a hard line under a floating/translucent bar */
+  .topbar::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -16px; height: 16px;
+    background: linear-gradient(to bottom, rgba(10,15,12,0.5), transparent);
+    pointer-events: none;
   }
   .topbar-inner { display: flex; gap: 6px; overflow-x: auto; padding: 0 14px; scrollbar-width: none; }
   .topbar-inner::-webkit-scrollbar { display: none; }
   .topbar a {
-    flex: none; text-decoration: none; font-size: 12.5px; font-weight: 600;
+    flex: none; text-decoration: none; font-size: 0.781rem; font-weight: 600;
     color: #9fac9e; background: #121912; border: 1px solid #223026;
-    border-radius: 100px; padding: 7px 13px; white-space: nowrap;
+    border-radius: 100px; padding: 9px 14px; white-space: nowrap;
+    transition: transform 100ms ease-out, background 150ms ease, color 150ms ease, border-color 150ms ease;
   }
+  .topbar a:active { transform: scale(0.95); }
   .topbar a.active { color: #06140c; background: #34c17a; border-color: #34c17a; }
 
+  @media (prefers-reduced-transparency: reduce) {
+    .topbar { background: #0a0f0c; backdrop-filter: none; }
+    .topbar::after { display: none; }
+  }
+
   header.hero { padding: 22px 16px 8px; }
-  header.hero h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
-  header.hero p { font-size: 13.5px; color: #9fac9e; margin: 0; }
+  header.hero h1 { font-size: 1.375rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header.hero p { font-size: 0.844rem; color: #9fac9e; margin: 0; }
 
   main { max-width: 720px; margin: 0 auto; padding: 8px 14px 60px; }
 
@@ -45,10 +59,10 @@
     border-bottom: 1px solid #223026; padding-bottom: 12px; margin: 0 0 16px;
   }
   .section-head h2 {
-    font-size: 17px; font-weight: 800; letter-spacing: -0.01em; margin: 0;
+    font-size: 1.0625rem; font-weight: 800; letter-spacing: -0.01em; margin: 0;
   }
   .section-head .count {
-    font-size: 11px; font-weight: 600; color: #9fac9e; background: #121912;
+    font-size: 0.688rem; font-weight: 600; color: #9fac9e; background: #121912;
     border: 1px solid #223026; border-radius: 100px; padding: 3px 10px;
     flex: none; white-space: nowrap;
   }
@@ -58,40 +72,99 @@
     padding: 14px 16px; margin-bottom: 12px;
   }
   .dish-top { display: flex; gap: 12px; }
-  .dish-photo { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; flex: none; background: #1a221a; }
-  .dish-name { font-size: 16px; font-weight: 700; margin: 0 0 2px; }
-  .dish-subtitle { font-size: 12.5px; font-style: italic; color: #9fac9e; margin: 0 0 6px; }
-  .dish-desc { font-size: 14px; line-height: 1.5; color: #d7ddd6; margin: 6px 0 0; white-space: pre-wrap; }
+  .dish-photo {
+    width: 64px; height: 64px; border-radius: 10px; object-fit: cover; flex: none;
+    background: #1a221a; cursor: pointer;
+    transition: transform 100ms ease-out, opacity 100ms ease-out;
+  }
+  .dish-photo:active { transform: scale(0.94); opacity: 0.85; }
+  .dish-name { font-size: 1rem; font-weight: 700; margin: 0 0 2px; }
+  .dish-subtitle { font-size: 0.781rem; font-style: italic; color: #9fac9e; margin: 0 0 6px; }
+  .dish-desc { font-size: 0.875rem; line-height: 1.5; color: #d7ddd6; margin: 6px 0 0; white-space: pre-wrap; }
 
   .dish-pitch {
     margin-top: 10px; padding: 10px 12px; background: #0a0f0c; border-left: 3px solid #34c17a;
-    border-radius: 0 8px 8px 0; font-size: 13.5px; font-style: italic; color: #c9d4c9;
+    border-radius: 0 8px 8px 0; font-size: 0.844rem; font-style: italic; color: #c9d4c9;
   }
 
+  /* Full ~44px tap target (10px padding, not 0), press feedback, a caret that
+     flips, and a label that names the current state — instead of a static
+     text link that never says whether it's open. */
   .dish-toggle {
-    margin-top: 10px; background: none; border: none; color: #34c17a;
-    font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 0;
+    margin: 10px -4px 0; background: none; border: none; color: #34c17a;
+    font-size: 0.781rem; font-weight: 600; cursor: pointer; padding: 10px 4px;
+    display: inline-flex; align-items: center; gap: 4px;
+    transition: opacity 100ms ease-out, transform 100ms ease-out;
   }
-  .dish-extra { display: none; margin-top: 10px; }
-  .dish-extra.open { display: block; }
+  .dish-toggle:active { opacity: 0.6; transform: scale(0.98); }
+  .dish-toggle .caret { display: inline-block; transition: transform 200ms ease; }
+  .dish-toggle.open .caret { transform: rotate(180deg); }
+
+  /* Animatable grid-rows accordion instead of display:none/block — settles
+     open/closed instead of snapping. */
+  .dish-extra {
+    display: grid; grid-template-rows: 0fr; opacity: 0; margin-top: 10px;
+    transition: grid-template-rows 280ms cubic-bezier(0.4,0,0.2,1), opacity 220ms ease;
+  }
+  .dish-extra.open { grid-template-rows: 1fr; opacity: 1; }
+  .dish-extra > div { overflow: hidden; min-height: 0; }
   .dish-extra h4 {
-    font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #647063;
+    font-size: 0.688rem; letter-spacing: 0.05em; text-transform: uppercase; color: #647063;
     margin: 12px 0 4px;
   }
   .dish-extra h4:first-child { margin-top: 0; }
-  .dish-extra p { font-size: 13.5px; color: #c9d4c9; margin: 0; white-space: pre-wrap; }
+  .dish-extra p { font-size: 0.844rem; color: #c9d4c9; margin: 0; white-space: pre-wrap; }
 
-  table.calc { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 4px; }
-  table.calc caption { text-align: left; font-size: 12px; color: #9fac9e; margin-bottom: 4px; caption-side: top; }
-  table.calc th { text-align: left; color: #647063; font-weight: 500; padding: 4px 6px 4px 0; border-bottom: 1px solid #223026; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  @media (prefers-reduced-motion: reduce) {
+    .dish-extra { transition: opacity 200ms ease; }
+  }
+
+  table.calc { width: 100%; border-collapse: collapse; font-size: 0.781rem; margin-top: 4px; }
+  table.calc caption { text-align: left; font-size: 0.75rem; color: #9fac9e; margin-bottom: 4px; caption-side: top; }
+  table.calc th { text-align: left; color: #647063; font-weight: 500; padding: 4px 6px 4px 0; border-bottom: 1px solid #223026; font-size: 0.688rem; text-transform: uppercase; letter-spacing: 0.04em; }
   table.calc td { padding: 5px 6px 5px 0; border-bottom: 1px solid #1a221a; }
   table.calc td.amount { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-  .empty { text-align: center; color: #647063; padding: 60px 20px; font-size: 14px; }
+  .empty { text-align: center; color: #647063; padding: 60px 20px; font-size: 0.875rem; }
   .search-wrap { padding: 4px 0 4px; }
   .search-wrap input {
     width: 100%; padding: 10px 12px; background: #121912; border: 1px solid #223026;
-    color: #eef2ee; border-radius: 10px; font-size: 14px;
+    color: #eef2ee; border-radius: 10px; font-size: 0.875rem;
+  }
+
+  /* Photo opens in place — anchored overlay, not a new browser tab with no
+     path back. */
+  .lightbox {
+    position: fixed; inset: 0; z-index: 30; display: flex;
+    align-items: center; justify-content: center; padding: 24px;
+    background: rgba(4,7,5,0); backdrop-filter: blur(0px);
+    opacity: 0; pointer-events: none;
+    transition: opacity 220ms ease, background 220ms ease, backdrop-filter 220ms ease;
+  }
+  .lightbox.open {
+    opacity: 1; pointer-events: auto;
+    background: rgba(4,7,5,0.88); backdrop-filter: blur(6px);
+  }
+  .lightbox img {
+    max-width: 100%; max-height: 100%; border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    transform: scale(0.85);
+    transition: transform 260ms cubic-bezier(0.2,0.8,0.2,1);
+  }
+  .lightbox.open img { transform: scale(1); }
+  .lightbox-close {
+    position: absolute; top: 16px; right: 16px; width: 40px; height: 40px;
+    border-radius: 50%; background: rgba(18,25,18,0.75); border: 1px solid #223026;
+    color: #eef2ee; font-size: 1rem; line-height: 1; cursor: pointer;
+    transition: transform 100ms ease-out, background 150ms ease;
+  }
+  .lightbox-close:active { transform: scale(0.92); background: rgba(18,25,18,0.95); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lightbox, .lightbox img { transition: opacity 200ms ease; transform: none !important; }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .lightbox.open { background: #06140c; backdrop-filter: none; }
   }
 </style>
 </head>
@@ -109,8 +182,16 @@
   <div id="content"></div>
 </main>
 
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" onclick="closeLightbox()" aria-label="Закрыть фото">✕</button>
+  <img id="lightboxImg" alt="">
+</div>
+
 <script>
+  document.addEventListener("touchstart", function () {}, { passive: true }); // enables :active feedback reliably on iOS Safari
+
   let guide = [];
+  let sectionObserver = null;
 
   function escapeHtml(value) {
     return String(value || "")
@@ -120,6 +201,33 @@
   }
   function slug(id) {
     return "sec-" + id;
+  }
+
+  // Scrollspy: highlights the topbar pill for whichever section is currently
+  // under the sticky bar, so the reader always knows where they are.
+  let intersecting = new Set();
+  function setupScrollSpy() {
+    if (sectionObserver) sectionObserver.disconnect();
+    intersecting = new Set();
+    const sections = Array.from(document.querySelectorAll("section.menu-section"));
+    if (!sections.length) return;
+    sectionObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) intersecting.add(entry.target);
+        else intersecting.delete(entry.target);
+      });
+      const top = sections.find((s) => intersecting.has(s));
+      if (top) setActiveSection(top.id);
+    }, { rootMargin: "-64px 0px -70% 0px", threshold: 0 });
+    sections.forEach((s) => sectionObserver.observe(s));
+  }
+
+  function setActiveSection(id) {
+    document.querySelectorAll(".topbar a").forEach((a) => {
+      a.classList.toggle("active", a.getAttribute("href") === `#${id}`);
+    });
+    const activeLink = document.querySelector(`.topbar a[href="#${id}"]`);
+    if (activeLink) activeLink.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
   }
 
   async function load() {
@@ -147,11 +255,13 @@
     const content = document.getElementById("content");
     if (!visibleSections.length) {
       content.innerHTML = `<div class="empty">${q ? "Ничего не найдено" : "Пособие пока пустое"}</div>`;
+      if (sectionObserver) sectionObserver.disconnect();
       return;
     }
 
     content.innerHTML = visibleSections.map(renderSection).join("");
     guide.forEach((s) => s.dishes.forEach(loadPhoto));
+    setupScrollSpy();
   }
 
   function pluralDishes(n) {
@@ -185,11 +295,14 @@
         </div>
         ${dish.description ? `<p class="dish-desc">${escapeHtml(dish.description)}</p>` : ""}
         ${dish.howToServe ? `<div class="dish-pitch">«${escapeHtml(dish.howToServe)}»</div>` : ""}
-        ${hasExtra ? `<button class="dish-toggle" onclick="toggleExtra('${dish.id}')">Показать состав и историю ▾</button>` : ""}
-        <div class="dish-extra" id="extra-${dish.id}">
+        ${hasExtra ? `
+          <button class="dish-toggle" id="toggle-${dish.id}" onclick="toggleExtra('${dish.id}')" aria-expanded="false">
+            <span class="label">Показать состав и историю</span><span class="caret">▾</span>
+          </button>` : ""}
+        <div class="dish-extra" id="extra-${dish.id}"><div>
           ${dish.history ? `<h4>История</h4><p>${escapeHtml(dish.history)}</p>` : ""}
           ${(dish.calcTables || []).map(renderCalcTable).join("")}
-        </div>
+        </div></div>
       </article>`;
   }
 
@@ -204,13 +317,32 @@
   }
 
   function toggleExtra(id) {
-    document.getElementById(`extra-${id}`).classList.toggle("open");
+    const extra = document.getElementById(`extra-${id}`);
+    const btn = document.getElementById(`toggle-${id}`);
+    const nowOpen = !extra.classList.contains("open");
+    extra.classList.toggle("open", nowOpen);
+    btn.classList.toggle("open", nowOpen);
+    btn.setAttribute("aria-expanded", String(nowOpen));
+    btn.querySelector(".label").textContent = nowOpen ? "Скрыть состав и историю" : "Показать состав и историю";
   }
 
   function openPhoto(id) {
     const img = document.getElementById(`photo-${id}`);
-    if (img && img.src) window.open(img.src, "_blank");
+    if (!img || !img.src) return;
+    document.getElementById("lightboxImg").src = img.src;
+    document.getElementById("lightbox").classList.add("open");
+    document.body.style.overflow = "hidden";
   }
+  function closeLightbox() {
+    document.getElementById("lightbox").classList.remove("open");
+    document.body.style.overflow = "";
+  }
+  document.getElementById("lightbox").addEventListener("click", (e) => {
+    if (e.target.id === "lightbox") closeLightbox();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeLightbox();
+  });
 
   const photoUrls = {};
   async function loadPhoto(dish) {
