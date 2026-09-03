@@ -40,6 +40,7 @@
   .dish-row { border: 1px solid #21262d; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; background: #0d1117; }
   .dish-row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; }
   .dish-row-head .name { font-size: 14px; font-weight: 600; }
+  .chevron { flex: none; color: #8b949e; font-size: 12px; width: 10px; }
   .dish-thumb { width: 32px; height: 32px; border-radius: 6px; object-fit: cover; background: #161b22; flex: none; }
   .dish-actions { display: flex; gap: 4px; }
   .dish-edit { display: none; margin-top: 10px; border-top: 1px solid #21262d; padding-top: 10px; }
@@ -165,6 +166,7 @@
           <div class="section-actions" onclick="event.stopPropagation()">
             <button class="icon" onclick="moveSection('${section.id}', -1)" title="Выше">↑</button>
             <button class="icon" onclick="moveSection('${section.id}', 1)" title="Ниже">↓</button>
+            <button class="secondary" onclick="collapseAllInSection('${section.id}')">Свернуть все</button>
             <button class="secondary" onclick="renameSection('${section.id}')">Переименовать</button>
             <button class="danger" onclick="removeSection('${section.id}')">Удалить</button>
           </div>
@@ -181,6 +183,14 @@
     if (openSections.has(id)) openSections.delete(id);
     else openSections.add(id);
     document.getElementById(`section-body-${id}`).classList.toggle("open");
+  }
+
+  // Bulk-close every currently-open dish in one section — useful once
+  // you've opened several dishes to edit in a row and want to go back to a
+  // scannable list instead of scrolling up to each dish's header one by one.
+  function collapseAllInSection(sectionId) {
+    dishesFor(sectionId).forEach((d) => openDishes.delete(d.id));
+    render();
   }
 
   async function renameSection(id) {
@@ -245,6 +255,7 @@
       <div class="dish-row">
         <div class="dish-row-head" onclick="toggleDish('${dish.id}')">
           <div style="display:flex;align-items:center;gap:8px;min-width:0">
+            <span class="chevron">${isOpen ? "▾" : "▸"}</span>
             ${dish.photo ? `<img class="dish-thumb" id="photo-${dish.id}">` : `<div class="dish-thumb"></div>`}
             <span class="name">${escapeHtml(dish.name) || "(без названия)"}</span>
           </div>
@@ -294,7 +305,10 @@
         <div id="calc-${d}"></div>
         <button class="secondary" onclick="addCalcTable('${d}')">+ Добавить таблицу</button>
       </div>
-      <button class="action" onclick="saveDish('${d}')">Сохранить</button>
+      <div style="display:flex; gap:8px; align-items:center">
+        <button class="action" onclick="saveDish('${d}')">Сохранить</button>
+        <button class="secondary" onclick="toggleDish('${d}')">▾ Свернуть</button>
+      </div>
       <div class="status" id="save-status-${d}"></div>
     `;
   }
