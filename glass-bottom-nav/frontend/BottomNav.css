@@ -1,0 +1,129 @@
+/*
+ * Стекло нижней навигации KitchenDesk — согласовано на прототипах:
+ *   1) https://claude.ai/code/artifact/a22fb092-747e-43c3-aa7f-22e09767e728 (форма вееера — вариант A)
+ *   2) https://claude.ai/code/artifact/51c4e698-8b33-4973-a304-76bca691e1e0 (финал: вся лента и
+ *      плитки "Склад" — один и тот же рецепт прозрачного зелёного стекла)
+ *
+ * Обычный CSS-файл, а не только Tailwind-утилиты — эффект стекла требует
+ * многослойного градиента + backdrop-filter + нескольких теней сразу, и как
+ * отдельные Tailwind-классы это было бы менее читаемо, чем именованные
+ * классы здесь. Импортируется в BottomNav.tsx и SkladNavButton.tsx.
+ */
+
+/* ---------- сама лента: прозрачное зелёное стекло ---------- */
+.kd-glass-nav {
+  position: relative;
+  display: flex;
+  padding: 8px 6px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  border-radius: 26px;
+  background: linear-gradient(135deg, rgba(110, 240, 165, 0.38), rgba(20, 110, 68, 0.4));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(190, 255, 215, 0.4);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+
+/* активная вкладка — плотная зелёная пилюля поверх стекла, иначе на
+   однородном полупрозрачном фоне не видно, где сейчас находится пользователь */
+.kd-glass-indicator {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  border-radius: 20px;
+  background: #34c17a; /* акцент KitchenDesk — замените на переменную темы, если она есть в проекте */
+  transition:
+    transform 380ms cubic-bezier(0.34, 1.2, 0.4, 1),
+    width 380ms cubic-bezier(0.34, 1.2, 0.4, 1);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.kd-glass-nav-item {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  font-family: inherit;
+  color: rgba(230, 245, 235, 0.7);
+  padding: 8px 2px;
+  cursor: pointer;
+  transition: color 200ms ease;
+}
+.kd-glass-nav-item svg { width: 18px; height: 18px; }
+.kd-glass-nav-item .kd-label { font-size: 10px; font-weight: 700; }
+.kd-glass-nav-item.is-active { color: #06140c; }
+/* превью-состояние "Склад" (веер открыт, выбор ещё не сделан) — светлее
+   обычного, но не тёмное: под кнопкой ещё нет сплошной пилюли-индикатора */
+.kd-glass-nav-item.is-open { color: #eafff2; }
+
+/* ---------- "Склад": веер из двух прозрачных зелёных плиток ---------- */
+.kd-sklad-wrap { position: relative; flex: 1; z-index: 1; }
+
+.kd-sklad-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 7, 5, 0);
+  transition: background 220ms ease;
+  z-index: 40;
+  pointer-events: none;
+}
+.kd-sklad-scrim.is-open { background: rgba(4, 7, 5, 0.5); pointer-events: auto; }
+
+.kd-fan {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  z-index: 50;
+  pointer-events: none;
+}
+
+/* та же формула стекла, что у ленты — один материал на всё */
+.kd-glass-tile {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 50px;
+  height: 50px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #eafff2;
+  background: linear-gradient(135deg, rgba(110, 240, 165, 0.38), rgba(20, 110, 68, 0.4));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(190, 255, 215, 0.4);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, 0) scale(0.4);
+  opacity: 0;
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 200ms ease;
+  pointer-events: none;
+}
+.kd-glass-tile svg { width: 21px; height: 21px; }
+
+.kd-fan.is-open .kd-glass-tile { opacity: 1; pointer-events: auto; }
+.kd-fan.is-open .kd-fan-zakup { transform: translate(calc(-50% - 58px), -20px) scale(1); }
+.kd-fan.is-open .kd-fan-spisanie { transform: translate(calc(-50% + 58px), -20px) scale(1); }
+
+.kd-fan-label {
+  position: absolute;
+  bottom: 54px;
+  left: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  color: #eef2ee;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 200ms ease 120ms;
+  pointer-events: none;
+}
+.kd-fan-label-zakup { transform: translateX(-92px); }
+.kd-fan-label-spisanie { transform: translateX(18px); }
+.kd-fan.is-open .kd-fan-label { opacity: 1; }
