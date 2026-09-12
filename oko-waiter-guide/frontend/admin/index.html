@@ -83,6 +83,23 @@
     <div class="status" id="sectionStatus"></div>
   </div>
 
+  <div class="card">
+    <h2 style="margin-bottom:6px">Импорт блюд из файла</h2>
+    <p class="hint" style="margin-bottom:10px">
+      .md-файл с блюдами по образцу формы (название, подзаголовок, описание, история,
+      как подать, калькуляция) — заводит их все разом, вместо ручного ввода по одному.
+      Фото не переносятся, добавляйте потом вручную по блюду.
+    </p>
+    <div class="field"><label>Раздел (необязательно — иначе берётся из файла)</label>
+      <select id="importSectionSelect"><option value="">— взять из файла —</option></select>
+    </div>
+    <div class="field"><label>Файл (.md)</label>
+      <input type="file" id="importFileInput" accept=".md,.markdown,text/markdown,text/plain">
+    </div>
+    <button class="action" onclick="importMarkdown()">Загрузить и создать блюда</button>
+    <div class="status" id="importStatus"></div>
+  </div>
+
   <div id="sectionsList"></div>
   <div id="orphansWrap"></div>
 </div>
@@ -142,6 +159,13 @@
     document.getElementById("orphansWrap").innerHTML = orphans.length ? renderOrphans() : "";
     orphans.forEach(loadPhoto);
     dishes.forEach(loadPhoto);
+
+    const importSelect = document.getElementById("importSectionSelect");
+    const prevValue = importSelect.value;
+    importSelect.innerHTML =
+      `<option value="">— взять из файла —</option>` +
+      sections.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
+    importSelect.value = prevValue;
   }
 
   function renderOrphans() {
@@ -246,6 +270,50 @@
     input.value = "";
     statusEl.className = "status ok";
     statusEl.innerText = "Добавлено";
+    await reload();
+  }
+
+  function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsText(file, "utf-8");
+    });
+  }
+
+  async function importMarkdown() {
+    const fileInput = document.getElementById("importFileInput");
+    const statusEl = document.getElementById("importStatus");
+    const sectionId = document.getElementById("importSectionSelect").value || undefined;
+    const file = fileInput.files[0];
+    if (!file) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Выберите файл";
+      return;
+    }
+
+    statusEl.className = "status";
+    statusEl.innerText = "Загружаю…";
+    const markdown = await readFileAsText(file);
+
+    const res = await fetch("/api/oko-waiter-guide/admin/import-markdown", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ markdown, sectionId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      statusEl.className = "status error";
+      statusEl.innerText = data.error || "Не удалось импортировать";
+      return;
+    }
+
+    statusEl.className = "status ok";
+    statusEl.innerText =
+      `Готово: раздел «${data.sectionName}» — добавлено блюд: ${data.created}` +
+      (data.skipped.length ? `. Пропущено (не блюда): ${data.skipped.length}` : "");
+    fileInput.value = "";
     await reload();
   }
 

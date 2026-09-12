@@ -1,6 +1,7 @@
 const express = require("express");
 const fs = require("fs");
 const store = require("./oko-waiter-guide-store");
+const { parseWaiterGuideMarkdown } = require("./oko-waiter-guide-md-import");
 
 function requireAdmin(req, res, next) {
   const password = req.header("X-Admin-Password");
@@ -83,6 +84,66 @@ function createOkoWaiterGuideRouter() {
 
   admin.get("/orphan-dishes", (req, res) => {
     res.json(store.getOrphanDishes());
+  });
+
+  // Массовый импорт блюд из .md-файла — формат см. в
+  // oko-waiter-guide-md-import.js. sectionId в теле запроса — раздел,
+  // выбранный вручную в форме загрузки; если не передан, используется
+  // раздел, указанный в самом файле (создаётся, если такого раздела ещё
+  // нет). Фото не переносятся — их добавляют потом вручную по блюду.
+  admin.post("/import-markdown", (req, res) => {
+    const { markdown, sectionId } = req.body || {};
+    if (!markdown || !markdown.trim()) {
+      return res.status(400).json({ error: "Файл пустой" });
+    }
+
+    const parsed = parseWaiterGuideMarkdown(markdown);
+    if (!parsed.dishes.length) {
+      return res.status(400).json({ error: "Не нашли ни одного блюда в файле — проверьте формат" });
+    }
+
+    let targetSectionId = sectionId || null;
+    let targetSectionName = null;
+    if (!targetSectionId) {
+      const name = parsed.defaultSection;
+      if (!name) {
+        return res.status(400).json({
+          error: "В файле нет строки \"Раздел везде один: **Название**\" — выберите раздел вручную",
+        });
+      }
+      const existing = store.readSections().find((s) => s.name.trim().toLowerCase() === name.toLowerCase());
+      const section = existing || store.addSection({ name });
+      targetSectionId = section.id;
+      targetSectionName = section.name;
+    } else {
+      const section = store.readSections().find((s) => s.id === targetSectionId);
+      if (!section) return res.status(400).json({ error: "Раздел не найден" });
+      targetSectionName = section.name;
+    }
+
+    const created = parsed.dishes.map((d) =>
+      store.addDish({
+        sectionId: d.sectionOverride
+          ? (store.readSections().find((s) => s.name.trim().toLowerCase() === d.sectionOverride.toLowerCase()) ||
+              store.addSection({ name: d.sectionOverride })).id
+          : targetSectionId,
+        name: d.name,
+        subtitle: d.subtitle,
+        description: d.description,
+        history: d.history,
+        howToServe: d.howToServe,
+        calcTables: d.calcTables,
+      }),
+    );
+
+    res.json({
+      ok: true,
+      sectionId: targetSectionId,
+      sectionName: targetSectionName,
+      created: created.length,
+      dishNames: created.map((d) => d.name),
+      skipped: parsed.skipped,
+    });
   });
 
   router.use("/admin", admin);
