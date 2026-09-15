@@ -33,12 +33,12 @@ function createOkoWaiterGuideRouter() {
   admin.use(requireAdmin);
 
   admin.get("/sections", (req, res) => {
-    res.json(store.readSections());
+    res.json(store.getSectionsShaped());
   });
   admin.post("/sections", (req, res) => {
-    const { name } = req.body || {};
+    const { name, icon } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: "Укажите название раздела" });
-    res.json(store.addSection({ name }));
+    res.json(store.addSection({ name, icon }));
   });
   admin.patch("/sections/:id", (req, res) => {
     const section = store.updateSection(req.params.id, req.body || {});
@@ -58,7 +58,7 @@ function createOkoWaiterGuideRouter() {
   });
 
   admin.get("/dishes", (req, res) => {
-    res.json(store.readDishes());
+    res.json(store.getAllDishesShaped());
   });
   admin.post("/dishes", (req, res) => {
     const { name } = req.body || {};

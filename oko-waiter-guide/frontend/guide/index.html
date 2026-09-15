@@ -5,193 +5,278 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OKO — пособие официанта</title>
 <style>
-  html { font-size: 100%; } /* rem baseline — type scales with the reader's system text size */
+  :root {
+    --bg:#0a0f0c; --card:#121912; --card2:#0d130f; --border:#1e2a20; --border-soft:#182018;
+    --text:#eef2ee; --muted:#9fac9e; --dim:#647063; --accent:#34c17a; --accent-soft:#152019;
+    --bad:#e0663f; --bad-soft:rgba(224,102,63,0.14); --info:#4b9fe8; --info-soft:rgba(75,159,232,0.14);
+    --amber:#e8b93f; --amber-soft:rgba(232,185,63,0.16);
+  }
+  html { font-size: 100%; }
   * { box-sizing: border-box; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #0a0f0c; color: #eef2ee; margin: 0;
-    -webkit-font-smoothing: antialiased;
+    background: var(--bg); color: var(--text); margin: 0; -webkit-font-smoothing: antialiased;
   }
-  a { color: inherit; }
+  button { font-family: inherit; }
+  input { font-family: inherit; }
 
+  #app { max-width: 480px; margin: 0 auto; min-height: 100vh; padding-bottom: 24px; }
+
+  /* ---------- shared topbar (list + detail screens) ---------- */
   .topbar {
-    position: sticky; top: 0; z-index: 5;
-    background: rgba(10,15,12,0.92); backdrop-filter: blur(8px);
-    padding: 10px 0;
+    position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between;
+    background: rgba(10,15,12,0.92); backdrop-filter: blur(8px); padding: 12px 14px;
   }
-  /* scroll-edge fade instead of a hard line under a floating/translucent bar */
   .topbar::after {
-    content: ""; position: absolute; left: 0; right: 0; bottom: -16px; height: 16px;
-    background: linear-gradient(to bottom, rgba(10,15,12,0.5), transparent);
-    pointer-events: none;
+    content: ""; position: absolute; left: 0; right: 0; bottom: -14px; height: 14px;
+    background: linear-gradient(to bottom, rgba(10,15,12,0.5), transparent); pointer-events: none;
   }
-  .topbar-inner { display: flex; gap: 6px; overflow-x: auto; padding: 0 14px; scrollbar-width: none; }
-  .topbar-inner::-webkit-scrollbar { display: none; }
-  .topbar a {
-    flex: none; text-decoration: none; font-size: 0.781rem; font-weight: 600;
-    color: #9fac9e; background: #121912; border: 1px solid #223026;
-    border-radius: 100px; padding: 9px 14px; white-space: nowrap;
-    transition: transform 100ms ease-out, background 150ms ease, color 150ms ease, border-color 150ms ease;
-  }
-  .topbar a:active { transform: scale(0.95); }
-  .topbar a.active { color: #06140c; background: #34c17a; border-color: #34c17a; }
-
   @media (prefers-reduced-transparency: reduce) {
-    .topbar { background: #0a0f0c; backdrop-filter: none; }
+    .topbar { background: var(--bg); backdrop-filter: none; }
     .topbar::after { display: none; }
   }
-
-  header.hero { padding: 22px 16px 8px; }
-  header.hero h1 { font-size: 1.375rem; margin: 0 0 4px; letter-spacing: -0.01em; }
-  header.hero p { font-size: 0.844rem; color: #9fac9e; margin: 0; }
-
-  main { max-width: 720px; margin: 0 auto; padding: 8px 14px 60px; }
-
-  /* Section = its own zone: full-bleed alternating tint (so a boundary reads
-     even at a glance, no reading required) + a header band with the name
-     and a dish count (so you always know how far into the section you are). */
-  section.menu-section { margin: 0 -14px; padding: 28px 14px 22px; }
-  section.menu-section:nth-of-type(odd) { background: #0a0f0c; }
-  section.menu-section:nth-of-type(even) { background: #10141a; }
-
-  .section-head {
-    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
-    border-bottom: 1px solid #223026; padding-bottom: 12px; margin: 0 0 16px;
-  }
-  .section-head h2 {
-    font-size: 1.0625rem; font-weight: 800; letter-spacing: -0.01em; margin: 0;
-  }
-  .section-head .count {
-    font-size: 0.688rem; font-weight: 600; color: #9fac9e; background: #121912;
-    border: 1px solid #223026; border-radius: 100px; padding: 3px 10px;
-    flex: none; white-space: nowrap;
-  }
-
-  .dish {
-    background: #121912; border: 1px solid #1e2a20; border-radius: 14px;
-    padding: 14px 16px; margin-bottom: 12px;
-  }
-  .dish-top { display: flex; gap: 12px; }
-  .dish-photo {
-    width: 64px; height: 64px; border-radius: 10px; object-fit: cover; flex: none;
-    background: #1a221a; cursor: pointer;
-    transition: transform 100ms ease-out, opacity 100ms ease-out;
-  }
-  .dish-photo:active { transform: scale(0.94); opacity: 0.85; }
-  .dish-name { font-size: 1rem; font-weight: 700; margin: 0 0 2px; }
-  .dish-subtitle { font-size: 0.781rem; font-style: italic; color: #9fac9e; margin: 0 0 6px; }
-  .dish-desc { font-size: 0.875rem; line-height: 1.5; color: #d7ddd6; margin: 6px 0 0; white-space: pre-wrap; }
-
-  .dish-pitch {
-    margin-top: 10px; padding: 10px 12px; background: #0a0f0c; border-left: 3px solid #34c17a;
-    border-radius: 0 8px 8px 0; font-size: 0.844rem; font-style: italic; color: #c9d4c9;
-  }
-
-  /* Full ~44px tap target (10px padding, not 0), press feedback, a caret that
-     flips, and a label that names the current state — instead of a static
-     text link that never says whether it's open. */
-  .dish-toggle {
-    margin: 10px -4px 0; background: none; border: none; color: #34c17a;
-    font-size: 0.781rem; font-weight: 600; cursor: pointer; padding: 10px 4px;
-    display: inline-flex; align-items: center; gap: 4px;
-    transition: opacity 100ms ease-out, transform 100ms ease-out;
-  }
-  .dish-toggle:active { opacity: 0.6; transform: scale(0.98); }
-  .dish-toggle .caret { display: inline-block; transition: transform 200ms ease; }
-  .dish-toggle.open .caret { transform: rotate(180deg); }
-
-  /* Animatable grid-rows accordion instead of display:none/block — settles
-     open/closed instead of snapping. */
-  .dish-extra {
-    display: grid; grid-template-rows: 0fr; opacity: 0; margin-top: 10px;
-    transition: grid-template-rows 280ms cubic-bezier(0.4,0,0.2,1), opacity 220ms ease;
-  }
-  .dish-extra.open { grid-template-rows: 1fr; opacity: 1; }
-  .dish-extra > div { overflow: hidden; min-height: 0; }
-  .dish-extra h4 {
-    font-size: 0.688rem; letter-spacing: 0.05em; text-transform: uppercase; color: #647063;
-    margin: 12px 0 4px;
-  }
-  .dish-extra h4:first-child { margin-top: 0; }
-  .dish-extra p { font-size: 0.844rem; color: #c9d4c9; margin: 0; white-space: pre-wrap; }
-
-  @media (prefers-reduced-motion: reduce) {
-    .dish-extra { transition: opacity 200ms ease; }
-  }
-
-  table.calc { width: 100%; border-collapse: collapse; font-size: 0.781rem; margin-top: 4px; }
-  table.calc caption { text-align: left; font-size: 0.75rem; color: #9fac9e; margin-bottom: 4px; caption-side: top; }
-  table.calc th { text-align: left; color: #647063; font-weight: 500; padding: 4px 6px 4px 0; border-bottom: 1px solid #223026; font-size: 0.688rem; text-transform: uppercase; letter-spacing: 0.04em; }
-  table.calc td { padding: 5px 6px 5px 0; border-bottom: 1px solid #1a221a; }
-  table.calc td.amount { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-
-  .empty { text-align: center; color: #647063; padding: 60px 20px; font-size: 0.875rem; }
-  .search-wrap { padding: 4px 0 4px; }
-  .search-wrap input {
-    width: 100%; padding: 10px 12px; background: #121912; border: 1px solid #223026;
-    color: #eef2ee; border-radius: 10px; font-size: 0.875rem;
-  }
-
-  /* Photo opens in place — anchored overlay, not a new browser tab with no
-     path back. */
-  .lightbox {
-    position: fixed; inset: 0; z-index: 30; display: flex;
-    align-items: center; justify-content: center; padding: 24px;
-    background: rgba(4,7,5,0); backdrop-filter: blur(0px);
-    opacity: 0; pointer-events: none;
-    transition: opacity 220ms ease, background 220ms ease, backdrop-filter 220ms ease;
-  }
-  .lightbox.open {
-    opacity: 1; pointer-events: auto;
-    background: rgba(4,7,5,0.88); backdrop-filter: blur(6px);
-  }
-  .lightbox img {
-    max-width: 100%; max-height: 100%; border-radius: 14px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    transform: scale(0.85);
-    transition: transform 260ms cubic-bezier(0.2,0.8,0.2,1);
-  }
-  .lightbox.open img { transform: scale(1); }
-  .lightbox-close {
-    position: absolute; top: 16px; right: 16px; width: 40px; height: 40px;
-    border-radius: 50%; background: rgba(18,25,18,0.75); border: 1px solid #223026;
-    color: #eef2ee; font-size: 1rem; line-height: 1; cursor: pointer;
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 12px; background: var(--card); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex: none;
     transition: transform 100ms ease-out, background 150ms ease;
   }
-  .lightbox-close:active { transform: scale(0.92); background: rgba(18,25,18,0.95); }
+  .icon-btn:active { transform: scale(0.92); }
+  .icon-btn svg { width: 18px; height: 18px; }
+  .topbar-logo { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+  .topbar-logo .wordmark { font-size: 0.938rem; font-weight: 800; letter-spacing: 0.02em; }
+  .topbar-logo .tagline { font-size: 0.563rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
+  .heart-btn.is-fav { color: var(--bad); border-color: rgba(224,102,63,0.4); background: var(--bad-soft); }
 
-  @media (prefers-reduced-motion: reduce) {
-    .lightbox, .lightbox img { transition: opacity 200ms ease; transform: none !important; }
+  /* ---------- home screen ---------- */
+  .home-hero {
+    padding: 40px 20px 26px; text-align: center; position: relative; overflow: hidden;
+    background:
+      radial-gradient(120% 90% at 50% -10%, rgba(52,193,122,0.22), transparent 60%),
+      linear-gradient(180deg, #0d1611 0%, var(--bg) 78%);
   }
-  @media (prefers-reduced-transparency: reduce) {
-    .lightbox.open { background: #06140c; backdrop-filter: none; }
+  /* Ambient texture standing in for a real hero photo — swap the block above
+     for `background-image: url(...)` + this gradient as an overlay once a
+     real venue/plant photo is available; no photo is faked here. */
+  .home-hero::before {
+    content: ""; position: absolute; inset: 0; opacity: 0.5; pointer-events: none;
+    background-image: radial-gradient(rgba(52,193,122,0.14) 1px, transparent 1px);
+    background-size: 22px 22px; mask-image: radial-gradient(60% 60% at 50% 20%, #000, transparent);
   }
+  .home-hero > * { position: relative; }
+  .home-wordmark { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.03em; margin: 0; }
+  .home-wordmark-sub { font-size: 0.688rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin: 2px 0 20px; }
+  .home-headline { font-size: 1.5rem; font-weight: 800; line-height: 1.25; margin: 0 0 8px; text-wrap: balance; }
+  .home-sub { font-size: 0.875rem; color: var(--muted); margin: 0 0 22px; line-height: 1.5; }
+
+  .search-field { position: relative; }
+  .search-field svg {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: var(--dim);
+  }
+  .search-field input {
+    width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px 14px 14px 40px; font-size: 0.938rem; color: var(--text);
+  }
+  .search-field input::placeholder { color: var(--dim); }
+  .search-field input:focus { outline: none; border-color: var(--accent); }
+
+  .chips-row { display: flex; gap: 8px; overflow-x: auto; padding: 18px 20px 4px; scrollbar-width: none; }
+  .chips-row::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: none; display: flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--border);
+    color: var(--muted); border-radius: 100px; padding: 9px 14px; font-size: 0.813rem; font-weight: 600; cursor: pointer;
+    transition: transform 100ms ease-out, background 150ms ease, color 150ms ease, border-color 150ms ease;
+  }
+  .chip:active { transform: scale(0.95); }
+  .chip.active { background: var(--accent); border-color: var(--accent); color: #06140c; }
+  .chip svg { width: 15px; height: 15px; }
+
+  .home-quote {
+    margin: 26px 20px 0; padding: 16px 18px; background: var(--card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 4px 14px 14px 4px; font-size: 0.844rem;
+    font-style: italic; color: #c9d4c9; line-height: 1.55;
+  }
+
+  /* ---------- list screen ---------- */
+  .list-head { padding: 16px 16px 4px; }
+  .list-head h1 { font-size: 1.375rem; margin: 0 0 2px; letter-spacing: -0.01em; }
+  .list-head .count { font-size: 0.813rem; color: var(--dim); }
+  .list-search { padding: 12px 16px 4px; }
+  .list-search .search-field input { padding: 11px 12px 11px 38px; font-size: 0.875rem; border-radius: 12px; }
+  .list-search .search-field svg { width: 15px; height: 15px; left: 12px; }
+
+  .dish-list { padding: 8px 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .dish-card {
+    display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 10px; cursor: pointer; text-align: left; width: 100%;
+    transition: transform 100ms ease-out, background 150ms ease;
+  }
+  .dish-card:active { transform: scale(0.98); background: var(--card2); }
+  .dish-card .thumb {
+    width: 52px; height: 52px; border-radius: 10px; object-fit: cover; flex: none; background: var(--card2);
+  }
+  .dish-card .thumb.placeholder { display: flex; align-items: center; justify-content: center; color: var(--dim); }
+  .dish-card .thumb.placeholder svg { width: 20px; height: 20px; }
+  .dish-card .body { min-width: 0; flex: 1; }
+  .dish-card .top-row { display: flex; align-items: center; gap: 6px; }
+  .dish-card .dname { font-size: 0.938rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dish-card .badge { flex: none; font-size: 0.688rem; font-weight: 700; white-space: nowrap; }
+  .dish-card .category { font-size: 0.719rem; color: var(--accent); margin-top: 1px; }
+  .dish-card .desc {
+    font-size: 0.781rem; color: var(--muted); margin-top: 2px; line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .dish-card .chev { flex: none; width: 16px; height: 16px; color: var(--dim); }
+
+  .skeleton-card {
+    display: flex; gap: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 10px;
+  }
+  .skel { background: linear-gradient(90deg, var(--card2) 25%, var(--border) 37%, var(--card2) 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; border-radius: 8px; }
+  @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+  .skel.thumb { width: 52px; height: 52px; border-radius: 10px; flex: none; }
+  .skel.line { height: 11px; margin-bottom: 8px; }
+  @media (prefers-reduced-motion: reduce) { .skel { animation: none; opacity: 0.5; } }
+
+  .empty-state { text-align: center; padding: 70px 24px 40px; color: var(--dim); }
+  .empty-state .emoji { font-size: 2rem; margin-bottom: 10px; }
+  .empty-state h3 { font-size: 1rem; color: var(--text); margin: 0 0 4px; }
+  .empty-state p { font-size: 0.813rem; margin: 0 0 16px; line-height: 1.5; }
+  .empty-state button {
+    background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 100px;
+    padding: 9px 18px; font-size: 0.813rem; font-weight: 600; cursor: pointer;
+  }
+
+  /* ---------- detail screen ---------- */
+  .carousel { position: relative; width: 100%; aspect-ratio: 1 / 1; background: var(--card2); overflow: hidden; }
+  .carousel-track { display: flex; height: 100%; transition: transform 260ms cubic-bezier(0.4,0,0.2,1); touch-action: pan-y; }
+  .carousel-track img { width: 100%; height: 100%; object-fit: cover; flex: none; }
+  .carousel .tap-zone { position: absolute; top: 0; bottom: 0; width: 32%; }
+  .carousel .tap-zone.left { left: 0; } .carousel .tap-zone.right { right: 0; }
+  .carousel-counter {
+    position: absolute; right: 12px; bottom: 12px; background: rgba(6,10,7,0.65); backdrop-filter: blur(4px);
+    color: #fff; font-size: 0.719rem; font-weight: 700; padding: 4px 10px; border-radius: 100px; font-variant-numeric: tabular-nums;
+  }
+  .carousel-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--dim); }
+  .carousel-placeholder svg { width: 40px; height: 40px; }
+  @media (prefers-reduced-motion: reduce) { .carousel-track { transition: none; } }
+
+  .detail-body { padding: 18px 18px 40px; }
+  .detail-top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .detail-name { font-size: 1.375rem; font-weight: 800; margin: 0 0 4px; letter-spacing: -0.01em; text-wrap: balance; }
+  .detail-badge {
+    flex: none; margin-top: 3px; font-size: 0.719rem; font-weight: 700; padding: 3px 9px; border-radius: 100px;
+    background: var(--amber-soft); color: var(--amber);
+  }
+  .detail-category { font-size: 0.813rem; color: var(--accent); font-weight: 600; margin: 0 0 10px; }
+  .detail-desc { font-size: 0.875rem; color: var(--muted); line-height: 1.55; margin: 0 0 16px; }
+
+  .tabs { display: flex; gap: 4px; background: var(--card2); border: 1px solid var(--border); border-radius: 100px; padding: 3px; margin-bottom: 18px; }
+  .tab-btn {
+    flex: 1; background: none; border: none; color: var(--dim); font-size: 0.781rem; font-weight: 700; padding: 9px 4px;
+    border-radius: 100px; cursor: pointer; transition: background 150ms ease, color 150ms ease;
+  }
+  .tab-btn.active { background: var(--accent); color: #06140c; }
+
+  .tab-panel h4 {
+    font-size: 0.688rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); margin: 18px 0 8px;
+  }
+  .tab-panel h4:first-child { margin-top: 0; }
+  .tab-panel p { font-size: 0.875rem; color: #d7ddd6; line-height: 1.6; margin: 0; white-space: pre-wrap; }
+
+  table.calc { width: 100%; border-collapse: collapse; font-size: 0.813rem; margin-top: 2px; }
+  table.calc caption { text-align: left; font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; caption-side: top; font-weight: 600; }
+  table.calc th { text-align: left; color: var(--dim); font-weight: 500; padding: 4px 6px 6px 0; border-bottom: 1px solid var(--border); font-size: 0.688rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  table.calc td { padding: 7px 6px 7px 0; border-bottom: 1px solid var(--border-soft); }
+  table.calc td.amount { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .calc-group + .calc-group { margin-top: 6px; }
+
+  .quote-card {
+    padding: 14px 16px; background: var(--card); border-left: 3px solid var(--accent);
+    border-radius: 4px 12px 12px 4px; font-size: 0.844rem; font-style: italic; color: #c9d4c9; line-height: 1.55; margin: 4px 0 0;
+  }
+  .waiter-phrase-card {
+    margin-top: 20px; padding: 14px 16px; background: var(--accent-soft); border: 1px solid rgba(52,193,122,0.3);
+    border-radius: 14px;
+  }
+  .waiter-phrase-card .kicker { display: flex; align-items: center; gap: 6px; font-size: 0.719rem; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+  .waiter-phrase-card .kicker svg { width: 14px; height: 14px; }
+  .waiter-phrase-card p { font-size: 0.906rem; color: var(--text); font-style: italic; line-height: 1.55; margin: 0; }
+
+  .serving-step { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; font-size: 0.875rem; color: #d7ddd6; line-height: 1.5; }
+  .serving-step svg { width: 18px; height: 18px; flex: none; color: var(--accent); margin-top: 1px; }
+
+  .important-row { display: flex; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border-soft); }
+  .important-row:last-of-type { border-bottom: none; }
+  .important-icon { flex: none; width: 30px; height: 30px; border-radius: 9px; display: flex; align-items: center; justify-content: center; }
+  .important-icon svg { width: 16px; height: 16px; }
+  .important-icon.allergen { background: var(--bad-soft); color: var(--bad); }
+  .important-icon.feature { background: var(--info-soft); color: var(--info); }
+  .important-icon.recommendation { background: var(--accent-soft); color: var(--accent); }
+  .important-text h5 { font-size: 0.844rem; font-weight: 700; margin: 0 0 2px; }
+  .important-text p { font-size: 0.813rem; color: var(--muted); margin: 0; line-height: 1.5; }
+
+  .faq-item { border-bottom: 1px solid var(--border-soft); }
+  .faq-item:last-child { border-bottom: none; }
+  .faq-q {
+    width: 100%; background: none; border: none; color: var(--text); text-align: left; padding: 13px 0;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; font-size: 0.875rem; font-weight: 600;
+  }
+  .faq-q .caret { flex: none; width: 16px; height: 16px; color: var(--dim); transition: transform 200ms ease; }
+  .faq-item.open .faq-q .caret { transform: rotate(180deg); }
+  .faq-a { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 240ms cubic-bezier(0.4,0,0.2,1), opacity 200ms ease; }
+  .faq-item.open .faq-a { grid-template-rows: 1fr; opacity: 1; }
+  .faq-a > div { overflow: hidden; min-height: 0; }
+  .faq-a p { font-size: 0.813rem; color: var(--muted); line-height: 1.55; margin: 0 0 14px; }
+  @media (prefers-reduced-motion: reduce) { .faq-a { transition: opacity 200ms ease; } }
+
+  .no-horizontal-scroll-guard { max-width: 100%; overflow-x: hidden; }
 </style>
 </head>
 <body>
 
-<nav class="topbar"><div class="topbar-inner" id="topbarLinks"></div></nav>
-
-<header class="hero">
-  <h1>Пособие официанта</h1>
-  <p>ОКО — состав блюд, история, как подать гостю</p>
-</header>
-
-<main>
-  <div class="search-wrap"><input type="search" id="search" placeholder="Поиск блюда..." oninput="render()"></div>
-  <div id="content"></div>
-</main>
-
-<div class="lightbox" id="lightbox">
-  <button class="lightbox-close" onclick="closeLightbox()" aria-label="Закрыть фото">✕</button>
-  <img id="lightboxImg" alt="">
-</div>
+<div id="app"></div>
 
 <script>
-  document.addEventListener("touchstart", function () {}, { passive: true }); // enables :active feedback reliably on iOS Safari
+  document.addEventListener("touchstart", function () {}, { passive: true }); // reliable :active on iOS Safari
 
-  let guide = [];
-  let sectionObserver = null;
+  const BASE = "/waiter-guide";
+  const API = "/api/oko-waiter-guide";
+
+  // ---------- icons (shared inline set — keys line up with the admin's
+  // section-icon picker, so choosing an icon there renders here). ----------
+  const ICONS = {
+    all: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    cutlery: '<path d="M7 2v8M5 2v5a2 2 0 0 0 4 0V2M7 10v12"/><path d="M17 2c-1.7 0-3 2-3 5s1.3 5 3 5v10"/>',
+    salad: '<path d="M12 21a8 8 0 0 0 8-8H4a8 8 0 0 0 8 8Z"/><path d="M12 13V7"/><path d="M12 7c-2-1-2-4 0-5 2 1 2 4 0 5Z"/>',
+    hot: '<path d="M12 2s-6 5.5-6 11a6 6 0 0 0 12 0c0-2-1-3-1-3s0 2-1.5 2C14 10 15 6 12 2Z"/>',
+    soup: '<path d="M3 12h18a7 7 0 0 1-14 0Z"/><path d="M12 12V9M9 6c0-1 .7-1.5.7-2.5S9 2 9 2M14 6c0-1 .7-1.5.7-2.5S14 2 14 2"/>',
+    meat: '<path d="M15 13a5 5 0 1 0-6-6c-2 1-6 5-6 8a4 4 0 0 0 4 4c3 0 7-4 8-6Z"/><path d="M17.5 6.5 21 3"/>',
+    pasta: '<path d="M4 6c3 0 3 3 6 3s3-3 6-3 3 3 6 3" /><path d="M4 12c3 0 3 3 6 3s3-3 6-3 3 3 6 3"/><path d="M4 18c3 0 3 3 6 3s3-3 6-3 3 3 6 3"/>',
+    pizza: '<path d="M12 2 2 20h20L12 2Z"/><circle cx="12" cy="14" r="1"/><circle cx="9" cy="17" r="1"/><circle cx="15" cy="17" r="1"/>',
+    skewer: '<path d="M3 12h18"/><circle cx="7" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="17" cy="12" r="2"/>',
+    sushi: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.2"/>',
+    bread: '<rect x="3" y="9" width="18" height="10" rx="4"/><path d="M7 9V7a5 5 0 0 1 10 0v2M8 13v3M12 13v3M16 13v3"/>',
+    dessert: '<path d="M4 20 12 4l8 16Z"/><circle cx="12" cy="9" r="1.4"/>',
+    drink: '<path d="M8 3h8l-1 12a3 3 0 0 1-6 0L8 3Z"/><path d="M6.5 8h11M12 15v6M9 21h6"/>',
+    beer: '<path d="M6 9h9v9a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9Z"/><path d="M15 11h2a2 2 0 0 1 0 4h-2M8 6c0-1.5 1-2 1-3M11 6c0-1.5 1-2 1-3"/>',
+    sauce: '<path d="M12 3c2 3 5 6.5 5 10a5 5 0 0 1-10 0c0-3.5 3-7 5-10Z"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+    back: '<path d="M15 6 9 12l6 6"/>',
+    heart: '<path d="M12 21s-7.5-4.6-10-9.3C.5 8 2.3 4 6.3 4c2 0 3.6 1.1 4.7 2.8C12.1 5.1 13.7 4 15.7 4c4 0 5.8 4 4.3 7.7-2.5 4.7-10 9.3-10 9.3Z"/>',
+    chev: '<path d="m9 6 6 6-6 6"/>',
+    check: '<path d="M4 12l5 5 11-11"/>',
+    warning: '<path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v5M12 18v.01"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 8v.01"/>',
+    photo: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="10" r="1.7"/><path d="m21 16-5-5-6 6"/>',
+    star: '<path d="m12 3 2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 17l-5.6 3.1 1.4-6.3L3 9.5l6.4-.6L12 3Z"/>',
+  };
+  function icon(name, extraClass) {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="${extraClass || ""}">${ICONS[name] || ICONS.cutlery}</svg>`;
+  }
+
+  const STATUS_META = {
+    hit: { emoji: "🔥", label: "Хит" },
+    popular: { emoji: "🌟", label: "Популярное" },
+  };
 
   function escapeHtml(value) {
     return String(value || "")
@@ -199,71 +284,10 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
   }
-  function slug(id) {
-    return "sec-" + id;
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
   }
-
-  // Scrollspy: highlights the topbar pill for whichever section is currently
-  // under the sticky bar, so the reader always knows where they are.
-  let intersecting = new Set();
-  function setupScrollSpy() {
-    if (sectionObserver) sectionObserver.disconnect();
-    intersecting = new Set();
-    const sections = Array.from(document.querySelectorAll("section.menu-section"));
-    if (!sections.length) return;
-    sectionObserver = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) intersecting.add(entry.target);
-        else intersecting.delete(entry.target);
-      });
-      const top = sections.find((s) => intersecting.has(s));
-      if (top) setActiveSection(top.id);
-    }, { rootMargin: "-64px 0px -70% 0px", threshold: 0 });
-    sections.forEach((s) => sectionObserver.observe(s));
-  }
-
-  function setActiveSection(id) {
-    document.querySelectorAll(".topbar a").forEach((a) => {
-      a.classList.toggle("active", a.getAttribute("href") === `#${id}`);
-    });
-    const activeLink = document.querySelector(`.topbar a[href="#${id}"]`);
-    if (activeLink) activeLink.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-  }
-
-  async function load() {
-    const res = await fetch("/api/oko-waiter-guide/guide");
-    guide = res.ok ? await res.json() : [];
-    render();
-  }
-
-  function matchesQuery(dish, q) {
-    if (!q) return true;
-    const hay = [dish.name, dish.subtitle, dish.description].join(" ").toLowerCase();
-    return hay.includes(q);
-  }
-
-  function render() {
-    const q = (document.getElementById("search").value || "").trim().toLowerCase();
-    const visibleSections = guide
-      .map((section) => ({ ...section, dishes: section.dishes.filter((d) => matchesQuery(d, q)) }))
-      .filter((section) => section.dishes.length);
-
-    document.getElementById("topbarLinks").innerHTML = guide
-      .map((s) => `<a href="#${slug(s.id)}">${escapeHtml(s.name)}</a>`)
-      .join("");
-
-    const content = document.getElementById("content");
-    if (!visibleSections.length) {
-      content.innerHTML = `<div class="empty">${q ? "Ничего не найдено" : "Пособие пока пустое"}</div>`;
-      if (sectionObserver) sectionObserver.disconnect();
-      return;
-    }
-
-    content.innerHTML = visibleSections.map(renderSection).join("");
-    guide.forEach((s) => s.dishes.forEach(loadPhoto));
-    setupScrollSpy();
-  }
-
   function pluralDishes(n) {
     const mod10 = n % 10, mod100 = n % 100;
     if (mod10 === 1 && mod100 !== 11) return "блюдо";
@@ -271,91 +295,402 @@
     return "блюд";
   }
 
-  function renderSection(section) {
-    return `
-      <section class="menu-section" id="${slug(section.id)}">
-        <div class="section-head">
-          <h2>${escapeHtml(section.name)}</h2>
-          <span class="count">${section.dishes.length} ${pluralDishes(section.dishes.length)}</span>
-        </div>
-        ${section.dishes.map(renderDish).join("")}
-      </section>`;
+  // ---------- data ----------
+  let guide = [];      // sections with .dishes[], as returned by /guide
+  let loaded = false;
+
+  function flatDishes() {
+    const out = [];
+    guide.forEach((section) => {
+      section.dishes.forEach((d) => out.push(Object.assign({}, d, { sectionName: section.name, sectionSlug: section.slug, sectionIcon: section.icon })));
+    });
+    return out;
+  }
+  function dishBySlug(slug) {
+    return flatDishes().find((d) => d.slug === slug) || null;
+  }
+  function sectionBySlug(slug) {
+    return guide.find((s) => s.slug === slug) || null;
   }
 
-  function renderDish(dish) {
-    const hasExtra = dish.history || (dish.calcTables && dish.calcTables.length);
+  async function loadGuide() {
+    try {
+      const res = await fetch(`${API}/guide`);
+      guide = res.ok ? await res.json() : [];
+    } catch {
+      guide = [];
+    }
+    loaded = true;
+  }
+
+  function matchesQuery(dish, q) {
+    if (!q) return true;
+    const ingredientNames = (dish.calcTables || []).flatMap((t) => t.rows.map((r) => r.name)).join(" ");
+    const hay = [dish.name, dish.subtitle, dish.description, dish.sectionName, ingredientNames].join(" ").toLowerCase();
+    return hay.includes(q);
+  }
+
+  // ---------- favorites (per-device convenience, not synced) ----------
+  function getFavorites() {
+    try { return new Set(JSON.parse(localStorage.getItem("owg_favorites") || "[]")); } catch { return new Set(); }
+  }
+  function toggleFavorite(dishId) {
+    const favs = getFavorites();
+    if (favs.has(dishId)) favs.delete(dishId); else favs.add(dishId);
+    try { localStorage.setItem("owg_favorites", JSON.stringify([...favs])); } catch {}
+    const btn = document.getElementById("heartBtn");
+    if (btn) btn.classList.toggle("is-fav", favs.has(dishId));
+    if (btn) btn.innerHTML = icon("heart", "");
+  }
+
+  // ---------- router ----------
+  let navCounter = 0;
+  const scrollPositions = {};
+
+  function currentPath() {
+    let p = location.pathname;
+    if (p.startsWith(BASE)) p = p.slice(BASE.length);
+    return p || "/";
+  }
+  function navigate(path, opts) {
+    opts = opts || {};
+    scrollPositions[currentPath()] = window.scrollY;
+    const full = BASE + path;
+    navCounter++;
+    if (opts.replace) history.replaceState({ nav: navCounter }, "", full);
+    else history.pushState({ nav: navCounter }, "", full);
+    routeChanged();
+  }
+  window.addEventListener("popstate", routeChanged);
+
+  function goBack(fallbackPath) {
+    if (history.state && history.state.nav) history.back();
+    else navigate(fallbackPath, { replace: true });
+  }
+
+  function routeChanged() {
+    const path = currentPath();
+    const url = new URL(location.href);
+    const q = url.searchParams.get("q") || "";
+    let m;
+    if (path === "/" || path === "") {
+      renderHome();
+    } else if ((m = /^\/category\/([^/]+)\/?$/.exec(path))) {
+      renderList(m[1], q);
+    } else if ((m = /^\/dish\/([^/]+)\/?$/.exec(path))) {
+      renderDetail(m[1]);
+    } else {
+      renderHome();
+    }
+    requestAnimationFrame(() => window.scrollTo(0, scrollPositions[path] || 0));
+  }
+
+  // ---------- home ----------
+  function renderHome() {
+    const app = document.getElementById("app");
+    const chips = [{ slug: "all", name: "Все блюда", icon: "all" }].concat(
+      guide.map((s) => ({ slug: s.slug, name: s.name, icon: s.icon })),
+    );
+    app.innerHTML = `
+      <div class="home-hero">
+        <div class="home-wordmark">OKO</div>
+        <div class="home-wordmark-sub">пособие официанта</div>
+        <h1 class="home-headline">Знания, которые<br>создают впечатления</h1>
+        <p class="home-sub">Блюда. Истории. Подача. Ты — часть атмосферы.</p>
+        <div class="search-field">
+          ${icon("search")}
+          <input type="search" id="homeSearch" placeholder="Какое блюдо ищем?">
+        </div>
+      </div>
+      <div class="chips-row">
+        ${chips.map((c, i) => `
+          <button class="chip ${i === 0 ? "active" : ""}" data-slug="${c.slug}">
+            ${icon(c.icon || "cutlery")}<span>${escapeHtml(c.name)}</span>
+          </button>`).join("")}
+      </div>
+      <div class="home-quote">«Хороший официант не просто приносит еду. Он создаёт впечатление.»</div>
+    `;
+
+    document.querySelectorAll(".chip").forEach((btn) => {
+      btn.addEventListener("click", () => navigate(`/category/${btn.dataset.slug}`));
+    });
+
+    const searchInput = document.getElementById("homeSearch");
+    const onSearch = debounce(() => {
+      const v = searchInput.value.trim();
+      if (v) navigate(`/category/all?q=${encodeURIComponent(v)}`);
+    }, 250);
+    searchInput.addEventListener("input", onSearch);
+  }
+
+  // ---------- list ----------
+  function renderList(categorySlug, initialQuery) {
+    const app = document.getElementById("app");
+    const isAll = categorySlug === "all";
+    const section = isAll ? null : sectionBySlug(categorySlug);
+
+    if (!isAll && !section && loaded) {
+      navigate("/category/all", { replace: true });
+      return;
+    }
+
+    const title = isAll ? "Все блюда" : (section ? section.name : "…");
+    app.innerHTML = `
+      <div class="topbar">
+        <button class="icon-btn" id="backBtn" aria-label="Назад">${icon("back")}</button>
+        <div class="topbar-logo"><span class="wordmark">OKO</span><span class="tagline">пособие официанта</span></div>
+        <div style="width:38px"></div>
+      </div>
+      <div class="list-head">
+        <h1>${escapeHtml(title)}</h1>
+        <div class="count" id="listCount"></div>
+      </div>
+      <div class="list-search">
+        <div class="search-field">${icon("search")}<input type="search" id="listSearch" placeholder="Поиск в категории" value="${escapeHtml(initialQuery)}"></div>
+      </div>
+      <div class="dish-list" id="dishList"></div>
+    `;
+    document.getElementById("backBtn").addEventListener("click", () => goBack("/"));
+
+    const listEl = document.getElementById("dishList");
+    const countEl = document.getElementById("listCount");
+    const searchInput = document.getElementById("listSearch");
+
+    if (!loaded) {
+      listEl.innerHTML = Array.from({ length: 4 }).map(() => `
+        <div class="skeleton-card">
+          <div class="skel thumb"></div>
+          <div style="flex:1"><div class="skel line" style="width:60%"></div><div class="skel line" style="width:90%"></div></div>
+        </div>`).join("");
+      return;
+    }
+
+    function renderItems() {
+      const q = searchInput.value.trim().toLowerCase();
+      const pool = isAll ? flatDishes() : (section ? section.dishes : []);
+      const items = pool.filter((d) => matchesQuery(d, q));
+
+      countEl.textContent = `${items.length} ${pluralDishes(items.length)}`;
+
+      if (!items.length) {
+        listEl.innerHTML = `
+          <div class="empty-state">
+            <div class="emoji">🔍</div>
+            <h3>Ничего не нашли</h3>
+            <p>Попробуйте изменить запрос или выбрать другую категорию.</p>
+            <button id="resetSearchBtn">Сбросить поиск</button>
+          </div>`;
+        const resetBtn = document.getElementById("resetSearchBtn");
+        if (resetBtn) resetBtn.addEventListener("click", () => { searchInput.value = ""; renderItems(); });
+        return;
+      }
+
+      listEl.innerHTML = items.map(renderDishCard).join("");
+      listEl.querySelectorAll(".dish-card").forEach((cardEl) => {
+        cardEl.addEventListener("click", () => navigate(`/dish/${cardEl.dataset.slug}`));
+      });
+    }
+
+    const url = new URL(location.href);
+    const onSearch = debounce(() => {
+      url.searchParams.set("q", searchInput.value.trim());
+      if (!searchInput.value.trim()) url.searchParams.delete("q");
+      history.replaceState(history.state, "", url.toString());
+      renderItems();
+    }, 250);
+    searchInput.addEventListener("input", onSearch);
+
+    renderItems();
+  }
+
+  function renderDishCard(dish) {
+    const meta = STATUS_META[dish.status];
+    const thumb = dish.photos && dish.photos[0]
+      ? `<img class="thumb" src="${API}/photos/${dish.photos[0]}" loading="lazy" alt="">`
+      : `<div class="thumb placeholder">${icon("photo")}</div>`;
     return `
-      <article class="dish">
-        <div class="dish-top">
-          ${dish.photo ? `<img class="dish-photo" id="photo-${dish.id}" onclick="openPhoto('${dish.id}')">` : ""}
-          <div style="min-width:0">
-            <div class="dish-name">${escapeHtml(dish.name)}</div>
-            ${dish.subtitle ? `<div class="dish-subtitle">${escapeHtml(dish.subtitle)}</div>` : ""}
+      <button class="dish-card" data-slug="${dish.slug}">
+        ${thumb}
+        <div class="body">
+          <div class="top-row">
+            <span class="dname">${escapeHtml(dish.name)}</span>
+            ${meta ? `<span class="badge">${meta.emoji} ${meta.label}</span>` : ""}
           </div>
+          ${dish.sectionName ? `<div class="category">${escapeHtml(dish.sectionName)}</div>` : ""}
+          ${dish.description ? `<div class="desc">${escapeHtml(dish.description)}</div>` : ""}
         </div>
-        ${dish.description ? `<p class="dish-desc">${escapeHtml(dish.description)}</p>` : ""}
-        ${dish.howToServe ? `<div class="dish-pitch">«${escapeHtml(dish.howToServe)}»</div>` : ""}
-        ${hasExtra ? `
-          <button class="dish-toggle" id="toggle-${dish.id}" onclick="toggleExtra('${dish.id}')" aria-expanded="false">
-            <span class="label">Показать состав и историю</span><span class="caret">▾</span>
-          </button>` : ""}
-        <div class="dish-extra" id="extra-${dish.id}"><div>
-          ${dish.history ? `<h4>История</h4><p>${escapeHtml(dish.history)}</p>` : ""}
-          ${(dish.calcTables || []).map(renderCalcTable).join("")}
-        </div></div>
-      </article>`;
+        <span class="chev">${icon("chev")}</span>
+      </button>`;
   }
 
-  function renderCalcTable(table) {
+  // ---------- detail ----------
+  let activeTab = "composition";
+  let carouselIndex = 0;
+
+  function renderDetail(dishSlug) {
+    const app = document.getElementById("app");
+    if (!loaded) { app.innerHTML = `<div class="detail-body"><div class="skel line" style="width:40%"></div></div>`; return; }
+
+    const dish = dishBySlug(dishSlug);
+    if (!dish) {
+      app.innerHTML = `<div class="empty-state"><h3>Блюдо не найдено</h3><p>Возможно, его переименовали или удалили.</p><button onclick="navigate('/')">На главную</button></div>`;
+      return;
+    }
+
+    activeTab = "composition";
+    carouselIndex = 0;
+    const favs = getFavorites();
+    const photos = dish.photos || [];
+
+    app.innerHTML = `
+      <div class="topbar">
+        <button class="icon-btn" id="backBtn" aria-label="Назад">${icon("back")}</button>
+        <div class="topbar-logo"><span class="wordmark">OKO</span><span class="tagline">пособие официанта</span></div>
+        <button class="icon-btn ${favs.has(dish.id) ? "is-fav" : ""}" id="heartBtn" aria-label="В избранное">${icon("heart")}</button>
+      </div>
+      <div class="carousel" id="carousel">
+        ${photos.length ? `
+          <div class="carousel-track" id="carouselTrack">
+            ${photos.map((p) => `<img src="${API}/photos/${p}" alt="${escapeHtml(dish.name)}">`).join("")}
+          </div>
+          <div class="tap-zone left" id="tapPrev"></div>
+          <div class="tap-zone right" id="tapNext"></div>
+          ${photos.length > 1 ? `<div class="carousel-counter" id="carouselCounter">1 / ${photos.length}</div>` : ""}
+        ` : `<div class="carousel-placeholder">${icon("photo")}</div>`}
+      </div>
+      <div class="detail-body">
+        <div class="detail-top-row">
+          <h1 class="detail-name">${escapeHtml(dish.name)}</h1>
+          ${STATUS_META[dish.status] ? `<span class="detail-badge">${STATUS_META[dish.status].emoji} ${STATUS_META[dish.status].label}</span>` : ""}
+        </div>
+        ${dish.sectionName ? `<div class="detail-category">${escapeHtml(dish.sectionName)}</div>` : ""}
+        ${dish.description ? `<p class="detail-desc">${escapeHtml(dish.description)}</p>` : ""}
+
+        <div class="tabs" id="tabs">
+          <button class="tab-btn" data-tab="composition">Состав</button>
+          <button class="tab-btn" data-tab="history">История</button>
+          <button class="tab-btn" data-tab="serving">Подача</button>
+          <button class="tab-btn" data-tab="important">Важно</button>
+        </div>
+        <div class="tab-panel" id="tabPanel"></div>
+      </div>
+    `;
+
+    document.getElementById("backBtn").addEventListener("click", () => goBack(dish.sectionSlug ? `/category/${dish.sectionSlug}` : "/"));
+    document.getElementById("heartBtn").addEventListener("click", () => toggleFavorite(dish.id));
+
+    if (photos.length > 1) {
+      const track = document.getElementById("carouselTrack");
+      const counter = document.getElementById("carouselCounter");
+      function goTo(i) {
+        carouselIndex = Math.max(0, Math.min(photos.length - 1, i));
+        track.style.transform = `translateX(-${carouselIndex * 100}%)`;
+        counter.textContent = `${carouselIndex + 1} / ${photos.length}`;
+      }
+      document.getElementById("tapPrev").addEventListener("click", () => goTo(carouselIndex - 1));
+      document.getElementById("tapNext").addEventListener("click", () => goTo(carouselIndex + 1));
+      let touchStartX = null;
+      const carouselEl = document.getElementById("carousel");
+      carouselEl.addEventListener("touchstart", (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
+      carouselEl.addEventListener("touchend", (e) => {
+        if (touchStartX === null) return;
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        if (Math.abs(dx) > 40) goTo(carouselIndex + (dx < 0 ? 1 : -1));
+        touchStartX = null;
+      }, { passive: true });
+    }
+
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => { activeTab = btn.dataset.tab; renderTabPanel(dish); });
+    });
+    renderTabPanel(dish);
+  }
+
+  function renderTabPanel(dish) {
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === activeTab));
+    const panel = document.getElementById("tabPanel");
+    if (activeTab === "composition") panel.innerHTML = renderCompositionTab(dish);
+    else if (activeTab === "history") panel.innerHTML = renderHistoryTab(dish);
+    else if (activeTab === "serving") panel.innerHTML = renderServingTab(dish);
+    else panel.innerHTML = renderImportantTab(dish);
+
+    if (activeTab === "important") {
+      panel.querySelectorAll(".faq-q").forEach((q) => {
+        q.addEventListener("click", () => q.closest(".faq-item").classList.toggle("open"));
+      });
+    }
+  }
+
+  function renderCompositionTab(dish) {
+    const tables = dish.calcTables || [];
+    if (!tables.length) return emptyTabNote("Состав пока не заполнен.");
+    return tables.map((t) => `
+      <div class="calc-group">
+        <table class="calc">
+          ${t.label ? `<caption>${escapeHtml(t.label)}</caption>` : ""}
+          <tr><th>Ингредиент</th><th>Ед.</th><th>Кол-во</th></tr>
+          ${t.rows.map((r) => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.unit)}</td><td class="amount">${escapeHtml(r.amount)}</td></tr>`).join("")}
+        </table>
+      </div>`).join("");
+  }
+
+  function renderHistoryTab(dish) {
+    if (!dish.history && !dish.historyQuote) return emptyTabNote("История блюда пока не заполнена.");
     return `
-      <h4>Состав</h4>
-      <table class="calc">
-        ${table.label ? `<caption>${escapeHtml(table.label)}</caption>` : ""}
-        <tr><th>Ингредиент</th><th>Ед.</th><th>Кол-во</th></tr>
-        ${table.rows.map((r) => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.unit)}</td><td class="amount">${escapeHtml(r.amount)}</td></tr>`).join("")}
-      </table>`;
+      ${dish.history ? `<h4>История блюда</h4><p>${escapeHtml(dish.history)}</p>` : ""}
+      ${dish.historyQuote ? `<div class="quote-card">«${escapeHtml(dish.historyQuote)}»</div>` : ""}
+    `;
   }
 
-  function toggleExtra(id) {
-    const extra = document.getElementById(`extra-${id}`);
-    const btn = document.getElementById(`toggle-${id}`);
-    const nowOpen = !extra.classList.contains("open");
-    extra.classList.toggle("open", nowOpen);
-    btn.classList.toggle("open", nowOpen);
-    btn.setAttribute("aria-expanded", String(nowOpen));
-    btn.querySelector(".label").textContent = nowOpen ? "Скрыть состав и историю" : "Показать состав и историю";
+  function renderServingTab(dish) {
+    const steps = dish.servingSteps || [];
+    if (!steps.length && !dish.waiterPhrase) return emptyTabNote("Подача пока не описана.");
+    return `
+      ${steps.length ? `<h4>Как подаём</h4>${steps.map((s) => `<div class="serving-step">${icon("check")}<span>${escapeHtml(s)}</span></div>`).join("")}` : ""}
+      ${dish.waiterPhrase ? `
+        <div class="waiter-phrase-card">
+          <div class="kicker">${icon("star")}Что сказать гостю</div>
+          <p>«${escapeHtml(dish.waiterPhrase)}»</p>
+        </div>` : ""}
+    `;
   }
 
-  function openPhoto(id) {
-    const img = document.getElementById(`photo-${id}`);
-    if (!img || !img.src) return;
-    document.getElementById("lightboxImg").src = img.src;
-    document.getElementById("lightbox").classList.add("open");
-    document.body.style.overflow = "hidden";
-  }
-  function closeLightbox() {
-    document.getElementById("lightbox").classList.remove("open");
-    document.body.style.overflow = "";
-  }
-  document.getElementById("lightbox").addEventListener("click", (e) => {
-    if (e.target.id === "lightbox") closeLightbox();
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeLightbox();
-  });
-
-  const photoUrls = {};
-  async function loadPhoto(dish) {
-    if (!dish.photo || photoUrls[dish.id]) return;
-    const res = await fetch(`/api/oko-waiter-guide/photos/${dish.photo}`);
-    if (!res.ok) return;
-    const blob = await res.blob();
-    photoUrls[dish.id] = URL.createObjectURL(blob);
-    const img = document.getElementById(`photo-${dish.id}`);
-    if (img) img.src = photoUrls[dish.id];
+  function renderImportantTab(dish) {
+    const rows = [
+      ...(dish.allergens || []).map((t) => ({ cls: "allergen", ic: "warning", title: "Аллергены", text: t })),
+      ...(dish.features || []).map((t) => ({ cls: "feature", ic: "info", title: "Особенности", text: t })),
+      ...(dish.recommendations || []).map((t) => ({ cls: "recommendation", ic: "check", title: "Рекомендации", text: t })),
+    ];
+    const faq = dish.faq || [];
+    if (!rows.length && !faq.length) return emptyTabNote("Особых пометок для этого блюда нет.");
+    return `
+      ${rows.map((r) => `
+        <div class="important-row">
+          <div class="important-icon ${r.cls}">${icon(r.ic)}</div>
+          <div class="important-text"><h5>${r.title}</h5><p>${escapeHtml(r.text)}</p></div>
+        </div>`).join("")}
+      ${faq.length ? `
+        <h4>Частые вопросы</h4>
+        ${faq.map((f) => `
+          <div class="faq-item">
+            <button class="faq-q"><span>${escapeHtml(f.question)}</span><span class="caret">${icon("chev")}</span></button>
+            <div class="faq-a"><div><p>${escapeHtml(f.answer)}</p></div></div>
+          </div>`).join("")}
+      ` : ""}
+    `;
   }
 
-  load();
+  function emptyTabNote(text) {
+    return `<p style="color:var(--dim)">${escapeHtml(text)}</p>`;
+  }
+
+  // ---------- boot ----------
+  async function boot() {
+    routeChanged(); // paint skeleton/home immediately, don't block on network
+    await loadGuide();
+    routeChanged();
+  }
+  boot();
 </script>
 </body>
 </html>

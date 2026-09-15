@@ -28,6 +28,49 @@ function makeId() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// ---------- slugs ----------
+// Не хранятся в файле — вычисляются на лету из имени + id при каждом чтении.
+// Так надёжнее: слаг НИКОГДА не может рассинхронизироваться с данными
+// (переименовали блюдо — слаг в тот же момент пересчитался везде разом),
+// а стабильность (один и тот же URL у блюда между запросами) обеспечивает
+// то, что вход — само имя плюс неизменный id, и порядок обработки списка
+// всегда один и тот же (по id).
+const CYR_TO_LAT = {
+  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z",
+  и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r",
+  с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch",
+  ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+};
+function translit(str) {
+  return String(str || "")
+    .toLowerCase()
+    .split("")
+    .map((ch) => (CYR_TO_LAT[ch] !== undefined ? CYR_TO_LAT[ch] : ch))
+    .join("");
+}
+function slugBase(name) {
+  const s = translit(name)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return s || "item";
+}
+// reserved: слаги, которые нельзя отдать блюду/разделу, потому что заняты
+// служебным маршрутом (например "all" — псевдораздел «Все блюда»).
+function assignSlugs(items, reserved) {
+  const taken = new Set(reserved || []);
+  const sorted = items.slice().sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const bySlug = new Map();
+  for (const item of sorted) {
+    const base = slugBase(item.name);
+    let candidate = base;
+    if (taken.has(candidate)) candidate = `${base}-${String(item.id).slice(-4)}`;
+    if (taken.has(candidate)) candidate = `${base}-${item.id}`;
+    taken.add(candidate);
+    bySlug.set(item.id, candidate);
+  }
+  return bySlug;
+}
+
 function readSections() {
   return readJson(SECTIONS_PATH, []);
 }
@@ -63,12 +106,23 @@ function photoPath(filename) {
   return path.join(PHOTOS_DIR, filename);
 }
 
+// Старые блюда/разделы (до этого обновления) хранят фото в одиночном поле
+// `photo` и фразу подачи в `howToServe` — эти геттеры читают оба варианта,
+// не трогая файл на диске, так что ничего не нужно мигрировать разово.
+function dishPhotos(dish) {
+  if (Array.isArray(dish.photos) && dish.photos.length) return dish.photos;
+  return dish.photo ? [dish.photo] : [];
+}
+function dishWaiterPhrase(dish) {
+  return dish.waiterPhrase !== undefined ? dish.waiterPhrase : dish.howToServe || "";
+}
+
 // ---------- sections ----------
 
-function addSection({ name }) {
+function addSection({ name, icon }) {
   const sections = readSections();
   const nextOrder = sections.reduce((max, s) => Math.max(max, s.order || 0), 0) + 1;
-  const section = { id: makeId(), name: (name || "").trim(), order: nextOrder };
+  const section = { id: makeId(), name: (name || "").trim(), icon: icon || "", order: nextOrder };
   sections.push(section);
   writeSections(sections);
   return section;
@@ -79,6 +133,7 @@ function updateSection(id, patch) {
   const section = sections.find((s) => s.id === id);
   if (!section) return null;
   if (patch.name !== undefined) section.name = patch.name.trim();
+  if (patch.icon !== undefined) section.icon = patch.icon;
   if (patch.order !== undefined) section.order = patch.order;
   writeSections(sections);
   return section;
@@ -110,22 +165,31 @@ function reorderSections(orderedIds) {
  * calcTables: array of { label, rows: [{ name, unit, amount }] } — a dish
  * can have more than one table (e.g. a base component plus a side/sauce
  * table), matching how the original handbook laid out composite dishes.
+ * Doubles as the "Состав" tab's ingredient groups from the ТЗ.
  */
-function addDish({ sectionId, name, subtitle, description, history, howToServe, calcTables, photo }) {
+function addDish(input) {
   const dishes = readDishes();
-  const siblings = dishes.filter((d) => d.sectionId === sectionId);
+  const siblings = dishes.filter((d) => d.sectionId === input.sectionId);
   const nextOrder = siblings.reduce((max, d) => Math.max(max, d.order || 0), 0) + 1;
   const dish = {
     id: makeId(),
-    sectionId: sectionId || null,
+    sectionId: input.sectionId || null,
     order: nextOrder,
-    name: (name || "").trim(),
-    subtitle: (subtitle || "").trim(),
-    description: (description || "").trim(),
-    history: (history || "").trim(),
-    howToServe: (howToServe || "").trim(),
-    calcTables: Array.isArray(calcTables) ? calcTables : [],
-    photo: savePhoto(photo),
+    name: (input.name || "").trim(),
+    subtitle: (input.subtitle || "").trim(),
+    description: (input.description || "").trim(),
+    history: (input.history || "").trim(),
+    historyQuote: (input.historyQuote || "").trim(),
+    status: input.status || "",
+    servingSteps: Array.isArray(input.servingSteps) ? input.servingSteps.filter(Boolean) : [],
+    waiterPhrase: (input.waiterPhrase || input.howToServe || "").trim(),
+    calcTables: Array.isArray(input.calcTables) ? input.calcTables : [],
+    photos: input.photo ? [savePhoto(input.photo)].filter(Boolean) : [],
+    allergens: Array.isArray(input.allergens) ? input.allergens.filter(Boolean) : [],
+    features: Array.isArray(input.features) ? input.features.filter(Boolean) : [],
+    recommendations: Array.isArray(input.recommendations) ? input.recommendations.filter(Boolean) : [],
+    faq: Array.isArray(input.faq) ? input.faq.filter((f) => f && f.question) : [],
+    hidden: Boolean(input.hidden),
     createdAt: Date.now(),
   };
   dishes.push(dish);
@@ -142,17 +206,45 @@ function updateDish(id, patch) {
   if (patch.subtitle !== undefined) dish.subtitle = patch.subtitle.trim();
   if (patch.description !== undefined) dish.description = patch.description.trim();
   if (patch.history !== undefined) dish.history = patch.history.trim();
-  if (patch.howToServe !== undefined) dish.howToServe = patch.howToServe.trim();
+  if (patch.historyQuote !== undefined) dish.historyQuote = patch.historyQuote.trim();
+  if (patch.status !== undefined) dish.status = patch.status;
+  if (patch.servingSteps !== undefined) dish.servingSteps = patch.servingSteps.filter(Boolean);
+  if (patch.waiterPhrase !== undefined) dish.waiterPhrase = patch.waiterPhrase.trim();
+  else if (patch.howToServe !== undefined) dish.waiterPhrase = patch.howToServe.trim();
   if (patch.calcTables !== undefined) dish.calcTables = patch.calcTables;
+  if (patch.allergens !== undefined) dish.allergens = patch.allergens.filter(Boolean);
+  if (patch.features !== undefined) dish.features = patch.features.filter(Boolean);
+  if (patch.recommendations !== undefined) dish.recommendations = patch.recommendations.filter(Boolean);
+  if (patch.faq !== undefined) dish.faq = patch.faq.filter((f) => f && f.question);
+  if (patch.hidden !== undefined) dish.hidden = Boolean(patch.hidden);
   if (patch.order !== undefined) dish.order = patch.order;
+
+  // Фото — теперь массив (несколько на блюдо). Одно сохранение формы может
+  // добавить одно новое фото и/или удалить одно по индексу — этого хватает
+  // для формы админки (кладём файлы по одному, как и раньше).
+  if (!Array.isArray(dish.photos)) dish.photos = dish.photo ? [dish.photo] : [];
+  if (patch.removePhotoIndex !== undefined && patch.removePhotoIndex !== null) {
+    const idx = Number(patch.removePhotoIndex);
+    if (dish.photos[idx]) {
+      deletePhoto(dish.photos[idx]);
+      dish.photos.splice(idx, 1);
+    }
+  }
+  if (patch.addPhoto) {
+    const filename = savePhoto(patch.addPhoto);
+    if (filename) dish.photos.push(filename);
+  }
+  // Обратная совместимость со старой формой (одно фото на блюдо).
   if (patch.photo) {
-    deletePhoto(dish.photo);
-    dish.photo = savePhoto(patch.photo);
+    dish.photos.forEach(deletePhoto);
+    dish.photos = [savePhoto(patch.photo)].filter(Boolean);
   }
   if (patch.removePhoto) {
-    deletePhoto(dish.photo);
-    dish.photo = null;
+    dish.photos.forEach(deletePhoto);
+    dish.photos = [];
   }
+  delete dish.photo; // поле больше не используется отдельно от массива
+
   writeDishes(dishes);
   return dish;
 }
@@ -161,7 +253,7 @@ function deleteDish(id) {
   const dishes = readDishes();
   const dish = dishes.find((d) => d.id === id);
   if (!dish) return false;
-  deletePhoto(dish.photo);
+  dishPhotos(dish).forEach(deletePhoto);
   writeDishes(dishes.filter((d) => d.id !== id));
   return true;
 }
@@ -175,22 +267,77 @@ function reorderDishes(orderedIds) {
   writeDishes(dishes);
 }
 
+function shapeDish(dish, slug) {
+  return {
+    id: dish.id,
+    slug,
+    sectionId: dish.sectionId,
+    order: dish.order || 0,
+    name: dish.name,
+    subtitle: dish.subtitle || "",
+    description: dish.description || "",
+    history: dish.history || "",
+    historyQuote: dish.historyQuote || "",
+    status: dish.status || "",
+    photos: dishPhotos(dish),
+    servingSteps: dish.servingSteps || [],
+    waiterPhrase: dishWaiterPhrase(dish),
+    calcTables: dish.calcTables || [],
+    allergens: dish.allergens || [],
+    features: dish.features || [],
+    recommendations: dish.recommendations || [],
+    faq: dish.faq || [],
+    hidden: Boolean(dish.hidden),
+  };
+}
+
 // Full structured guide — sections in order, each with its dishes in
-// order. Used both by the admin page and the public read-only page.
-function getGuide() {
+// order, slugs computed. Used both by the admin page and the public
+// read-only page (public callers should use getGuide(), which additionally
+// drops hidden dishes and empty-after-filtering sections stay — an empty
+// section is still shown, it's just an editorial choice, not a bug).
+function getGuideAll() {
   const sections = readSections().slice().sort((a, b) => (a.order || 0) - (b.order || 0));
   const dishes = readDishes();
+  const sectionSlugs = assignSlugs(sections, ["all"]);
+  const dishSlugs = assignSlugs(dishes, []);
   return sections.map((section) => ({
     ...section,
+    slug: sectionSlugs.get(section.id),
     dishes: dishes
       .filter((d) => d.sectionId === section.id)
-      .sort((a, b) => (a.order || 0) - (b.order || 0)),
+      .sort((a, b) => (a.order || 0) - (b.order || 0))
+      .map((d) => shapeDish(d, dishSlugs.get(d.id))),
   }));
+}
+
+function getGuide() {
+  return getGuideAll()
+    .map((section) => ({ ...section, dishes: section.dishes.filter((d) => !d.hidden) }));
+}
+
+// Разделы со слагами — то, что нужно и админке (чтобы показать ссылку на
+// категорию), и публичной странице (для маршрутов /category/:slug).
+function getSectionsShaped() {
+  const sections = readSections().slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+  const sectionSlugs = assignSlugs(sections, ["all"]);
+  return sections.map((s) => ({ ...s, slug: sectionSlugs.get(s.id) }));
+}
+
+// Все блюда (включая скрытые) со слагами и развёрнутым массивом фото — то,
+// что нужно админке для списка/формы редактирования. В отличие от
+// getGuide()/getGuideAll(), не группирует по разделам.
+function getAllDishesShaped() {
+  const dishes = readDishes();
+  const dishSlugs = assignSlugs(dishes, []);
+  return dishes.map((d) => shapeDish(d, dishSlugs.get(d.id)));
 }
 
 function getOrphanDishes() {
   const sectionIds = new Set(readSections().map((s) => s.id));
-  return readDishes().filter((d) => !d.sectionId || !sectionIds.has(d.sectionId));
+  const dishes = readDishes();
+  const dishSlugs = assignSlugs(dishes, []);
+  return dishes.filter((d) => !d.sectionId || !sectionIds.has(d.sectionId)).map((d) => shapeDish(d, dishSlugs.get(d.id)));
 }
 
 module.exports = {
@@ -205,6 +352,9 @@ module.exports = {
   deleteDish,
   reorderDishes,
   getGuide,
+  getGuideAll,
+  getSectionsShaped,
+  getAllDishesShaped,
   getOrphanDishes,
   photoPath,
   PHOTOS_DIR,
