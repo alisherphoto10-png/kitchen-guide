@@ -6,7 +6,7 @@
 <title>OKO — инвентаризация</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 16px; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; }
   h1 { font-size: 20px; margin: 0 0 4px; }
   h2 { font-size: 16px; margin: 0 0 12px; }
   .hint { font-size: 12px; color: #8b949e; margin: 0 0 16px; }
@@ -21,14 +21,52 @@
   button.secondary { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
   button.danger { background: #21262d; color: #f85149; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 12px; }
   button:disabled { opacity: .5; cursor: default; }
-  #gate { max-width: 320px; margin: 80px auto; text-align: center; }
+  #gate { max-width: 320px; margin: 80px auto; text-align: center; padding: 16px; }
   #gate input { width: 100%; padding: 10px; margin: 10px 0; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; }
-  #app { display: none; max-width: 780px; margin: 0 auto; }
+  #app { display: none; }
   .status { font-size: 13px; margin-top: 8px; min-height: 16px; }
   .status.error { color: #f85149; }
   .status.ok { color: #3fb950; }
   .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
   .toolbar input[type="search"] { flex: 1; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; }
+
+  /* ---------- вкладки + боковая панель (ПК) ---------- */
+  .app-shell { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 220px; flex: none; background: #10151c; border-right: 1px solid #21262d;
+    padding: 18px 10px; display: flex; flex-direction: column; gap: 3px; position: sticky; top: 0; height: 100vh;
+  }
+  .sidebar-brand { font-size: 15px; font-weight: 700; padding: 6px 10px 18px; }
+  .nav-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: none; border: none; color: #8b949e; text-align: left; padding: 10px 12px;
+    border-radius: 7px; cursor: pointer; font-size: 14px; font-family: inherit;
+  }
+  .nav-item:hover { background: #1c2129; color: #e6edf3; }
+  .nav-item.active { background: #238636; color: white; }
+  .nav-badge {
+    background: #f85149; color: white; border-radius: 100px; padding: 1px 7px; font-size: 11px; font-weight: 700;
+  }
+  .main-content { flex: 1; min-width: 0; padding: 26px 30px 60px; max-width: 1000px; }
+  .view-head { margin-bottom: 18px; }
+  .view-head h1 { font-size: 22px; }
+  .view-head .hint { margin: 0; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .add-item-panel { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #21262d; }
+  .add-item-panel.open { display: flex; }
+
+  @media (max-width: 760px) {
+    .app-shell { flex-direction: column; }
+    .sidebar {
+      width: 100%; height: auto; position: static; flex-direction: row; overflow-x: auto;
+      border-right: none; border-bottom: 1px solid #21262d; padding: 8px;
+    }
+    .sidebar-brand { display: none; }
+    .nav-item { flex: none; white-space: nowrap; }
+    .main-content { padding: 16px; max-width: none; }
+  }
 
   .cat-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
   .cat-chip {
@@ -161,115 +199,149 @@
 </div>
 
 <div id="app">
-  <h1>Инвентаризация кухни</h1>
-  <p class="hint">Каталог утвари: добавляй позиции, отмечай приход/списание, смотри остатки. Экспорт — Excel-таблица за выбранный период.</p>
+  <div class="app-shell">
+    <nav class="sidebar">
+      <div class="sidebar-brand">🍳 Инвентаризация</div>
+      <button class="nav-item" data-tab="drafts" onclick="switchTab('drafts')">
+        <span>Входящие</span><span class="nav-badge" id="draftsNavBadge" style="display:none"></span>
+      </button>
+      <button class="nav-item" data-tab="items" onclick="switchTab('items')"><span>Позиции</span></button>
+      <button class="nav-item" data-tab="categories" onclick="switchTab('categories')"><span>Категории</span></button>
+      <button class="nav-item" data-tab="settings" onclick="switchTab('settings')"><span>Настройки</span></button>
+    </nav>
 
-  <div class="card" id="draftsCard" style="display:none">
-    <h2>Из Telegram <span id="draftsCount" class="draft-badge" style="display:none"></span></h2>
-    <p class="hint" style="margin:0 0 8px">Повара прислали фото в тему — проверьте, что бот угадал, и подтвердите.</p>
-    <div id="draftsList"></div>
-  </div>
+    <main class="main-content">
+      <section class="tab-panel" id="tab-drafts">
+        <div class="view-head">
+          <h1>Входящие</h1>
+          <p class="hint">Уведомления от поваров из Telegram — проверьте, что бот угадал, и подтвердите.</p>
+        </div>
+        <div class="card">
+          <div id="draftsList"></div>
+        </div>
+      </section>
 
-  <div class="card">
-    <h2>Настройки Telegram</h2>
-    <p class="hint" style="margin:0 0 8px">
-      Тема, куда повара кидают фото со списанием/приходом утвари. Если нужной группы/темы нет
-      в списке — напишите туда что угодно (или <code>/okoid</code>) и обновите страницу.
-    </p>
-    <div class="add-form">
-      <div class="field wide">
-        <label>Группа / тема</label>
-        <select id="telegramChatSelect" onchange="onTelegramChatSelectChange()"></select>
-      </div>
-      <div class="field">
-        <label>Chat ID (вручную)</label>
-        <input type="text" id="telegramChatIdInput" placeholder="-100...">
-      </div>
-      <div class="field">
-        <label>Thread ID (вручную, необязательно)</label>
-        <input type="text" id="telegramThreadIdInput" placeholder="123">
-      </div>
-    </div>
-    <button class="action" onclick="saveTelegramConfig()">Сохранить</button>
-    <div class="status" id="telegramConfigStatus"></div>
-  </div>
+      <section class="tab-panel" id="tab-items">
+        <div class="view-head">
+          <h1>Позиции</h1>
+          <p class="hint">Каталог утвари: категории, приход/списание, остатки.</p>
+        </div>
 
-  <div class="card">
-    <h2>Категории</h2>
-    <p class="hint" style="margin:0 0 8px">Разбейте утварь по категориям — появится фильтр в списке позиций.</p>
-    <div id="categoriesManageList"></div>
-    <div class="cat-add-row">
-      <input type="text" id="newCategoryName" placeholder="Название новой категории" onkeydown="if(event.key==='Enter') addCategory()">
-      <button class="action" onclick="addCategory()">+ Добавить</button>
-    </div>
-    <div class="status" id="categoryStatus"></div>
-  </div>
+        <div class="card">
+          <button class="secondary" onclick="toggleAddItemForm()" id="addItemToggleBtn">+ Добавить позицию</button>
+          <div class="add-form add-item-panel" id="addItemPanel">
+            <div class="field wide">
+              <label>Название</label>
+              <input type="text" id="newName" placeholder="Например: Сковородка">
+            </div>
+            <div class="field">
+              <label>Категория</label>
+              <select id="newCategoryId"></select>
+            </div>
+            <div class="field">
+              <label>Размер (необязательно)</label>
+              <input type="text" id="newSize" placeholder="22 см">
+            </div>
+            <div class="field">
+              <label>Ед. изм</label>
+              <input type="text" id="newUnit" placeholder="шт" value="шт">
+            </div>
+            <div class="field">
+              <label>Начальное кол-во</label>
+              <input type="number" id="newQty" placeholder="0" min="0">
+            </div>
+            <div class="field wide">
+              <label>Примечание (необязательно)</label>
+              <input type="text" id="newNote" placeholder="на складе / сломано и т.п.">
+            </div>
+            <div class="field wide">
+              <label>Фото (необязательно)</label>
+              <input type="file" id="newPhoto" accept="image/*">
+            </div>
+            <div style="flex-basis:100%">
+              <button class="action" onclick="addItem()">+ Добавить</button>
+              <div class="status" id="addStatus"></div>
+            </div>
+          </div>
+        </div>
 
-  <div class="card">
-    <h2>Добавить позицию</h2>
-    <div class="add-form">
-      <div class="field wide">
-        <label>Название</label>
-        <input type="text" id="newName" placeholder="Например: Сковородка">
-      </div>
-      <div class="field">
-        <label>Категория</label>
-        <select id="newCategoryId"></select>
-      </div>
-      <div class="field">
-        <label>Размер (необязательно)</label>
-        <input type="text" id="newSize" placeholder="22 см">
-      </div>
-      <div class="field">
-        <label>Ед. изм</label>
-        <input type="text" id="newUnit" placeholder="шт" value="шт">
-      </div>
-      <div class="field">
-        <label>Начальное кол-во</label>
-        <input type="number" id="newQty" placeholder="0" min="0">
-      </div>
-      <div class="field wide">
-        <label>Примечание (необязательно)</label>
-        <input type="text" id="newNote" placeholder="на складе / сломано и т.п.">
-      </div>
-      <div class="field wide">
-        <label>Фото (необязательно)</label>
-        <input type="file" id="newPhoto" accept="image/*">
-      </div>
-    </div>
-    <button class="action" onclick="addItem()">+ Добавить</button>
-    <div class="status" id="addStatus"></div>
-  </div>
+        <div class="card">
+          <div class="toolbar">
+            <input type="search" id="search" placeholder="Поиск по названию..." oninput="render()">
+          </div>
+          <div class="cat-chips" id="categoryFilterChips"></div>
+          <div id="itemsList"></div>
+        </div>
+      </section>
 
-  <div class="card">
-    <h2>Экспорт</h2>
-    <div class="export-row">
-      <div class="field">
-        <label>С даты</label>
-        <input type="date" id="exportFrom">
-      </div>
-      <div class="field">
-        <label>По дату</label>
-        <input type="date" id="exportTo">
-      </div>
-      <button class="action" onclick="exportExcel()">📥 Excel</button>
-      <button class="action" onclick="exportPdf()">📄 PDF</button>
-    </div>
-    <p class="hint" style="margin:8px 0 0">
-      Если пересылаете копию через Google Таблицы (открыть → «Отправить копию») — фото в
-      картинках может потеряться, это ограничение самих Google Таблиц. Кнопка «PDF» собирает файл
-      с фото прямо здесь, без Google Таблиц — надёжнее для пересылки.
-    </p>
-    <div class="status" id="exportStatus"></div>
-  </div>
+      <section class="tab-panel" id="tab-categories">
+        <div class="view-head">
+          <h1>Категории</h1>
+          <p class="hint">Разбейте утварь по категориям — появится фильтр на вкладке «Позиции».</p>
+        </div>
+        <div class="card">
+          <div id="categoriesManageList"></div>
+          <div class="cat-add-row">
+            <input type="text" id="newCategoryName" placeholder="Название новой категории" onkeydown="if(event.key==='Enter') addCategory()">
+            <button class="action" onclick="addCategory()">+ Добавить</button>
+          </div>
+          <div class="status" id="categoryStatus"></div>
+        </div>
+      </section>
 
-  <div class="card">
-    <div class="toolbar">
-      <h2 style="margin:0">Позиции</h2>
-      <input type="search" id="search" placeholder="Поиск по названию..." oninput="render()">
-    </div>
-    <div class="cat-chips" id="categoryFilterChips"></div>
-    <div id="itemsList"></div>
+      <section class="tab-panel" id="tab-settings">
+        <div class="view-head">
+          <h1>Настройки</h1>
+          <p class="hint">Подключение Telegram-темы и экспорт таблицы.</p>
+        </div>
+
+        <div class="card">
+          <h2>Telegram</h2>
+          <p class="hint" style="margin:0 0 8px">
+            Тема, куда повара кидают фото со списанием/приходом утвари. Если нужной группы/темы нет
+            в списке — напишите туда что угодно (или <code>/okoid</code>) и обновите страницу.
+          </p>
+          <div class="add-form">
+            <div class="field wide">
+              <label>Группа / тема</label>
+              <select id="telegramChatSelect" onchange="onTelegramChatSelectChange()"></select>
+            </div>
+            <div class="field">
+              <label>Chat ID (вручную)</label>
+              <input type="text" id="telegramChatIdInput" placeholder="-100...">
+            </div>
+            <div class="field">
+              <label>Thread ID (вручную, необязательно)</label>
+              <input type="text" id="telegramThreadIdInput" placeholder="123">
+            </div>
+          </div>
+          <button class="action" onclick="saveTelegramConfig()">Сохранить</button>
+          <div class="status" id="telegramConfigStatus"></div>
+        </div>
+
+        <div class="card">
+          <h2>Экспорт</h2>
+          <div class="export-row">
+            <div class="field">
+              <label>С даты</label>
+              <input type="date" id="exportFrom">
+            </div>
+            <div class="field">
+              <label>По дату</label>
+              <input type="date" id="exportTo">
+            </div>
+            <button class="action" onclick="exportExcel()">📥 Excel</button>
+            <button class="action" onclick="exportPdf()">📄 PDF</button>
+          </div>
+          <p class="hint" style="margin:8px 0 0">
+            Если пересылаете копию через Google Таблицы (открыть → «Отправить копию») — фото в
+            картинках может потеряться, это ограничение самих Google Таблиц. Кнопка «PDF» собирает файл
+            с фото прямо здесь, без Google Таблиц — надёжнее для пересылки.
+          </p>
+          <div class="status" id="exportStatus"></div>
+        </div>
+      </section>
+    </main>
   </div>
 </div>
 
@@ -297,12 +369,25 @@
   }
 
   function afterLogin() {
+    switchTab("drafts");
     setDefaultExportRange();
     loadCategories();
     render();
     loadDrafts();
     loadKnownChats();
     loadTelegramConfig();
+  }
+
+  function switchTab(tab) {
+    document.querySelectorAll(".nav-item").forEach((el) => el.classList.toggle("active", el.dataset.tab === tab));
+    document.querySelectorAll(".tab-panel").forEach((el) => el.classList.toggle("active", el.id === `tab-${tab}`));
+  }
+
+  function toggleAddItemForm() {
+    const panel = document.getElementById("addItemPanel");
+    const btn = document.getElementById("addItemToggleBtn");
+    const open = panel.classList.toggle("open");
+    btn.innerText = open ? "− Скрыть форму" : "+ Добавить позицию";
   }
 
   function setDefaultExportRange() {
@@ -470,17 +555,18 @@
   }
 
   function renderDrafts() {
-    const card = document.getElementById("draftsCard");
-    const badge = document.getElementById("draftsCount");
+    const badge = document.getElementById("draftsNavBadge");
     const list = document.getElementById("draftsList");
+    if (!list) return;
 
-    if (!drafts.length) {
-      card.style.display = "none";
+    if (drafts.length) {
+      badge.style.display = "inline-block";
+      badge.innerText = drafts.length;
+    } else {
+      badge.style.display = "none";
+      list.innerHTML = '<p class="hint" style="margin:0">Пока нет новых уведомлений от поваров.</p>';
       return;
     }
-    card.style.display = "block";
-    badge.style.display = "inline-block";
-    badge.innerText = drafts.length;
 
     list.innerHTML = drafts
       .map((d) => {
