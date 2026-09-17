@@ -116,6 +116,15 @@ function createOkoWaiterGuideRouter(bot) {
     res.json({ ok: true });
   });
 
+  // Анонимный счётчик открытий страницы официанта — без имени и логина
+  // (страница осознанно без входа), только "сколько раз и когда". Вызывается
+  // со страницы при каждой смене экрана, не блокирует и не ждёт ответа.
+  router.post("/guide-view", (req, res) => {
+    const p = String((req.body || {}).path || "").slice(0, 200);
+    store.logGuideView(p);
+    res.json({ ok: true });
+  });
+
   router.get("/photos/:filename", (req, res) => {
     const filePath = store.photoPath(req.params.filename);
     if (!fs.existsSync(filePath)) return res.status(404).end();
@@ -311,6 +320,10 @@ function createOkoWaiterGuideRouter(bot) {
 
   admin.get("/activity", requireOwner, (req, res) => {
     res.json(store.getActivity(200));
+  });
+
+  admin.get("/guide-view-stats", requireOwner, (req, res) => {
+    res.json(store.getGuideViews());
   });
 
   // ---------- фирменные изображения (только владелец) ----------

@@ -80,6 +80,11 @@
   .sidebar-stat { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px; text-align: center; }
   .sidebar-stat .num { font-size: 1.25rem; font-weight: 800; color: var(--gold-text); }
   .sidebar-stat .lbl { font-size: 0.656rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+
+  .guide-views-chart { display: flex; align-items: flex-end; gap: 4px; height: 90px; padding: 0 2px; overflow-x: auto; }
+  .guide-views-bar { flex: 1 0 20px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 20px; }
+  .guide-views-bar .fill { width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 4px; }
+  .guide-views-bar span { font-size: 0.563rem; color: var(--dim); margin-top: 4px; white-space: nowrap; }
   .btn-logout {
     width: 100%; background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 12px;
     padding: 10px; font-size: 0.813rem; font-weight: 600;
@@ -1458,12 +1463,22 @@
       </div>`).join("") : `<div class="empty-note">Пока пусто</div>`;
   }
 
-  function renderSettingsView() {
+  async function renderSettingsView() {
     const t = Date.now();
     document.getElementById("mainContent").innerHTML = `
       <div class="view-head"><div><h1>Настройки</h1><div class="hint">Ссылка на пособие официанта, логотип и фото на главном экране</div></div></div>
       <div class="cat-form">
-        <div class="field"><label>Публичная ссылка (без пароля)</label><input type="text" readonly value="${location.origin}/waiter-guide/"></div>
+        <div class="field"><label>Публичная ссылка (без пароля)</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="guideLinkInput" readonly value="${location.origin}/waiter-guide/" style="flex:1">
+            <button class="btn-ghost" id="copyGuideLinkBtn" style="flex:none">Скопировать</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="cat-form">
+        <div class="view-head" style="margin-bottom:12px"><div><h1 style="font-size:1.05rem">Открытия пособия</h1><div class="hint">Страница без логина — узнать, кто именно открыл, нельзя; только сколько раз и когда</div></div></div>
+        <div id="guideViewStats"><div class="empty-note">Загрузка…</div></div>
       </div>
 
       <div class="cat-form">
@@ -1527,6 +1542,45 @@
         statusEl.className = "status-msg ok"; statusEl.innerText = "Фото обновлено";
       });
     });
+
+    document.getElementById("copyGuideLinkBtn").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      const input = document.getElementById("guideLinkInput");
+      try {
+        await navigator.clipboard.writeText(input.value);
+      } catch {
+        input.select();
+        document.execCommand("copy");
+      }
+      const original = btn.innerText;
+      btn.innerText = "Скопировано";
+      setTimeout(() => { btn.innerText = original; }, 1500);
+    });
+
+    renderGuideViewStats();
+  }
+
+  async function renderGuideViewStats() {
+    const wrap = document.getElementById("guideViewStats");
+    if (!wrap) return;
+    const res = await fetch("/api/oko-waiter-guide/admin/guide-view-stats", { headers: authHeaders() });
+    const data = res.ok ? await res.json() : { totalCount: 0, byDay: {} };
+    const days = Object.keys(data.byDay || {}).sort().slice(-14);
+    const maxCount = Math.max(1, ...days.map((d) => data.byDay[d]));
+    wrap.innerHTML = `
+      <div class="sidebar-stats" style="margin-bottom:14px">
+        <div class="sidebar-stat"><div class="num">${data.totalCount || 0}</div><div class="lbl">Открытий всего</div></div>
+      </div>
+      ${days.length ? `
+        <div class="guide-views-chart">
+          ${days.map((d) => {
+            const count = data.byDay[d];
+            const h = Math.max(4, Math.round((count / maxCount) * 60));
+            const label = new Date(d).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+            return `<div class="guide-views-bar" title="${label}: ${count}"><div class="fill" style="height:${h}px"></div><span>${label}</span></div>`;
+          }).join("")}
+        </div>` : `<div class="empty-note">Пока не открывали</div>`}
+    `;
   }
 
   // ---------- dish editor ----------

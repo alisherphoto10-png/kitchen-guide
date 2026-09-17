@@ -561,6 +561,19 @@
     if (p.startsWith(BASE)) p = p.slice(BASE.length);
     return p || "/";
   }
+  // Анонимный счётчик открытий (без имени/логина — см. README) — просто
+  // "сколько раз и когда" по каждому реальному переходу, не по каждой
+  // перерисовке (иначе initial-boot и повторный routeChanged() после
+  // загрузки данных задвоили бы один и тот же просмотр).
+  function logGuideView() {
+    try {
+      fetch(`${API}/guide-view`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: currentPath() }),
+      }).catch(() => {});
+    } catch {}
+  }
+
   function navigate(path, opts) {
     opts = opts || {};
     scrollPositions[currentPath()] = window.scrollY;
@@ -569,8 +582,9 @@
     if (opts.replace) history.replaceState({ nav: navCounter }, "", full);
     else history.pushState({ nav: navCounter }, "", full);
     routeChanged();
+    logGuideView();
   }
-  window.addEventListener("popstate", routeChanged);
+  window.addEventListener("popstate", () => { routeChanged(); logGuideView(); });
 
   function goBack(fallbackPath) {
     if (history.state && history.state.nav) history.back();
@@ -1172,6 +1186,7 @@
     routeChanged(); // paint skeleton/home immediately, don't block on network
     await Promise.all([loadGuide(), loadStatuses()]);
     routeChanged();
+    logGuideView(); // самый первый просмотр за этот заход — один раз
     await finishPreload();
   }
   boot();

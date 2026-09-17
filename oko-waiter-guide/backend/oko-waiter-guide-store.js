@@ -11,6 +11,7 @@ const FEEDBACK_PATH = path.join(DATA_DIR, "feedback.json");
 const USERS_PATH = path.join(DATA_DIR, "users.json");
 const ACTIVITY_PATH = path.join(DATA_DIR, "activity.json");
 const STATUSES_PATH = path.join(DATA_DIR, "statuses.json");
+const GUIDE_VIEWS_PATH = path.join(DATA_DIR, "guide-views.json");
 const FRONTEND_DIR = "/home/kitchendesk/frontend/waiter-guide";
 
 // Список статусов ("Хит", "Популярное", ...) — управляемый, не зашит в код.
@@ -615,6 +616,32 @@ function getActivity(limit) {
   return list.slice(-(limit || 200)).reverse();
 }
 
+// ---------- открытия пособия (анонимный счётчик, без имён и логина) ----------
+// Официанты открывают страницу без логина осознанно (см. README) — значит
+// узнать, КТО конкретно открыл, нельзя в принципе, не ломая это. Считаем
+// только сколько раз и когда — общий счётчик + разбивка по дням, файл не
+// растёт бесконечно (старше 90 дней — не храним, "recent" обрезаем).
+function logGuideView(pathName) {
+  try {
+    const data = readJson(GUIDE_VIEWS_PATH, { totalCount: 0, byDay: {}, recent: [] });
+    data.totalCount = (data.totalCount || 0) + 1;
+    const day = new Date().toISOString().slice(0, 10);
+    data.byDay = data.byDay || {};
+    data.byDay[day] = (data.byDay[day] || 0) + 1;
+    const days = Object.keys(data.byDay).sort();
+    if (days.length > 90) days.slice(0, days.length - 90).forEach((d) => delete data.byDay[d]);
+    data.recent = data.recent || [];
+    data.recent.push({ path: pathName || "", at: Date.now() });
+    if (data.recent.length > 500) data.recent = data.recent.slice(-500);
+    writeJson(GUIDE_VIEWS_PATH, data);
+  } catch (e) {
+    console.error("[oko-waiter-guide] guide view log failed:", e.message);
+  }
+}
+function getGuideViews() {
+  return readJson(GUIDE_VIEWS_PATH, { totalCount: 0, byDay: {}, recent: [] });
+}
+
 module.exports = {
   addFeedback,
   sectionGroup,
@@ -626,6 +653,8 @@ module.exports = {
   verifyUserPassword,
   logActivity,
   getActivity,
+  logGuideView,
+  getGuideViews,
   readSections,
   addSection,
   updateSection,
