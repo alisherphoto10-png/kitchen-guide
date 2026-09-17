@@ -118,37 +118,68 @@
   .cat-add-row { display: flex; gap: 8px; margin-top: 10px; }
   .cat-add-row input { flex: 1; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 14px; }
 
-  .item-category-select {
-    margin-top: 6px; padding: 4px 8px; background: #0d1117; border: 1px solid #30363d;
-    color: #8b949e; border-radius: 6px; font-size: 12px; max-width: 220px;
+  /* ---------- компактный список позиций (клик по строке открывает карточку) ---------- */
+  .item-row-btn {
+    all: unset; display: flex; align-items: center; gap: 14px; padding: 12px 6px;
+    border-bottom: 1px solid #21262d; cursor: pointer; width: 100%; box-sizing: border-box;
   }
-
-  .item-row {
-    display: flex; gap: 12px; align-items: flex-start;
-    padding: 12px 0; border-bottom: 1px solid #21262d;
+  .item-row-btn:last-child { border-bottom: none; }
+  .item-row-btn:hover { background: #1a2029; border-radius: 8px; }
+  .item-number-badge {
+    flex: none; min-width: 30px; height: 24px; padding: 0 6px; border-radius: 6px; background: #21262d;
+    color: #8b949e; font-size: 11.5px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    font-variant-numeric: tabular-nums;
   }
-  .item-row:last-child { border-bottom: none; }
-  .item-photo {
-    width: 48px; height: 48px; border-radius: 8px; background: #0d1117;
-    border: 1px solid #30363d; flex: none; object-fit: cover;
-    display: flex; align-items: center; justify-content: center; font-size: 18px; color: #484f58;
+  .item-row-photo {
+    flex: none; width: 60px; height: 60px; border-radius: 10px; background: #0d1117;
+    border: 1px solid #30363d; overflow: hidden; display: flex; align-items: center;
+    justify-content: center; font-size: 20px; color: #484f58;
   }
-  .item-main { flex: 1; min-width: 0; }
-  .item-name { font-size: 14.5px; font-weight: 600; }
+  .item-row-photo img { width: 100%; height: 100%; object-fit: cover; }
+  .item-row-main { flex: 1; min-width: 0; text-align: left; }
+  .item-row-name { font-size: 14.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item-row-sub { display: flex; align-items: center; gap: 8px; margin-top: 3px; flex-wrap: wrap; }
+  .item-row-balance { font-size: 12px; color: #8b949e; }
+  .item-row-balance b { color: #e6edf3; font-size: 13px; }
+  .item-row-cat-tag { background: #21262d; color: #8b949e; border-radius: 100px; padding: 1px 8px; font-size: 10.5px; }
+  .item-row-chev { flex: none; color: #8b949e; }
   .item-meta { font-size: 12px; color: #8b949e; margin-top: 2px; }
-  .item-balance { font-size: 13px; font-family: ui-monospace, monospace; margin-top: 4px; }
-  .item-balance b { font-size: 16px; }
-  .item-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  .item-actions button { font-size: 12px; padding: 5px 9px; }
+
+  /* ---------- карточка позиции (модалка) ---------- */
+  .item-modal-photo {
+    width: 88px; height: 88px; border-radius: 12px; background: #0d1117; border: 1px solid #30363d;
+    flex: none; display: flex; align-items: center; justify-content: center; color: #484f58; overflow: hidden;
+  }
+  .item-modal-balance-card {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 10px; padding: 12px 14px;
+    display: flex; align-items: baseline; justify-content: space-between;
+  }
+  .item-modal-actions { display: flex; gap: 8px; }
+  .item-modal-actions button { flex: 1; }
+  .item-modal-writeoff {
+    flex: 1; background: #3d1f1f; border: 1px solid #5c2b2b; color: #f85149; border-radius: 6px;
+    padding: 9px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  }
+  .item-modal-delete {
+    color: #f85149; background: none; border: none; border-top: 1px solid #21262d;
+    width: 100%; padding: 10px; font-size: 12.5px; cursor: pointer; margin-top: 6px;
+  }
+  .item-modal-nav {
+    display: flex; align-items: center; justify-content: space-between; padding: 12px 16px;
+    border-top: 1px solid #21262d; background: #12161d; margin: 16px -20px -20px;
+  }
+  .item-modal-nav button {
+    background: #21262d; border: none; color: #e6edf3; border-radius: 8px; padding: 6px 10px;
+    font-size: 12.5px; cursor: pointer;
+  }
+  .item-modal-nav button:disabled { opacity: 0.4; cursor: default; }
 
   .move-form { display: none; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px; }
   .move-form.open { display: flex; }
   .move-form input { width: 90px; padding: 6px; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; }
   .move-form input.note { width: 160px; }
 
-  .history { display: none; margin-top: 8px; font-size: 12.5px; color: #8b949e; }
-  .history.open { display: block; }
-  .history-row { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px dashed #21262d; }
+  .history-row { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px dashed #21262d; font-size: 12.5px; color: #8b949e; }
   .history-row .plus { color: #3fb950; }
   .history-row .minus { color: #f85149; }
 
@@ -395,6 +426,10 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="itemModalOverlay" onclick="if(event.target===this) closeItemModal()">
+  <div class="modal-box" id="itemModalBox"></div>
+</div>
+
 <script>
   let password = sessionStorage.getItem("oko_inv_password") || "";
   let items = [];
@@ -492,6 +527,7 @@
     const res = await fetch("/api/oko-inventory/items", { headers: authHeaders() });
     items = await res.json();
     render();
+    if (currentModalItemId) renderItemModal();
   }
 
   // ---------- категории утвари ----------
@@ -920,8 +956,8 @@
     }
   }
 
-  async function loadPhoto(item) {
-    const img = document.getElementById(`photo-${item.id}`);
+  async function loadPhoto(item, imgId) {
+    const img = document.getElementById(imgId || `photo-${item.id}`);
     if (!img || !item.photo) return;
     // Тот же баг, что и с фото черновиков (см. loadDraftPhoto) — блоб уже
     // скачан раньше, но render() (вызывается после смены категории,
@@ -942,15 +978,22 @@
     img.src = photoUrls[item.id];
   }
 
-  function render() {
+  // Общий фильтр (поиск + категория) — используется и списком, и стрелками
+  // "пред./след." в карточке позиции, чтобы листание шло по тому же
+  // порядку, что человек реально видит на экране.
+  function getFilteredItems() {
     const q = (document.getElementById("search").value || "").trim().toLowerCase();
-    const list = document.getElementById("itemsList");
-    const filtered = items.filter((it) => {
+    return items.filter((it) => {
       if (q && !it.name.toLowerCase().includes(q)) return false;
       if (activeCategoryFilter === "__none__") return !it.categoryId;
       if (activeCategoryFilter !== "__all__") return it.categoryId === activeCategoryFilter;
       return true;
     });
+  }
+
+  function render() {
+    const list = document.getElementById("itemsList");
+    const filtered = getFilteredItems();
 
     if (!filtered.length) {
       list.innerHTML = `<p class="hint" style="margin:0">Ничего нет.</p>`;
@@ -959,50 +1002,132 @@
 
     list.innerHTML = filtered
       .map((item) => {
-        const historyRows = item.movements
-          .slice(0, 15)
-          .map(
-            (m) => `
-          <div class="history-row">
-            <span>${m.date} ${m.note ? "— " + escapeHtml(m.note) : ""}</span>
-            <span class="${m.type === "приход" ? "plus" : "minus"}">${m.type === "приход" ? "+" : "−"}${m.qty} ${escapeHtml(item.unit)}
-              <button class="danger" onclick="removeMovement('${m.id}')" title="Удалить запись">×</button>
-            </span>
-          </div>`,
-          )
-          .join("");
-
+        const cat = categories.find((c) => c.id === item.categoryId);
         return `
-        <div class="item-row">
-          <div class="item-photo" id="photo-wrap-${item.id}">
-            ${item.photo ? `<img class="item-photo" id="photo-${item.id}" style="width:48px;height:48px">` : "📦"}
+        <button class="item-row-btn" onclick="openItemModal('${item.id}')">
+          <div class="item-number-badge">№${item.number}</div>
+          <div class="item-row-photo" id="photo-wrap-${item.id}">
+            ${item.photo ? `<img id="photo-${item.id}">` : "📦"}
           </div>
-          <div class="item-main">
-            <div class="item-name">№${item.number} ${escapeHtml(item.name)}</div>
-            <div class="item-meta">${[item.size, item.note].filter(Boolean).map(escapeHtml).join(" · ") || "&nbsp;"}</div>
-            <div class="item-balance">Остаток: <b>${item.balance}</b> ${escapeHtml(item.unit)}</div>
-            <select class="item-category-select" onchange="setItemCategory('${item.id}', this.value)">
-              ${['<option value="">Без категории</option>'].concat(categories.map((c) => `<option value="${c.id}" ${c.id === item.categoryId ? "selected" : ""}>${escapeHtml(c.name)}</option>`)).join("")}
-            </select>
-            <div class="item-actions">
-              <button class="secondary" onclick="toggleMoveForm('${item.id}', 'приход')">+ Приход</button>
-              <button class="secondary" onclick="toggleMoveForm('${item.id}', 'списание')">− Списание</button>
-              <button class="secondary" onclick="toggleHistory('${item.id}')">История</button>
-              <button class="danger" onclick="removeItem('${item.id}')">Удалить позицию</button>
+          <div class="item-row-main">
+            <div class="item-row-name">${escapeHtml(item.name)}</div>
+            <div class="item-row-sub">
+              <span class="item-row-balance">Остаток: <b>${item.balance}</b> ${escapeHtml(item.unit)}</span>
+              <span class="item-row-cat-tag">${cat ? escapeHtml(cat.name) : "Без категории"}</span>
             </div>
-            <div class="move-form" id="move-${item.id}">
-              <input type="number" min="1" placeholder="Кол-во" id="moveQty-${item.id}">
-              <input type="date" id="moveDate-${item.id}" value="${new Date().toISOString().slice(0, 10)}">
-              <input type="text" class="note" placeholder="Причина (необязательно)" id="moveNote-${item.id}">
-              <button class="action" id="moveSubmit-${item.id}" onclick="submitMove('${item.id}')">Записать</button>
-            </div>
-            <div class="history" id="history-${item.id}">${historyRows || '<span class="hint">Движений ещё не было</span>'}</div>
           </div>
-        </div>`;
+          <div class="item-row-chev">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </button>`;
       })
       .join("");
 
     filtered.forEach(loadPhoto);
+  }
+
+  // ---------- карточка позиции (модалка вместо кнопок в строке) ----------
+  let currentModalItemId = null;
+
+  function openItemModal(id) {
+    currentModalItemId = id;
+    renderItemModal();
+    document.getElementById("itemModalOverlay").classList.add("open");
+  }
+  function closeItemModal() {
+    document.getElementById("itemModalOverlay").classList.remove("open");
+    currentModalItemId = null;
+  }
+  function modalPrev() {
+    const list = getFilteredItems();
+    const idx = list.findIndex((it) => it.id === currentModalItemId);
+    if (idx > 0) { currentModalItemId = list[idx - 1].id; renderItemModal(); }
+  }
+  function modalNext() {
+    const list = getFilteredItems();
+    const idx = list.findIndex((it) => it.id === currentModalItemId);
+    if (idx !== -1 && idx < list.length - 1) { currentModalItemId = list[idx + 1].id; renderItemModal(); }
+  }
+
+  function renderItemModal() {
+    const item = items.find((it) => it.id === currentModalItemId);
+    const box = document.getElementById("itemModalBox");
+    if (!item) { closeItemModal(); return; }
+
+    const list = getFilteredItems();
+    const idx = list.findIndex((it) => it.id === item.id);
+    const cat = categories.find((c) => c.id === item.categoryId);
+
+    const historyRows = item.movements
+      .slice(0, 15)
+      .map(
+        (m) => `
+      <div class="history-row">
+        <span>${m.date} ${m.note ? "— " + escapeHtml(m.note) : ""}</span>
+        <span class="${m.type === "приход" ? "plus" : "minus"}">${m.type === "приход" ? "+" : "−"}${m.qty} ${escapeHtml(item.unit)}
+          <button class="danger" onclick="removeMovement('${m.id}')" title="Удалить запись">×</button>
+        </span>
+      </div>`,
+      )
+      .join("");
+
+    box.innerHTML = `
+      <div class="modal-head">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="item-number-badge">№${item.number}</span>
+          <span class="item-row-cat-tag">${cat ? escapeHtml(cat.name) : "Без категории"}</span>
+        </div>
+        <button class="modal-close" onclick="closeItemModal()">✕</button>
+      </div>
+
+      <div style="display:flex;gap:14px;align-items:center;margin-bottom:16px">
+        <div class="item-modal-photo" id="photo-wrap-modal-${item.id}">
+          ${item.photo ? `<img id="photo-modal-${item.id}" style="width:100%;height:100%;object-fit:cover">` : "📦"}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:17px;font-weight:800;line-height:1.25">${escapeHtml(item.name)}</div>
+          ${item.size || item.note ? `<div class="item-meta">${[item.size, item.note].filter(Boolean).map(escapeHtml).join(" · ")}</div>` : ""}
+        </div>
+      </div>
+
+      <div class="item-modal-balance-card" style="margin-bottom:14px">
+        <span style="font-size:12px;color:#8b949e">Текущий остаток</span>
+        <span style="font-size:24px;font-weight:800;font-variant-numeric:tabular-nums">${item.balance} <span style="font-size:13px;font-weight:500;color:#8b949e">${escapeHtml(item.unit)}</span></span>
+      </div>
+
+      <div class="item-modal-actions" style="margin-bottom:10px">
+        <button class="secondary" onclick="toggleMoveForm('${item.id}', 'приход')">+ Приход</button>
+        <button class="item-modal-writeoff" onclick="toggleMoveForm('${item.id}', 'списание')">− Списание</button>
+      </div>
+      <div class="move-form" id="move-${item.id}" style="margin-bottom:14px">
+        <input type="number" min="1" placeholder="Кол-во" id="moveQty-${item.id}">
+        <input type="date" id="moveDate-${item.id}" value="${new Date().toISOString().slice(0, 10)}">
+        <input type="text" class="note" placeholder="Причина (необязательно)" id="moveNote-${item.id}">
+        <button class="action" id="moveSubmit-${item.id}" onclick="submitMove('${item.id}')">Записать</button>
+      </div>
+
+      <div class="field" style="margin-bottom:14px">
+        <label>Категория</label>
+        <select onchange="setItemCategory('${item.id}', this.value)">
+          ${['<option value="">Без категории</option>'].concat(categories.map((c) => `<option value="${c.id}" ${c.id === item.categoryId ? "selected" : ""}>${escapeHtml(c.name)}</option>`)).join("")}
+        </select>
+      </div>
+
+      <div style="margin-bottom:4px">
+        <div style="font-size:11px;color:#8b949e;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em">История</div>
+        ${historyRows || '<span class="hint">Движений ещё не было</span>'}
+      </div>
+
+      <button class="item-modal-delete" onclick="removeItem('${item.id}')">Удалить позицию</button>
+
+      <div class="item-modal-nav">
+        <button onclick="modalPrev()" ${idx <= 0 ? "disabled" : ""}>← Пред.</button>
+        <span style="font-size:11.5px;color:#8b949e">${list.length ? idx + 1 : 0} из ${list.length}</span>
+        <button onclick="modalNext()" ${idx === -1 || idx >= list.length - 1 ? "disabled" : ""}>След. →</button>
+      </div>
+    `;
+
+    loadPhoto(item, `photo-modal-${item.id}`);
   }
 
   function escapeHtml(value) {
@@ -1024,10 +1149,6 @@
     openMoveType[id] = type;
     form.classList.add("open");
     document.getElementById(`moveSubmit-${id}`).innerText = type === "приход" ? "Записать приход" : "Записать списание";
-  }
-
-  function toggleHistory(id) {
-    document.getElementById(`history-${id}`).classList.toggle("open");
   }
 
   async function submitMove(id) {
