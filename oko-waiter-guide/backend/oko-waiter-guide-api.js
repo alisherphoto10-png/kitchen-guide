@@ -132,7 +132,7 @@ function createOkoWaiterGuideRouter(bot) {
     res.json(req.scope === "all" ? all : all.filter((s) => (req.allowedGroups || []).includes(store.sectionGroup(s))));
   });
   admin.post("/sections", (req, res) => {
-    const { name, icon, group, parentId } = req.body || {};
+    const { name, icon, group, parentId, note } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: "Укажите название раздела" });
     if (parentId && !sectionAllowed(parentId, req)) return res.status(403).json({ error: "Нет доступа к этому разделу" });
     // Сотрудник с ОДНОЙ ролью (kitchen ИЛИ bar) не может создать себе раздел
@@ -141,7 +141,7 @@ function createOkoWaiterGuideRouter(bot) {
     const effectiveGroup = req.scope === "all" || (req.allowedGroups || []).length > 1
       ? group
       : (req.allowedGroups || [])[0];
-    const section = store.addSection({ name, icon, group: effectiveGroup, parentId });
+    const section = store.addSection({ name, icon, group: effectiveGroup, parentId, note });
     store.logActivity({ userId: req.userId, userName: req.userName, action: "section_created", targetName: section.name });
     res.json(section);
   });

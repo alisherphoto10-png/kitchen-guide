@@ -193,6 +193,14 @@
   .list-head .count { font-size: 0.813rem; color: var(--dim); }
   .list-search { padding: 12px 16px 4px; }
   .list-search .search-field input { padding: 11px 12px 11px 40px; font-size: 0.875rem; border-radius: 12px; }
+  .category-note {
+    margin: 12px 16px 0; padding: 12px 14px; display: flex; gap: 10px; align-items: flex-start;
+    background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.12);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    border-left: 3px solid var(--accent); border-radius: 4px 14px 14px 4px;
+  }
+  .category-note svg { width: 17px; height: 17px; flex: none; color: var(--accent); margin-top: 1px; }
+  .category-note p { margin: 0; font-size: 0.844rem; color: #f0e9db; line-height: 1.5; white-space: pre-wrap; }
   .sub-chips-row { display: flex; gap: 8px; overflow-x: auto; padding: 8px 16px 6px; scrollbar-width: none; }
   .sub-chips-row::-webkit-scrollbar { display: none; }
   .sub-chip {
@@ -704,6 +712,7 @@
         <h1>${escapeHtml(title)}</h1>
         <div class="count" id="listCount"></div>
       </div>
+      <div id="categoryNote"></div>
       <div class="list-search">
         <div class="search-field"><input class="has-icon-bg" type="search" id="listSearch" placeholder="Поиск в категории" value="${escapeHtml(initialQuery)}"></div>
       </div>
@@ -752,6 +761,19 @@
       return section.dishes.concat(...children.map((c) => c.dishes));
     }
 
+    // Текстовый блок-объявление раздела/подраздела (например: "эти позиции
+    // уже утверждены, но меню ещё не запущено") — показывает записку
+    // ИМЕННО открытой сейчас категории (родителя, либо выбранного
+    // подраздела), а не обеих разом. Пусто — ничего не рисуем, без заглушки.
+    function renderNote() {
+      const noteEl = document.getElementById("categoryNote");
+      if (!noteEl) return;
+      const active = subSlug ? children.find((c) => c.slug === subSlug) : section;
+      noteEl.innerHTML = active && active.note
+        ? `<div class="category-note">${icon("info")}<p>${escapeHtml(active.note)}</p></div>`
+        : "";
+    }
+
     function renderItems() {
       const q = searchInput.value.trim().toLowerCase();
       const items = poolForCurrentSub().filter((d) => matchesQuery(d, q));
@@ -783,6 +805,7 @@
           subSlug = btn.dataset.sub;
           document.querySelectorAll("#subChipsRow .sub-chip").forEach((b) => b.classList.toggle("active", b === btn));
           syncUrl();
+          renderNote();
           renderItems();
         });
       });
@@ -791,6 +814,7 @@
     const onSearch = debounce(() => { syncUrl(); renderItems(); }, 250);
     searchInput.addEventListener("input", onSearch);
 
+    renderNote();
     renderItems();
   }
 

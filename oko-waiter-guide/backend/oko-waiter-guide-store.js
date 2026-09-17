@@ -172,7 +172,7 @@ function dishWaiterPhrase(dish) {
 // подразделы — при создании подраздела parentId родителя игнорируется (см.
 // ниже). Блюдо может быть заведено и прямо в раздел с подразделами (просто
 // не попадёт ни в один из них), и в сам подраздел — оба варианта равноправны.
-function addSection({ name, icon, group, parentId }) {
+function addSection({ name, icon, group, parentId, note }) {
   const sections = readSections();
   // Подраздел у подраздела не бывает — если parentId указывает на что-то,
   // что само уже подраздел, кладём на верхний уровень его родителя.
@@ -191,6 +191,11 @@ function addSection({ name, icon, group, parentId }) {
     icon: icon || "",
     order: nextOrder,
     group: group === "bar" ? "bar" : "kitchen",
+    // Текстовый блок-объявление — показывается официанту наверху списка,
+    // когда он открывает именно этот раздел/подраздел. Пусто — ничего не
+    // показывается, никакой заглушки (например: "эти блюда уже утверждены,
+    // но меню ещё не запущено — можно изучать заранее").
+    note: (note || "").trim(),
   };
   sections.push(section);
   writeSections(sections);
@@ -205,6 +210,7 @@ async function updateSection(id, patch) {
   if (patch.icon !== undefined) section.icon = patch.icon;
   if (patch.order !== undefined) section.order = patch.order;
   if (patch.group !== undefined) section.group = patch.group === "bar" ? "bar" : "kitchen";
+  if (patch.note !== undefined) section.note = patch.note.trim();
   if (patch.removePhoto) {
     deletePhoto(section.photo);
     section.photo = "";

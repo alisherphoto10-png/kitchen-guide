@@ -214,6 +214,7 @@
   .cat-row .cat-actions { display: flex; gap: 4px; flex: none; }
   .cat-row .cat-actions button { width: 32px; height: 32px; border-radius: 9px; background: var(--card2); border: 1px solid var(--border); color: var(--muted); }
   .cat-row .cat-actions button svg { width: 14px; height: 14px; }
+  .cat-row .cat-actions button.has-note { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
   .subsections { margin: 6px 0 10px 20px; padding-left: 14px; border-left: 2px solid var(--border); }
   .subsections .cat-row { padding: 8px 10px; margin-bottom: 6px; cursor: default; }
@@ -474,6 +475,7 @@
     menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
     coldcup: '<path d="M12 11V6"/><circle cx="12" cy="4.3" r="1.6"/><path d="M4 12h16a8 8 0 0 1-16 0Z"/>',
     drumstick: '<path d="M8 19a5.2 5.2 0 0 1 0-10.4c1 0 1.8.3 2.5.8a4.2 4.2 0 0 1 5.8 5.8c-1.5 2.5-5 3.8-8.3 3.8Z"/><path d="M15 8.5 19.5 4"/><path d="M18 3l2.5 2.5"/>',
+    note: '<path d="M4 4a2 2 0 0 1 2-2h7l7 7v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M13 2v7h7"/><path d="M8 13h8M8 17h5"/>',
   };
   function icon(name) {
     return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ICONS.cutlery}</svg>`;
@@ -858,6 +860,7 @@
               ${canPickGroup() ? `<button onclick="toggleCategoryGroup('${s.id}')" title="Переключить Кухня/Бар">${icon("settings")}</button>` : ""}
               <button onclick="renameCategory('${s.id}')" title="Переименовать">${icon("edit")}</button>
               <button onclick="pickCategoryMediaDialog('${s.id}')" title="Иконка / фото">${icon("folder")}</button>
+              <button class="${s.note ? "has-note" : ""}" onclick="editCategoryNoteDialog('${s.id}')" title="Текстовый блок">${icon("note")}</button>
               <button class="icon-btn danger" style="width:32px;height:32px;border-radius:9px" onclick="removeCategory('${s.id}')" title="Удалить">${icon("trash")}</button>
             </div>
           </div>
@@ -872,6 +875,7 @@
                   <button onclick="moveSubsection('${sub.id}', -1)" title="Выше">↑</button>
                   <button onclick="moveSubsection('${sub.id}', 1)" title="Ниже">↓</button>
                   <button onclick="renameCategory('${sub.id}')" title="Переименовать">${icon("edit")}</button>
+                  <button class="${sub.note ? "has-note" : ""}" onclick="editCategoryNoteDialog('${sub.id}')" title="Текстовый блок">${icon("note")}</button>
                   <button class="icon-btn danger" style="width:32px;height:32px;border-radius:9px" onclick="removeCategory('${sub.id}')" title="Удалить">${icon("trash")}</button>
                 </div>
               </div>
@@ -1113,6 +1117,42 @@
       }
     }
     render();
+  }
+  // Текстовый блок-объявление раздела/подраздела — официант видит его
+  // наверху списка блюд, когда открывает именно эту категорию. Пусто —
+  // ничего не показывается на странице официанта, заглушки нет.
+  function editCategoryNoteDialog(id) {
+    const section = sections.find((s) => s.id === id);
+    if (!section) return;
+    const overlay = document.getElementById("confirmOverlay");
+    overlay.innerHTML = `
+      <div class="confirm-modal">
+        <h3>Текстовый блок — «${escapeHtml(section.name)}»</h3>
+        <p class="hint">Показывается официанту наверху, когда он открывает этот раздел. Например: «Эти позиции уже утверждены, но меню ещё не запущено — можно изучать заранее». Пусто — ничего не показывается.</p>
+        <textarea id="categoryNoteInput" rows="4" style="width:100%;resize:vertical">${escapeHtml(section.note || "")}</textarea>
+        <div class="status-msg" id="categoryNoteStatus"></div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn-ghost" id="categoryNoteClose" style="flex:1">Отмена</button>
+          <button class="btn-accent" id="categoryNoteSave" style="flex:1">Сохранить</button>
+        </div>
+      </div>`;
+    overlay.classList.add("open");
+    function closeDialog() {
+      overlay.classList.remove("open");
+      setTimeout(() => { overlay.innerHTML = ""; }, 200);
+    }
+    document.getElementById("categoryNoteClose").addEventListener("click", closeDialog);
+    document.getElementById("categoryNoteSave").addEventListener("click", async () => {
+      const statusEl = document.getElementById("categoryNoteStatus");
+      const note = document.getElementById("categoryNoteInput").value;
+      const res = await fetch(`/api/oko-waiter-guide/admin/sections/${id}`, {
+        method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ note }),
+      });
+      if (!res.ok) { statusEl.className = "status-msg error"; statusEl.innerText = "Не удалось сохранить"; return; }
+      section.note = note.trim();
+      await reload();
+      closeDialog();
+    });
   }
   async function removeCategory(id) {
     const section = sections.find((s) => s.id === id);
