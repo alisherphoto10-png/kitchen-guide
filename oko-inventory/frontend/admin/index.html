@@ -264,6 +264,57 @@
   .create-item-form input, .create-item-form select {
     width: 100%; padding: 6px; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 13px;
   }
+
+  /* ---------- пересчёт утвари ---------- */
+  .section-label { font-size: 11px; color: #8b949e; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .recount-cat-list { display: flex; flex-direction: column; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+  .recount-cat-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid #21262d; cursor: pointer; font-size: 13.5px; }
+  .recount-cat-row:last-child { border-bottom: none; }
+  .recount-cat-row input { width: 17px; height: 17px; accent-color: #238636; }
+  .recount-cat-row .name { flex: 1; }
+  .recount-cat-row .count { font-size: 12px; color: #8b949e; }
+  .recount-preview { margin-top: 10px; font-size: 12.5px; color: #8b949e; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 9px 12px; }
+  .recount-preview b { color: #e6edf3; font-size: 13.5px; }
+
+  .recount-link-row { display: flex; gap: 8px; align-items: center; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px 12px; margin: 14px 0; }
+  .recount-link-row input { flex: 1; background: none; border: none; color: #8b949e; font-size: 12.5px; font-family: ui-monospace, monospace; outline: none; }
+
+  .recount-progress-bar-wrap { margin-bottom: 14px; }
+  .recount-progress-label { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: #8b949e; margin-bottom: 8px; }
+  .recount-progress-label b { color: #e6edf3; }
+  .recount-progress-bar { height: 8px; background: #0d1117; border: 1px solid #30363d; border-radius: 100px; overflow: hidden; }
+  .recount-progress-bar div { height: 100%; background: #238636; border-radius: 100px; }
+
+  .recount-cat-progress { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; margin-bottom: 14px; }
+  .recount-progress-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid #21262d; font-size: 13.5px; }
+  .recount-progress-row:last-child { border-bottom: none; }
+  .recount-progress-row .name { flex: 1; }
+  .recount-progress-row .count { font-size: 12.5px; color: #8b949e; font-weight: 700; }
+  .recount-progress-row .count.done { color: #3fb950; }
+
+  .recount-activity-list { display: flex; flex-direction: column; }
+  .recount-activity-row { display: flex; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px dashed #21262d; font-size: 12.5px; }
+  .recount-activity-row:last-child { border-bottom: none; }
+
+  .recount-review-table { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+  .recount-review-head, .recount-review-row {
+    display: grid; grid-template-columns: 40px 1fr 90px 90px 90px 200px 120px; gap: 12px; align-items: center; padding: 8px 14px;
+  }
+  .recount-review-head { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 1px solid #21262d; }
+  .recount-review-row { border-bottom: 1px solid #21262d; font-size: 13px; }
+  .recount-review-row:last-child { border-bottom: none; }
+  .recount-review-row.mismatch { background: rgba(248,81,73,0.05); }
+  .recount-review-row .photo { width: 36px; height: 36px; border-radius: 7px; background: #161b22; border: 1px solid #30363d; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .recount-review-row .photo img { width: 100%; height: 100%; object-fit: cover; }
+  .recount-review-row .name { font-weight: 600; }
+  .recount-review-row .num { text-align: center; font-variant-numeric: tabular-nums; color: #8b949e; }
+  .recount-review-row .num.strong { color: #e6edf3; font-weight: 700; }
+  .recount-review-row .num.diff { font-weight: 700; }
+  .recount-review-row .num.diff.zero { color: #3fb950; }
+  .recount-review-row .num.diff.pos { color: #3fb950; }
+  .recount-review-row .num.diff.neg { color: #f85149; }
+  .recount-review-row .reason input { width: 100%; padding: 6px 8px; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 12px; }
+  button.danger-solid { background: #8b1e1e; color: white; border: none; border-radius: 6px; padding: 7px 12px; cursor: pointer; font-size: 12px; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -318,6 +369,14 @@
           <div class="cat-chips" id="categoryFilterChips"></div>
           <div id="itemsList"></div>
         </div>
+      </section>
+
+      <section class="tab-panel" id="tab-recount">
+        <div class="view-head">
+          <h1>Пересчёт</h1>
+          <p class="hint">Полная физическая инвентаризация — повара считают по ссылке, вы сверяете с системой.</p>
+        </div>
+        <div id="recountContainer"></div>
       </section>
 
       <section class="tab-panel" id="tab-categories">
@@ -471,6 +530,10 @@
     loadDrafts();
     loadKnownChats();
     loadTelegramConfig();
+    loadRecount();
+    setInterval(() => {
+      if (activeTab === "recount" && recountState && !recountState.closedAt) loadRecount();
+    }, 6000);
   }
 
   // ---------- вкладки + навигация (общая разметка для боковой панели на ПК и выдвижного меню на мобильном) ----------
@@ -482,6 +545,7 @@
     const tabs = [
       { id: "drafts", label: "Входящие", badge: draftsCountValue || null },
       { id: "items", label: "Позиции" },
+      { id: "recount", label: "Пересчёт" },
       { id: "categories", label: "Категории" },
       { id: "settings", label: "Настройки" },
     ];
@@ -502,6 +566,7 @@
     activeTab = tab;
     renderSidebarNav();
     document.querySelectorAll(".tab-panel").forEach((el) => el.classList.toggle("active", el.id === `tab-${tab}`));
+    if (tab === "recount") loadRecount();
   }
 
   function openMobileNav() {
@@ -531,6 +596,279 @@
     const first = new Date(now.getFullYear(), now.getMonth(), 1);
     document.getElementById("exportFrom").value = first.toISOString().slice(0, 10);
     document.getElementById("exportTo").value = now.toISOString().slice(0, 10);
+  }
+
+  // ---------- пересчёт утвари (полная физическая инвентаризация) ----------
+  let recountState = null; // ответ /recount/latest, или null (ещё ни одной сессии/начинаем новую)
+  let recountReviewData = null; // ответ /recount/:id/review, кэш пока сессия не поменялась
+  let recountShowSetup = false; // локальный флаг "Начать новый пересчёт" — до реального создания сессии
+
+  function formatRuDateShort(isoDate) {
+    if (!isoDate) return "";
+    const [y, m, d] = isoDate.split("-");
+    return `${d}.${m}.${y}`;
+  }
+
+  function timeAgo(ts) {
+    const diffMin = Math.round((Date.now() - ts) / 60000);
+    if (diffMin < 1) return "только что";
+    if (diffMin < 60) return `${diffMin} мин назад`;
+    const diffH = Math.round(diffMin / 60);
+    if (diffH < 24) return `${diffH} ч назад`;
+    return `${Math.round(diffH / 24)} дн назад`;
+  }
+
+  async function loadRecount() {
+    const res = await fetch("/api/oko-inventory/recount/latest", { headers: authHeaders() });
+    recountState = await res.json();
+    await renderRecount();
+  }
+
+  async function renderRecount() {
+    const box = document.getElementById("recountContainer");
+    if (!box) return;
+
+    if (!recountState || recountShowSetup) {
+      box.innerHTML = recountSetupHtml();
+      updateRecountPreview();
+      return;
+    }
+
+    if (!recountState.closedAt) {
+      box.innerHTML = recountProgressHtml(recountState);
+      return;
+    }
+
+    if (!recountReviewData || recountReviewData.session.id !== recountState.id) {
+      const res = await fetch(`/api/oko-inventory/recount/${recountState.id}/review`, { headers: authHeaders() });
+      recountReviewData = await res.json();
+    }
+    box.innerHTML = recountReviewHtml(recountReviewData);
+    recountReviewData.rows.forEach((r) => {
+      if (r.item.photo) loadPhoto({ id: r.itemId, photo: r.item.photo }, `rr-photo-${r.itemId}`);
+    });
+  }
+
+  function recountSetupHtml() {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const rows = categories
+      .map((c) => {
+        const count = items.filter((it) => it.categoryId === c.id && !it.archived).length;
+        return `
+        <label class="recount-cat-row">
+          <input type="checkbox" class="recount-cat-check" value="${c.id}" checked onchange="updateRecountPreview()">
+          <span class="name">${escapeHtml(c.name)}</span>
+          <span class="count">${count} поз.</span>
+        </label>`;
+      })
+      .join("");
+    return `
+      <div class="card">
+        <h2 style="margin-top:0">Новый пересчёт</h2>
+        <p class="hint">Повара считают физически по ссылке, вы сверяете результат с тем, что должно быть по системе.</p>
+
+        <div class="field" style="max-width:420px">
+          <label>Ссылка действует</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="date" id="recountFrom" value="${todayStr}" style="flex:1">
+            <span class="hint" style="margin:0">—</span>
+            <input type="date" id="recountTo" value="${todayStr}" style="flex:1">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Какие категории считаем</label>
+          ${categories.length ? `<div class="recount-cat-list">${rows}</div>` : '<p class="hint">Сначала добавьте категории на вкладке «Категории»</p>'}
+          <div class="recount-preview">Будет посчитано: <b id="recountPreviewCount">—</b> из ${items.length} позиций</div>
+        </div>
+
+        <button class="action" onclick="createRecount()">Создать ссылку</button>
+        <div class="status" id="recountSetupStatus"></div>
+      </div>
+    `;
+  }
+
+  function updateRecountPreview() {
+    const el = document.getElementById("recountPreviewCount");
+    if (!el) return;
+    const checked = Array.from(document.querySelectorAll(".recount-cat-check:checked")).map((c) => c.value);
+    el.innerText = items.filter((it) => !it.archived && checked.includes(it.categoryId)).length;
+  }
+
+  async function createRecount() {
+    const statusEl = document.getElementById("recountSetupStatus");
+    statusEl.className = "status";
+    statusEl.innerText = "";
+    const checked = Array.from(document.querySelectorAll(".recount-cat-check:checked")).map((c) => c.value);
+    if (!checked.length) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Выберите хотя бы одну категорию";
+      return;
+    }
+    const validFrom = document.getElementById("recountFrom").value;
+    const validUntil = document.getElementById("recountTo").value;
+    const res = await fetch("/api/oko-inventory/recount", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ categoryIds: checked, validFrom, validUntil }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      statusEl.className = "status error";
+      statusEl.innerText = data.error || "Не удалось создать";
+      return;
+    }
+    recountState = await res.json();
+    recountReviewData = null;
+    recountShowSetup = false;
+    await renderRecount();
+  }
+
+  function recountProgressHtml(state) {
+    const link = `${location.origin}/count/${state.token}`;
+    const pct = state.totalItems ? Math.round((state.countedItems / state.totalItems) * 100) : 0;
+    const catRows = state.categories
+      .map(
+        (c) => `
+      <div class="recount-progress-row">
+        <span class="name">${escapeHtml(c.name)}</span>
+        <span class="count ${c.counted === c.total && c.total > 0 ? "done" : ""}">${c.counted} / ${c.total}${c.counted === c.total && c.total > 0 ? " ✓" : ""}</span>
+      </div>`,
+      )
+      .join("");
+    const activityRows =
+      state.activity
+        .map(
+          (a) => `
+      <div class="recount-activity-row">
+        <span>${escapeHtml(a.itemName)} — <b>${a.qty}</b></span>
+        <span class="hint" style="margin:0">${escapeHtml(a.by)}, ${timeAgo(a.at)}</span>
+      </div>`,
+        )
+        .join("") || '<p class="hint">Пока никто ничего не вбил</p>';
+
+    return `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+          <div>
+            <h2 style="margin:0 0 4px">Пересчёт идёт</h2>
+            <p class="hint" style="margin:0">Действует до ${formatRuDateShort(state.validUntil)}</p>
+          </div>
+          <button class="secondary" onclick="closeRecount('${state.id}')">Завершить и сверить</button>
+        </div>
+
+        <div class="recount-link-row">
+          <input type="text" readonly value="${link}" id="recountLinkInput" onclick="this.select()">
+          <button class="secondary" onclick="copyRecountLink()">Скопировать</button>
+        </div>
+
+        <div class="recount-progress-bar-wrap">
+          <div class="recount-progress-label"><span>Общий прогресс</span><span><b>${state.countedItems}</b> из ${state.totalItems}</span></div>
+          <div class="recount-progress-bar"><div style="width:${pct}%"></div></div>
+        </div>
+
+        <div class="recount-cat-progress">${catRows}</div>
+
+        <div>
+          <div class="section-label">Последние записи</div>
+          <div class="recount-activity-list">${activityRows}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function copyRecountLink() {
+    const input = document.getElementById("recountLinkInput");
+    input.select();
+    navigator.clipboard?.writeText(input.value).catch(() => {});
+  }
+
+  async function closeRecount(id) {
+    if (!confirm("Завершить пересчёт? Повара больше не смогут вбивать количество по этой ссылке.")) return;
+    const res = await fetch(`/api/oko-inventory/recount/${id}/close`, { method: "POST", headers: authHeaders() });
+    recountState = await res.json();
+    recountReviewData = null;
+    await renderRecount();
+  }
+
+  function recountReviewHtml(data) {
+    const rows = data.rows;
+    const matchCount = rows.filter((r) => r.diff === 0).length;
+    const mismatchCount = rows.length - matchCount;
+    const pendingMatching = rows.filter((r) => r.diff === 0 && !r.accepted).length;
+
+    const rowsHtml =
+      rows
+        .map((r) => {
+          const diffClass = r.diff === 0 ? "zero" : r.diff > 0 ? "pos" : "neg";
+          const diffText = r.diff === 0 ? "0" : r.diff > 0 ? `+${r.diff}` : String(r.diff);
+          return `
+        <div class="recount-review-row ${r.diff !== 0 ? "mismatch" : ""}">
+          <div class="photo" id="rr-photo-wrap-${r.itemId}">${r.item.photo ? `<img id="rr-photo-${r.itemId}">` : "📦"}</div>
+          <div class="name">${escapeHtml(r.item.name)}</div>
+          <div class="num">${r.expected}</div>
+          <div class="num strong">${r.counted}</div>
+          <div class="num diff ${diffClass}">${diffText}</div>
+          <div class="reason">${
+            r.accepted
+              ? '<span class="hint" style="margin:0">—</span>'
+              : r.diff !== 0
+                ? `<input type="text" placeholder="Причина" id="rr-reason-${r.itemId}">`
+                : '<span class="hint" style="margin:0">—</span>'
+          }</div>
+          <div class="act">${
+            r.accepted
+              ? '<button class="secondary" disabled>Принято ✓</button>'
+              : `<button class="${r.diff !== 0 ? "danger-solid" : "secondary"}" onclick="acceptRecountRow('${data.session.id}','${r.itemId}')">Принять</button>`
+          }</div>
+        </div>`;
+        })
+        .join("") || '<p class="hint" style="padding:14px;margin:0">Нет посчитанных позиций</p>';
+
+    return `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px">
+          <div>
+            <h2 style="margin:0 0 4px">Сверка пересчёта</h2>
+            <p class="hint" style="margin:0">${rows.length} позиций посчитано · ${matchCount} совпадают · ${mismatchCount} расхождений</p>
+          </div>
+          ${pendingMatching ? `<button class="secondary" onclick="acceptAllMatching('${data.session.id}')">Принять все совпадающие (${pendingMatching})</button>` : ""}
+        </div>
+        <div class="recount-review-table" style="margin-top:14px">
+          <div class="recount-review-head">
+            <div class="photo"></div>
+            <div class="name">Название</div>
+            <div class="num">Ожидалось</div>
+            <div class="num">Посчитано</div>
+            <div class="num">Разница</div>
+            <div class="reason">Причина</div>
+            <div class="act"></div>
+          </div>
+          ${rowsHtml}
+        </div>
+        <button class="secondary" style="margin-top:14px" onclick="recountShowSetup = true; renderRecount()">Начать новый пересчёт</button>
+      </div>
+    `;
+  }
+
+  async function acceptRecountRow(sessionId, itemId) {
+    const reasonEl = document.getElementById(`rr-reason-${itemId}`);
+    const reason = reasonEl ? reasonEl.value : "";
+    const res = await fetch(`/api/oko-inventory/recount/${sessionId}/accept`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ itemId, reason }),
+    });
+    if (!res.ok) return;
+    recountReviewData = null;
+    await renderRecount();
+    await reload();
+  }
+
+  async function acceptAllMatching(sessionId) {
+    await fetch(`/api/oko-inventory/recount/${sessionId}/accept-all-matching`, { method: "POST", headers: authHeaders() });
+    recountReviewData = null;
+    await renderRecount();
   }
 
   async function reload() {

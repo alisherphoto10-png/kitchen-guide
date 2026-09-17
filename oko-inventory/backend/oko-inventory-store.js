@@ -1,11 +1,13 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const DATA_DIR = path.join(__dirname, "data");
 const ITEMS_PATH = path.join(DATA_DIR, "oko-inventory-items.json");
 const MOVEMENTS_PATH = path.join(DATA_DIR, "oko-inventory-movements.json");
 const DRAFTS_PATH = path.join(DATA_DIR, "oko-inventory-drafts.json");
 const CATEGORIES_PATH = path.join(DATA_DIR, "oko-inventory-categories.json");
+const RECOUNTS_PATH = path.join(DATA_DIR, "oko-inventory-recounts.json");
 const PHOTOS_DIR = path.join(DATA_DIR, "photos");
 
 function ensureDirs() {
@@ -350,6 +352,241 @@ function listPendingDrafts() {
     .sort((a, b) => b.createdAt - a.createdAt);
 }
 
+// ---------- пересчёт утвари (полная физическая инвентаризация) ----------
+// Отдельный флоу от черновиков выше: там повар шлёт единичное фото на одно
+// движение, тут — разовая сессия, где несколько поваров обходят кухню и
+// вбивают фактическое количество по каждой позиции выбранных категорий,
+// а результат владелец сверяет с тем, что должно быть по системе, и сам
+// решает, принимать ли расхождение (см. /recount/:id/review в API).
+// Доступ у поваров — не по паролю админки, а по непубличной ссылке с
+// токеном (см. createOkoInventoryCountRouter в API) — отсюда crypto для
+// токена, а не обычный makeId().
+function readRecounts() {
+  return readJson(RECOUNTS_PATH, []);
+}
+function writeRecounts(recounts) {
+  writeJson(RECOUNTS_PATH, recounts);
+}
+
+// Разом активна только одна сессия — второй "Начать пересчёт" молча
+// закрывает предыдущую, если её забыли закрыть, вместо того чтобы плодить
+// параллельные несовместимые сессии на одних и тех же позициях.
+function createRecountSession({ categoryIds, validFrom, validUntil }) {
+  const ids = Array.isArray(categoryIds) ? categoryIds.filter(Boolean) : [];
+  if (!ids.length) throw new Error("Выберите хотя бы одну категорию");
+  const recounts = readRecounts();
+  recounts.forEach((s) => {
+    if (!s.closedAt) s.closedAt = Date.now();
+  });
+  const today = new Date().toISOString().slice(0, 10);
+  const session = {
+    id: makeId(),
+    token: crypto.randomBytes(16).toString("hex"),
+    createdAt: Date.now(),
+    categoryIds: ids,
+    validFrom: validFrom || today,
+    validUntil: validUntil || today,
+    closedAt: null,
+    entries: {},
+  };
+  recounts.push(session);
+  writeRecounts(recounts);
+  return session;
+}
+
+function getLatestRecountSession() {
+  const recounts = readRecounts();
+  return recounts.length ? recounts[recounts.length - 1] : null;
+}
+
+function getRecountByToken(token) {
+  return readRecounts().find((s) => s.token === token) || null;
+}
+
+// Окно действия ссылки для поваров — отдельно от closedAt (владелец может
+// закрыть сессию досрочно вручную) и отдельно от "сессия вообще активна
+// для админки" (там она видна и после закрытия — пока не сверена).
+function recountIsOpenForCooks(session) {
+  if (!session || session.closedAt) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  return today >= session.validFrom && today <= session.validUntil;
+}
+
+function recountEligibleCount(categoryIds) {
+  const ids = Array.isArray(categoryIds) ? categoryIds : [];
+  return readItems().filter((it) => !it.archived && ids.includes(it.categoryId)).length;
+}
+
+// Список для экрана повара — сознательно БЕЗ текущего остатка по системе:
+// иначе повар просто перепишет "сколько должно быть" вместо того, чтобы
+// реально пересчитать. Видно только факт — посчитано или нет, и кем.
+function recountCountList(session) {
+  const items = readItems().filter((it) => !it.archived && session.categoryIds.includes(it.categoryId));
+  return items.map((it) => {
+    const entry = session.entries[it.id];
+    return {
+      id: it.id,
+      number: it.number,
+      name: it.name,
+      photo: it.photo,
+      unit: it.unit,
+      categoryId: it.categoryId,
+      counted: !!entry,
+      countedQty: entry ? entry.qty : null,
+      countedBy: entry ? entry.by : null,
+      countedAt: entry ? entry.at : null,
+    };
+  });
+}
+
+function recordRecountEntry(sessionId, itemId, qty, by) {
+  const recounts = readRecounts();
+  const session = recounts.find((s) => s.id === sessionId);
+  if (!session) return null;
+  const n = Number(qty);
+  if (!Number.isFinite(n) || n < 0) throw new Error("Количество должно быть неотрицательным числом");
+  const entry = { qty: n, by: (by || "").trim() || "Без имени", at: Date.now(), accepted: false, acceptedAt: null };
+  session.entries[itemId] = entry;
+  writeRecounts(recounts);
+  return entry;
+}
+
+function closeRecountSession(id) {
+  const recounts = readRecounts();
+  const session = recounts.find((s) => s.id === id);
+  if (!session) return null;
+  session.closedAt = Date.now();
+  writeRecounts(recounts);
+  return session;
+}
+
+// Сводка для админки, пока сессия открыта — прогресс по категориям и лента
+// последних записей (кто что вбил), тот же общий список позиций, что и
+// recountCountList(), просто ещё и с разбивкой по категориям.
+function recountAdminView(id) {
+  const session = readRecounts().find((s) => s.id === id);
+  if (!session) return null;
+  const categoriesById = new Map(readCategories().map((c) => [c.id, c]));
+  const items = readItems().filter((it) => !it.archived && session.categoryIds.includes(it.categoryId));
+
+  const byCategory = new Map();
+  session.categoryIds.forEach((cid) => {
+    const cat = categoriesById.get(cid);
+    byCategory.set(cid, { id: cid, name: cat ? cat.name : "?", total: 0, counted: 0 });
+  });
+  items.forEach((it) => {
+    const bucket = byCategory.get(it.categoryId);
+    if (!bucket) return;
+    bucket.total += 1;
+    if (session.entries[it.id]) bucket.counted += 1;
+  });
+
+  const activity = Object.entries(session.entries)
+    .map(([itemId, entry]) => {
+      const item = items.find((it) => it.id === itemId);
+      return { itemId, itemName: item ? item.name : "(позиция удалена)", qty: entry.qty, by: entry.by, at: entry.at };
+    })
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 20);
+
+  return {
+    id: session.id,
+    token: session.token,
+    createdAt: session.createdAt,
+    categoryIds: session.categoryIds,
+    validFrom: session.validFrom,
+    validUntil: session.validUntil,
+    closedAt: session.closedAt,
+    openForCooks: recountIsOpenForCooks(session),
+    totalItems: items.length,
+    countedItems: items.filter((it) => session.entries[it.id]).length,
+    categories: Array.from(byCategory.values()),
+    activity,
+  };
+}
+
+// Сверка после закрытия сессии — для каждой посчитанной позиции: что
+// должно быть по системе сейчас (balanceAsOf по всем движениям, включая
+// те, что случились уже после подсчёта — на случай если владелец успел
+// что-то провести за это время), что насчитали, и разница.
+function recountReview(id) {
+  const session = readRecounts().find((s) => s.id === id);
+  if (!session) return null;
+  const byItem = movementsByItem();
+  const itemsById = new Map(readItems().map((it) => [it.id, it]));
+  const rows = Object.entries(session.entries)
+    .map(([itemId, entry]) => {
+      const item = itemsById.get(itemId);
+      if (!item) return null; // позицию удалили после подсчёта — пропускаем
+      const expected = balanceAsOf(byItem[itemId] || [], null);
+      return {
+        itemId,
+        item: { id: item.id, number: item.number, name: item.name, photo: item.photo, unit: item.unit, categoryId: item.categoryId },
+        expected,
+        counted: entry.qty,
+        diff: entry.qty - expected,
+        by: entry.by,
+        at: entry.at,
+        accepted: entry.accepted,
+        acceptedAt: entry.acceptedAt,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.item.number - b.item.number);
+  return { session, rows };
+}
+
+// Расхождение != 0 становится обычным корректирующим движением (та же
+// addMovement(), что и ручной приход/списание в админке) — остаток не
+// трогается, пока это не подтверждено явным "Принять", чтобы случайный
+// или заведомо неверный подсчёт не испортил остатки молча.
+function acceptRecountEntry(sessionId, itemId, reason) {
+  const recounts = readRecounts();
+  const session = recounts.find((s) => s.id === sessionId);
+  if (!session) return null;
+  const entry = session.entries[itemId];
+  if (!entry) return null;
+  const item = readItems().find((it) => it.id === itemId);
+  if (!item) return null;
+
+  const expected = balanceAsOf(movementsByItem()[itemId] || [], null);
+  const diff = entry.qty - expected;
+  let movement = null;
+  if (diff !== 0) {
+    movement = addMovement({
+      itemId,
+      type: diff > 0 ? "приход" : "списание",
+      qty: Math.abs(diff),
+      note: ["Корректировка по пересчёту", (reason || "").trim()].filter(Boolean).join(" — "),
+    });
+  }
+  entry.accepted = true;
+  entry.acceptedAt = Date.now();
+  writeRecounts(recounts);
+  return { entry, movement };
+}
+
+// Массово принять только то, что и так совпало — расхождения по-прежнему
+// требуют явного решения по каждой позиции (см. acceptRecountEntry).
+function acceptAllMatchingRecountEntries(sessionId) {
+  const recounts = readRecounts();
+  const session = recounts.find((s) => s.id === sessionId);
+  if (!session) return null;
+  const byItem = movementsByItem();
+  let count = 0;
+  Object.entries(session.entries).forEach(([itemId, entry]) => {
+    if (entry.accepted) return;
+    const expected = balanceAsOf(byItem[itemId] || [], null);
+    if (entry.qty === expected) {
+      entry.accepted = true;
+      entry.acceptedAt = Date.now();
+      count += 1;
+    }
+  });
+  writeRecounts(recounts);
+  return { count };
+}
+
 module.exports = {
   readItems,
   addItem,
@@ -369,8 +606,21 @@ module.exports = {
   addDraft,
   updateDraft,
   listPendingDrafts,
+  createRecountSession,
+  getLatestRecountSession,
+  getRecountByToken,
+  recountIsOpenForCooks,
+  recountEligibleCount,
+  recountCountList,
+  recordRecountEntry,
+  closeRecountSession,
+  recountAdminView,
+  recountReview,
+  acceptRecountEntry,
+  acceptAllMatchingRecountEntries,
   PHOTOS_DIR,
   ITEMS_PATH,
   MOVEMENTS_PATH,
   DRAFTS_PATH,
+  RECOUNTS_PATH,
 };

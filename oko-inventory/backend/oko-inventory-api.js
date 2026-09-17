@@ -258,6 +258,57 @@ function createOkoInventoryRouter(bot) {
     res.json({ ok: true });
   });
 
+  // ---------- пересчёт утвари (полная физическая инвентаризация) ----------
+  router.get("/recount/eligible-count", (req, res) => {
+    const categoryIds = String(req.query.categoryIds || "").split(",").filter(Boolean);
+    res.json({ count: store.recountEligibleCount(categoryIds), total: store.readItems().length });
+  });
+
+  router.post("/recount", (req, res) => {
+    const { categoryIds, validFrom, validUntil } = req.body || {};
+    try {
+      const session = store.createRecountSession({ categoryIds, validFrom, validUntil });
+      res.json(store.recountAdminView(session.id));
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.get("/recount/latest", (req, res) => {
+    const session = store.getLatestRecountSession();
+    if (!session) return res.json(null);
+    res.json(store.recountAdminView(session.id));
+  });
+
+  router.post("/recount/:id/close", (req, res) => {
+    const session = store.closeRecountSession(req.params.id);
+    if (!session) return res.status(404).json({ error: "Сессия не найдена" });
+    res.json(store.recountAdminView(session.id));
+  });
+
+  router.get("/recount/:id/review", (req, res) => {
+    const review = store.recountReview(req.params.id);
+    if (!review) return res.status(404).json({ error: "Сессия не найдена" });
+    res.json(review);
+  });
+
+  router.post("/recount/:id/accept", (req, res) => {
+    const { itemId, reason } = req.body || {};
+    try {
+      const result = store.acceptRecountEntry(req.params.id, itemId, reason);
+      if (!result) return res.status(404).json({ error: "Запись не найдена" });
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.post("/recount/:id/accept-all-matching", (req, res) => {
+    const result = store.acceptAllMatchingRecountEntries(req.params.id);
+    if (!result) return res.status(404).json({ error: "Сессия не найдена" });
+    res.json(result);
+  });
+
   // Photos: filenames are opaque random ids (see savePhoto in the store),
   // same "not publicized but not password-gated" posture oko-order-relay
   // itself uses for the order form — simplest thing that works for a
@@ -519,4 +570,71 @@ function createOkoInventoryRouter(bot) {
   return router;
 }
 
-module.exports = { createOkoInventoryRouter, registerInventoryDraftListener: inventoryTelegram.registerInventoryDraftListener };
+// Отдельный, не защищённый паролем роутер — для страницы, которую владелец
+// скидывает поварам одноразовой ссылкой (см. createRecountSession в
+// store). Секрет тут — сам токен в ссылке (криптослучайный, см.
+// crypto.randomBytes в store), а не X-Admin-Password: поварам этот пароль
+// не выдаём. Держим отдельно от createOkoInventoryRouter(), у которого
+// router.use(requireAdmin) навешан на весь роутер целиком — проще завести
+// второй роутер, чем разбирать авторизацию по каждому урлу там.
+function createOkoInventoryCountRouter() {
+  const router = express.Router();
+
+  function loadOpenSession(req, res) {
+    const session = store.getRecountByToken(req.params.token);
+    if (!session) {
+      res.status(404).json({ error: "Ссылка не найдена" });
+      return null;
+    }
+    if (session.closedAt || !store.recountIsOpenForCooks(session)) {
+      res.status(410).json({ error: "Пересчёт уже завершён или ссылка больше не действует" });
+      return null;
+    }
+    return session;
+  }
+
+  router.get("/:token", (req, res) => {
+    const session = loadOpenSession(req, res);
+    if (!session) return;
+    const categories = store.readCategories().filter((c) => session.categoryIds.includes(c.id));
+    res.json({
+      validFrom: session.validFrom,
+      validUntil: session.validUntil,
+      categories,
+      items: store.recountCountList(session),
+    });
+  });
+
+  router.post("/:token/entry", (req, res) => {
+    const session = loadOpenSession(req, res);
+    if (!session) return;
+    const { itemId, qty, name } = req.body || {};
+    const item = store.readItems().find((it) => it.id === itemId && session.categoryIds.includes(it.categoryId));
+    if (!item) return res.status(400).json({ error: "Позиция не найдена в этом пересчёте" });
+    try {
+      const entry = store.recordRecountEntry(session.id, itemId, qty, name);
+      res.json({ ok: true, entry });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Тот же принцип, что и /photos/:filename у админки — непубличные, но не
+  // защищённые паролем имена файлов; тут вдобавок нужен валидный токен
+  // сессии, чтобы просто открыть фотку.
+  router.get("/:token/photos/:filename", (req, res) => {
+    const session = store.getRecountByToken(req.params.token);
+    if (!session) return res.status(404).end();
+    const filePath = store.photoPath(req.params.filename);
+    if (!fs.existsSync(filePath)) return res.status(404).end();
+    res.sendFile(filePath);
+  });
+
+  return router;
+}
+
+module.exports = {
+  createOkoInventoryRouter,
+  createOkoInventoryCountRouter,
+  registerInventoryDraftListener: inventoryTelegram.registerInventoryDraftListener,
+};

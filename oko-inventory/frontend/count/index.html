@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Пересчёт утвари</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #0d1117; color: #e6edf3; }
+  button, input { font-family: inherit; }
+
+  #nameGate { max-width: 360px; margin: 60px auto; padding: 0 20px; }
+  #nameGate h2 { margin: 0 0 6px; font-size: 19px; }
+  #nameGate p { font-size: 13px; color: #8b949e; margin: 0 0 16px; }
+  #nameGate input {
+    width: 100%; padding: 11px 12px; background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    color: #e6edf3; font-size: 15px; margin-bottom: 10px;
+  }
+  #nameGate button {
+    width: 100%; background: #238636; color: white; border: none; border-radius: 8px; padding: 12px;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+
+  #errorScreen { max-width: 360px; margin: 80px auto; padding: 0 20px; text-align: center; color: #8b949e; font-size: 14px; }
+
+  #app { display: none; max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+  #app.visible { display: flex; }
+
+  .top { padding: 16px 16px 12px; border-bottom: 1px solid #21262d; flex: none; }
+  .top .title { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+  .top .who { font-size: 12px; color: #8b949e; }
+  .top .who button { all: unset; color: #58a6ff; cursor: pointer; font-size: 12px; }
+  .progress-bar { margin-top: 10px; height: 6px; background: #161b22; border-radius: 100px; overflow: hidden; }
+  .progress-bar div { height: 100%; background: #238636; border-radius: 100px; }
+  .progress-text { margin-top: 5px; font-size: 11px; color: #8b949e; }
+
+  .chips { padding: 10px 16px; display: flex; gap: 6px; overflow-x: auto; flex: none; }
+  .chip {
+    background: #0d1117; border: 1px solid #30363d; color: #8b949e; border-radius: 100px; padding: 5px 12px;
+    font-size: 12px; white-space: nowrap; cursor: pointer; flex: none;
+  }
+  .chip.active { background: #238636; border-color: #238636; color: white; }
+
+  #search { margin: 0 16px 10px; padding: 9px 12px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; color: #e6edf3; font-size: 13.5px; flex: none; }
+
+  .list { flex: 1; overflow-y: auto; padding: 0 14px 24px; display: flex; flex-direction: column; gap: 9px; }
+  .item-card {
+    background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 11px 12px;
+    display: flex; gap: 11px; align-items: center;
+  }
+  .item-card.done { border-color: #21262d; opacity: 0.82; }
+  .item-photo {
+    width: 44px; height: 44px; border-radius: 8px; background: #0d1117; border: 1px solid #30363d; flex: none;
+    overflow: hidden; display: flex; align-items: center; justify-content: center; color: #484f58; font-size: 18px;
+  }
+  .item-photo img { width: 100%; height: 100%; object-fit: cover; }
+  .item-main { flex: 1; min-width: 0; }
+  .item-name { font-size: 13.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item-status { font-size: 11px; color: #8b949e; margin-top: 2px; }
+  .item-status.done { color: #3fb950; }
+  .item-qty {
+    width: 52px; padding: 8px 4px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    color: #e6edf3; font-size: 14px; text-align: center; flex: none;
+  }
+  .item-submit {
+    all: unset; background: #238636; color: white; border-radius: 6px; padding: 9px 11px; font-size: 13px;
+    font-weight: 700; cursor: pointer; flex: none;
+  }
+  .item-submit:active { background: #1a6b29; }
+  .empty { text-align: center; color: #8b949e; font-size: 13px; padding: 30px 0; }
+</style>
+</head>
+<body>
+
+<div id="nameGate">
+  <h2>Пересчёт утвари</h2>
+  <p>Представьтесь, чтобы было видно, кто что посчитал.</p>
+  <input type="text" id="nameInput" placeholder="Ваше имя" onkeydown="if(event.key==='Enter') startCounting()">
+  <button onclick="startCounting()">Начать</button>
+</div>
+
+<div id="errorScreen" style="display:none"></div>
+
+<div id="app">
+  <div class="top">
+    <div class="title">Пересчёт утвари</div>
+    <div class="who">Считает: <b id="whoName"></b> · <button onclick="resetName()">не я</button></div>
+    <div class="progress-bar"><div id="progressFill" style="width:0%"></div></div>
+    <div class="progress-text" id="progressText"></div>
+  </div>
+  <div class="chips" id="chips"></div>
+  <input type="search" id="search" placeholder="Поиск по названию..." oninput="render()">
+  <div class="list" id="list"></div>
+</div>
+
+<script>
+  const token = location.pathname.split("/").filter(Boolean).pop();
+  const API = `/api/oko-inventory-count/${token}`;
+
+  let cookName = localStorage.getItem("oko_recount_name") || "";
+  let items = [];
+  let categories = [];
+  let activeCategory = "__all__";
+  const photoUrls = {};
+  let pollTimer = null;
+
+  function startCounting() {
+    const name = document.getElementById("nameInput").value.trim();
+    if (!name) return;
+    cookName = name;
+    localStorage.setItem("oko_recount_name", name);
+    boot();
+  }
+
+  function resetName() {
+    localStorage.removeItem("oko_recount_name");
+    cookName = "";
+    document.getElementById("app").classList.remove("visible");
+    document.getElementById("nameGate").style.display = "block";
+    document.getElementById("nameInput").value = "";
+  }
+
+  async function boot() {
+    document.getElementById("nameGate").style.display = "none";
+    document.getElementById("app").classList.add("visible");
+    document.getElementById("whoName").innerText = cookName;
+    await load();
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(load, 5000);
+  }
+
+  function showError(message) {
+    document.getElementById("nameGate").style.display = "none";
+    document.getElementById("app").classList.remove("visible");
+    const el = document.getElementById("errorScreen");
+    el.style.display = "block";
+    el.innerText = message;
+    if (pollTimer) clearInterval(pollTimer);
+  }
+
+  async function load() {
+    // Не трогаем DOM, пока повар набирает количество — иначе опрос каждые
+    // 5 секунд сбросит недописанное число под пальцами.
+    if (document.activeElement && document.activeElement.classList.contains("item-qty")) return;
+
+    let res;
+    try {
+      res = await fetch(API);
+    } catch {
+      return; // временный сбой сети — тихо попробуем на следующем опросе
+    }
+    if (res.status === 404) return showError("Ссылка не найдена. Проверьте, что она скопирована полностью.");
+    if (res.status === 410) return showError("Пересчёт уже завершён, или ссылка больше не действует.");
+    if (!res.ok) return;
+
+    const data = await res.json();
+    items = data.items;
+    categories = data.categories;
+    renderChips();
+    render();
+  }
+
+  function renderChips() {
+    const chips = [{ id: "__all__", name: "Все" }, ...categories];
+    document.getElementById("chips").innerHTML = chips
+      .map((c) => `<div class="chip ${activeCategory === c.id ? "active" : ""}" onclick="setCategory('${c.id}')">${escapeHtml(c.name)}</div>`)
+      .join("");
+  }
+
+  function setCategory(id) {
+    activeCategory = id;
+    renderChips();
+    render();
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function getFiltered() {
+    const q = (document.getElementById("search").value || "").trim().toLowerCase();
+    return items.filter((it) => {
+      if (q && !it.name.toLowerCase().includes(q)) return false;
+      if (activeCategory !== "__all__" && it.categoryId !== activeCategory) return false;
+      return true;
+    });
+  }
+
+  function render() {
+    const total = items.length;
+    const counted = items.filter((it) => it.counted).length;
+    const pct = total ? Math.round((counted / total) * 100) : 0;
+    document.getElementById("progressFill").style.width = `${pct}%`;
+    document.getElementById("progressText").innerText = `${counted} из ${total} посчитано`;
+
+    const filtered = getFiltered();
+    const list = document.getElementById("list");
+    if (!filtered.length) {
+      list.innerHTML = `<div class="empty">Ничего нет</div>`;
+      return;
+    }
+
+    list.innerHTML = filtered
+      .map((it) => {
+        if (it.counted) {
+          return `
+          <div class="item-card done">
+            <div class="item-photo" id="photo-wrap-${it.id}">${it.photo ? `<img id="photo-${it.id}">` : "📦"}</div>
+            <div class="item-main">
+              <div class="item-name">${escapeHtml(it.name)}</div>
+              <div class="item-status done">✓ ${it.countedQty} ${escapeHtml(it.unit)} — ${escapeHtml(it.countedBy)}</div>
+            </div>
+          </div>`;
+        }
+        return `
+        <div class="item-card">
+          <div class="item-photo" id="photo-wrap-${it.id}">${it.photo ? `<img id="photo-${it.id}">` : "📦"}</div>
+          <div class="item-main">
+            <div class="item-name">${escapeHtml(it.name)}</div>
+            <div class="item-status">не посчитано</div>
+          </div>
+          <input type="number" min="0" placeholder="0" class="item-qty" id="qty-${it.id}" onkeydown="if(event.key==='Enter') submitCount('${it.id}')">
+          <button class="item-submit" onclick="submitCount('${it.id}')">✓</button>
+        </div>`;
+      })
+      .join("");
+
+    filtered.forEach((it) => {
+      if (it.photo) loadPhoto(it);
+    });
+  }
+
+  async function loadPhoto(item) {
+    const img = document.getElementById(`photo-${item.id}`);
+    if (!img) return;
+    if (photoUrls[item.id]) {
+      img.src = photoUrls[item.id];
+      return;
+    }
+    const res = await fetch(`${API}/photos/${item.photo}`);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    photoUrls[item.id] = URL.createObjectURL(blob);
+    img.src = photoUrls[item.id];
+  }
+
+  async function submitCount(itemId) {
+    const input = document.getElementById(`qty-${itemId}`);
+    const qty = input.value;
+    if (qty === "" || Number(qty) < 0) return;
+    const res = await fetch(`${API}/entry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemId, qty, name: cookName }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || "Не удалось сохранить");
+      return;
+    }
+    await load();
+  }
+
+  if (!token) {
+    showError("Некорректная ссылка.");
+  } else if (cookName) {
+    boot();
+  }
+</script>
+
+</body>
+</html>
