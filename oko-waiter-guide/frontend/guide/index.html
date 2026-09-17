@@ -263,6 +263,20 @@
     padding: 9px 18px; font-size: 0.813rem; font-weight: 600; cursor: pointer;
   }
 
+  mark {
+    background: rgba(217,162,74,0.32); color: inherit; border-radius: 3px; padding: 0 1px;
+  }
+  .match-note {
+    margin-top: 4px; font-size: 0.719rem; color: var(--dim); line-height: 1.4;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .match-note mark { background: rgba(217,162,74,0.4); }
+  .did-you-mean {
+    display: block; margin: 0 auto; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14);
+    color: var(--accent); border-radius: 100px; padding: 9px 16px; font-size: 0.813rem; font-weight: 600; cursor: pointer;
+  }
+  .did-you-mean:active { background: rgba(255,255,255,0.1); }
+
   /* ---------- detail screen ---------- */
   .carousel { position: relative; width: 100%; aspect-ratio: 1 / 1; background: var(--card2); overflow: hidden; }
   .carousel-track { display: flex; height: 100%; transition: transform 260ms cubic-bezier(0.4,0,0.2,1); touch-action: pan-y; }
@@ -545,11 +559,98 @@
     loaded = true;
   }
 
+  // Поля для поиска — ПО ПОРЯДКУ важности (индекс = приоритет при
+  // ранжировании: совпадение в названии должно быть выше, чем случайное
+  // совпадение в составе). label — для подсказки "нашлось в:", когда
+  // совпавшее поле не видно в самой карточке (например, аллерген).
+  const SEARCH_FIELDS = [
+    { key: "name", label: null, get: (d) => d.name },
+    { key: "subtitle", label: "Подзаголовок", get: (d) => d.subtitle },
+    { key: "description", label: "Описание", get: (d) => d.description },
+    { key: "waiterPhrase", label: "Что сказать гостю", get: (d) => d.waiterPhrase },
+    { key: "ingredient", label: "Состав", get: (d) => (d.calcTables || []).flatMap((t) => t.rows.map((r) => r.name)).join(", ") },
+    { key: "section", label: "Раздел", get: (d) => d.sectionName },
+    { key: "allergen", label: "Аллергены", get: (d) => (d.allergens || []).join(", ") },
+    { key: "feature", label: "Особенности", get: (d) => (d.features || []).join(", ") },
+    { key: "recommendation", label: "Рекомендации", get: (d) => (d.recommendations || []).join(", ") },
+    { key: "warning", label: "Предупреждение", get: (d) => d.warning },
+    { key: "faq", label: "Частые вопросы", get: (d) => (d.faq || []).flatMap((f) => [f.question, f.answer]).join(" ") },
+  ];
+
+  // Первое совпавшее поле (в порядке приоритета) + позиция совпадения в
+  // нём — используется и чтобы просто отфильтровать (matchesQuery), и
+  // чтобы отсортировать по релевантности, и чтобы показать, почему
+  // блюдо вообще нашлось, если совпадение не в названии/описании.
+  function matchInfo(dish, q) {
+    if (!q) return null;
+    for (let i = 0; i < SEARCH_FIELDS.length; i++) {
+      const f = SEARCH_FIELDS[i];
+      const value = String(f.get(dish) || "");
+      const idx = value.toLowerCase().indexOf(q);
+      if (idx !== -1) return { priority: i, idx, field: f.key, label: f.label, value };
+    }
+    return null;
+  }
   function matchesQuery(dish, q) {
     if (!q) return true;
-    const ingredientNames = (dish.calcTables || []).flatMap((t) => t.rows.map((r) => r.name)).join(" ");
-    const hay = [dish.name, dish.subtitle, dish.description, dish.sectionName, ingredientNames].join(" ").toLowerCase();
-    return hay.includes(q);
+    return !!matchInfo(dish, q);
+  }
+  // Сортировка списка результатов по релевантности — сначала совпадения в
+  // названии, потом в описании и т.д. (см. SEARCH_FIELDS), при равном
+  // приоритете — у кого совпадение ближе к началу поля.
+  function sortByRelevance(items, q) {
+    if (!q) return items;
+    return items
+      .map((d) => ({ d, m: matchInfo(d, q) }))
+      .sort((a, b) => (a.m.priority - b.m.priority) || (a.m.idx - b.m.idx))
+      .map((x) => x.d);
+  }
+
+  function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  // Оборачивает совпадение в <mark> — текст уже экранирован (escapeHtml),
+  // поэтому запрос для регулярки экранируем тем же способом, чтобы
+  // сравнение шло "как есть" на экране, включая спецсимволы вроде «».
+  function highlightMatch(text, q) {
+    const safe = escapeHtml(text || "");
+    if (!q) return safe;
+    const safeQ = escapeHtml(q).trim();
+    if (!safeQ) return safe;
+    const re = new RegExp(`(${escapeRegExp(safeQ)})`, "ig");
+    return safe.replace(re, "<mark>$1</mark>");
+  }
+
+  // ---------- «может, искали...» при нулевых результатах ----------
+  function levenshtein(a, b) {
+    const dp = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+    for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+    for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
+    }
+    return dp[a.length][b.length];
+  }
+  // Сравниваем запрос и с целым названием, и с каждым его словом отдельно
+  // (короткий запрос может опечататься в одном слове длинного названия).
+  // Порог 0.45 — подобрано на глаз для опечаток в 1-2 буквы, не для
+  // случайных не связанных слов.
+  function suggestClosest(q, pool) {
+    const ql = q.toLowerCase();
+    let best = null;
+    let bestScore = Infinity;
+    pool.forEach((d) => {
+      const name = (d.name || "").toLowerCase();
+      [name, ...name.split(/\s+/)].forEach((candidate) => {
+        if (!candidate) return;
+        const dist = levenshtein(ql, candidate);
+        const rel = dist / Math.max(ql.length, candidate.length, 1);
+        if (rel < bestScore) { bestScore = rel; best = d; }
+      });
+    });
+    return bestScore <= 0.45 ? best : null;
   }
 
   // ---------- router ----------
@@ -659,10 +760,17 @@
 
     function renderHomeSearchResults(q) {
       if (!q) { resultsEl.hidden = true; resultsEl.innerHTML = ""; return; }
-      const matches = flatDishes().filter((d) => matchesQuery(d, q.toLowerCase()));
+      const ql = q.toLowerCase();
+      const matches = sortByRelevance(flatDishes().filter((d) => matchesQuery(d, ql)), ql);
       if (!matches.length) {
-        resultsEl.innerHTML = `<div class="search-results-empty">Ничего не нашли по запросу «${escapeHtml(q)}»</div>`;
+        const suggestion = suggestClosest(ql, flatDishes());
+        resultsEl.innerHTML = `
+          <div class="search-results-empty">Ничего не нашли по запросу «${escapeHtml(q)}»</div>
+          ${suggestion ? `<button id="homeDidYouMeanBtn" class="did-you-mean" style="margin:0 12px 12px">Может, искали «${escapeHtml(suggestion.name)}»?</button>` : ""}
+        `;
         resultsEl.hidden = false;
+        const dymBtn = document.getElementById("homeDidYouMeanBtn");
+        if (dymBtn) dymBtn.addEventListener("click", () => navigate(`/dish/${suggestion.slug}`));
         return;
       }
       const shown = matches.slice(0, 6);
@@ -670,7 +778,7 @@
         <button class="search-results-item" data-slug="${d.slug}">
           ${d.photos && d.photos[0] ? `<img class="thumb" src="${API}/photos/${d.photos[0]}" alt="">` : `<div class="thumb placeholder">${icon("photo")}</div>`}
           <span class="body">
-            <span class="name">${escapeHtml(d.name)}</span>
+            <span class="name">${highlightMatch(d.name, ql)}</span>
             <span class="cat">${escapeHtml(d.sectionName || "")}</span>
           </span>
         </button>
@@ -793,24 +901,28 @@
 
     function renderItems() {
       const q = searchInput.value.trim().toLowerCase();
-      const items = poolForCurrentSub().filter((d) => matchesQuery(d, q));
+      const items = sortByRelevance(poolForCurrentSub().filter((d) => matchesQuery(d, q)), q);
 
       countEl.textContent = `${items.length} ${pluralDishes(items.length)}`;
 
       if (!items.length) {
+        const suggestion = q ? suggestClosest(q, poolForCurrentSub()) : null;
         listEl.innerHTML = `
           <div class="empty-state">
             <div class="emoji">🔍</div>
             <h3>Ничего не нашли</h3>
             <p>Попробуйте изменить запрос или выбрать другую категорию.</p>
+            ${suggestion ? `<button id="didYouMeanBtn" class="did-you-mean">Может, искали «${escapeHtml(suggestion.name)}»?</button>` : ""}
             <button id="resetSearchBtn">Сбросить поиск</button>
           </div>`;
         const resetBtn = document.getElementById("resetSearchBtn");
         if (resetBtn) resetBtn.addEventListener("click", () => { searchInput.value = ""; syncUrl(); renderItems(); });
+        const dymBtn = document.getElementById("didYouMeanBtn");
+        if (dymBtn) dymBtn.addEventListener("click", () => navigate(`/dish/${suggestion.slug}`));
         return;
       }
 
-      listEl.innerHTML = items.map(renderDishCard).join("");
+      listEl.innerHTML = items.map((d) => renderDishCard(d, q)).join("");
       listEl.querySelectorAll(".dish-card").forEach((cardEl) => {
         cardEl.addEventListener("click", () => navigate(`/dish/${cardEl.dataset.slug}`));
       });
@@ -835,21 +947,34 @@
     renderItems();
   }
 
-  function renderDishCard(dish) {
+  // q — текущий поисковый запрос (или "" вне поиска): подсвечивает
+  // совпадение в названии/описании, а если блюдо нашлось по полю, которого
+  // на карточке не видно (аллерген, FAQ, состав…) — показывает короткую
+  // пометку "Нашлось в: <поле>", чтобы было понятно, почему оно в списке.
+  function renderDishCard(dish, q) {
     const meta = statusMeta[dish.status];
     const thumb = dish.photos && dish.photos[0]
       ? `<img class="thumb" src="${API}/photos/${dish.photos[0]}" loading="lazy" alt="">`
       : `<div class="thumb placeholder">${icon("photo")}</div>`;
+    const m = q ? matchInfo(dish, q) : null;
+    const nameHtml = q ? highlightMatch(dish.name, q) : escapeHtml(dish.name);
+    const descHtml = dish.description ? (q ? highlightMatch(dish.description, q) : escapeHtml(dish.description)) : "";
+    // "Нашлось в" показываем только когда совпадение реально не видно на
+    // карточке (не в названии/описании) — иначе это просто дублирующий шум.
+    const showMatchNote = m && m.label && !["name", "description"].includes(m.field);
+    const snippetStart = showMatchNote ? Math.max(0, m.idx - 20) : 0;
+    const snippet = showMatchNote ? (snippetStart > 0 ? "…" : "") + m.value.slice(snippetStart, m.idx + q.length + 20) + (m.idx + q.length + 20 < m.value.length ? "…" : "") : "";
     return `
       <button class="dish-card" data-slug="${dish.slug}">
         ${thumb}
         <div class="body">
           <div class="top-row">
-            <span class="dname">${escapeHtml(dish.name)}</span>
+            <span class="dname">${nameHtml}</span>
             ${meta ? `<span class="badge">${meta.emoji} ${meta.label}</span>` : ""}
           </div>
           ${dish.sectionName ? `<div class="category">${escapeHtml(dish.sectionName)}</div>` : ""}
-          ${dish.description ? `<div class="desc">${escapeHtml(dish.description)}</div>` : ""}
+          ${descHtml ? `<div class="desc">${descHtml}</div>` : ""}
+          ${showMatchNote ? `<div class="match-note">${m.label}: ${highlightMatch(snippet, q)}</div>` : ""}
         </div>
         <span class="chev">${icon("chev")}</span>
       </button>`;
