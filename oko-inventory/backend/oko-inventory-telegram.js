@@ -171,7 +171,7 @@ function registerInventoryDraftListener(bot) {
 
       const fromName = [msg.from.first_name, msg.from.last_name].filter(Boolean).join(" ") || msg.from.username || "Повар";
 
-      store.addDraft({
+      const draft = store.addDraft({
         chatId: msg.chat.id,
         threadId: msg.message_thread_id || null,
         messageId: msg.message_id,
@@ -195,16 +195,22 @@ function registerInventoryDraftListener(bot) {
       );
       lines.push(parsed.qty ? `Количество: *${parsed.qty}*` : "Количество не распознано — впишу вручную.");
       lines.push(`Тип: *${parsed.direction}*`);
-      lines.push("");
-      lines.push("Подтвердите в админке инвентаризации.");
 
-      bot
-        .sendMessage(msg.chat.id, lines.join("\n"), {
+      // Message id запоминаем, чтобы при подтверждении в админке (см.
+      // /drafts/:id/confirm) ОТРЕДАКТИРОВАТЬ это же сообщение на "Записано",
+      // а не слать новое — владелец может разбирать черновики не в день
+      // прихода, а раз в неделю, и заваливать тему повторными сообщениями
+      // на каждое старое фото не нужно.
+      try {
+        const sent = await bot.sendMessage(msg.chat.id, lines.join("\n"), {
           parse_mode: "Markdown",
           reply_to_message_id: msg.message_id,
           message_thread_id: msg.message_thread_id,
-        })
-        .catch(() => {});
+        });
+        store.updateDraft(draft.id, { botReplyMessageId: sent.message_id });
+      } catch (e) {
+        console.error("[oko-inventory] telegram draft reply failed:", e.message);
+      }
     } catch (e) {
       console.error("[oko-inventory] telegram draft failed:", e.message);
     }

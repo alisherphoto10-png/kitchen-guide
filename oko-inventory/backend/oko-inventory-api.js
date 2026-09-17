@@ -201,13 +201,24 @@ function createOkoInventoryRouter(bot) {
           `*${escapeMd(item.name)}*`,
           `${sign}: *${movement.qty} ${escapeMd(item.unit)}*`,
         ].join("\n");
-        bot
-          .sendMessage(draft.chatId, text, {
-            parse_mode: "Markdown",
-            reply_to_message_id: draft.messageId,
-            message_thread_id: draft.threadId || undefined,
-          })
-          .catch(() => {});
+        // Правим то же самое "Принято в обработку" на "Записано", а не шлём
+        // новое сообщение — владелец разбирает черновики не сразу, иногда
+        // раз в неделю, и заваливать тему повторными сообщениями на каждое
+        // старое фото не нужно. Если по какой-то причине message_id того
+        // сообщения не сохранился (например, отправка тогда не удалась) —
+        // отправляем новое, как раньше, чтобы подтверждение не потерялось.
+        const editOrSend = draft.botReplyMessageId
+          ? bot.editMessageText(text, {
+              chat_id: draft.chatId,
+              message_id: draft.botReplyMessageId,
+              parse_mode: "Markdown",
+            })
+          : bot.sendMessage(draft.chatId, text, {
+              parse_mode: "Markdown",
+              reply_to_message_id: draft.messageId,
+              message_thread_id: draft.threadId || undefined,
+            });
+        editOrSend.catch(() => {});
       }
       res.json({ ok: true, movement });
     } catch (err) {

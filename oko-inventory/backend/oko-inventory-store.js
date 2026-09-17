@@ -330,6 +330,7 @@ function addDraft(data) {
     guessedItemName: data.guessedItemName || null,
     candidates: Array.isArray(data.candidates) ? data.candidates : [],
     nameGuess: data.nameGuess || "",
+    botReplyMessageId: null,
   };
   drafts.push(draft);
   writeDrafts(drafts);
