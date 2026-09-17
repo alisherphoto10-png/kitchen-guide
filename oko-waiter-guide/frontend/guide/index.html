@@ -103,6 +103,8 @@
   .list-search { padding: 12px 16px 4px; }
   .list-search .search-field input { padding: 11px 12px 11px 38px; font-size: 0.875rem; border-radius: 12px; }
   .list-search .search-field svg { width: 15px; height: 15px; left: 12px; }
+  .chips-row.sub { padding: 8px 16px 6px; }
+  .chips-row.sub .chip { padding: 7px 12px; font-size: 0.75rem; }
 
   .dish-list { padding: 8px 16px 20px; display: flex; flex-direction: column; gap: 10px; }
   .dish-card {
@@ -273,10 +275,18 @@
     return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="${extraClass || ""}">${ICONS[name] || ICONS.cutlery}</svg>`;
   }
 
-  const STATUS_META = {
-    hit: { emoji: "🔥", label: "Хит" },
-    popular: { emoji: "🌟", label: "Популярное" },
-  };
+  // Статусы — управляемый список из админки (карточка "Статусы блюд"), не
+  // зашиты в код. Грузятся при загрузке страницы вместе с guide.
+  let statusMeta = {};
+  async function loadStatuses() {
+    try {
+      const res = await fetch(`${API}/statuses`);
+      const list = res.ok ? await res.json() : [];
+      statusMeta = Object.fromEntries(list.map((s) => [s.id, s]));
+    } catch {
+      statusMeta = {};
+    }
+  }
 
   function escapeHtml(value) {
     return String(value || "")
@@ -299,10 +309,27 @@
   let guide = [];      // sections with .dishes[], as returned by /guide
   let loaded = false;
 
+  function topLevelSections() {
+    return guide.filter((s) => !s.parentId);
+  }
+  function subsectionsOf(sectionId) {
+    return guide.filter((s) => s.parentId === sectionId);
+  }
+  // «Родитель · Подраздел», когда блюдо заведено в подраздел — иначе просто
+  // имя раздела. Одна строка на карточке/странице блюда вместо отдельного
+  // поля под каждый случай.
+  function sectionPathOf(section) {
+    if (!section) return "";
+    if (!section.parentId) return section.name;
+    const parent = guide.find((s) => s.id === section.parentId);
+    return parent ? `${parent.name} · ${section.name}` : section.name;
+  }
   function flatDishes() {
     const out = [];
     guide.forEach((section) => {
-      section.dishes.forEach((d) => out.push(Object.assign({}, d, { sectionName: section.name, sectionSlug: section.slug, sectionIcon: section.icon })));
+      section.dishes.forEach((d) => out.push(Object.assign({}, d, {
+        sectionName: sectionPathOf(section), sectionSlug: section.slug, sectionIcon: section.icon,
+      })));
     });
     return out;
   }
@@ -372,11 +399,12 @@
     const path = currentPath();
     const url = new URL(location.href);
     const q = url.searchParams.get("q") || "";
+    const sub = url.searchParams.get("sub") || "";
     let m;
     if (path === "/" || path === "") {
       renderHome();
     } else if ((m = /^\/category\/([^/]+)\/?$/.exec(path))) {
-      renderList(m[1], q);
+      renderList(m[1], q, sub);
     } else if ((m = /^\/dish\/([^/]+)\/?$/.exec(path))) {
       renderDetail(m[1]);
     } else {
@@ -389,7 +417,7 @@
   function renderHome() {
     const app = document.getElementById("app");
     const chips = [{ slug: "all", name: "Все блюда", icon: "all" }].concat(
-      guide.map((s) => ({ slug: s.slug, name: s.name, icon: s.icon })),
+      topLevelSections().map((s) => ({ slug: s.slug, name: s.name, icon: s.icon })),
     );
     app.innerHTML = `
       <div class="home-hero">
@@ -424,7 +452,7 @@
   }
 
   // ---------- list ----------
-  function renderList(categorySlug, initialQuery) {
+  function renderList(categorySlug, initialQuery, initialSub) {
     const app = document.getElementById("app");
     const isAll = categorySlug === "all";
     const section = isAll ? null : sectionBySlug(categorySlug);
@@ -433,6 +461,12 @@
       navigate("/category/all", { replace: true });
       return;
     }
+
+    // Раздел верхнего уровня со своими подразделами — под поиском ещё одна
+    // строка чипсов, чтобы сузить список до одного подраздела, не уходя с
+    // экрана (как обычный поиск — просто фильтр, синхронизированный с URL).
+    const children = section && !section.parentId ? subsectionsOf(section.id) : [];
+    let subSlug = children.length && children.some((c) => c.slug === initialSub) ? initialSub : "";
 
     const title = isAll ? "Все блюда" : (section ? section.name : "…");
     app.innerHTML = `
@@ -448,6 +482,11 @@
       <div class="list-search">
         <div class="search-field">${icon("search")}<input type="search" id="listSearch" placeholder="Поиск в категории" value="${escapeHtml(initialQuery)}"></div>
       </div>
+      ${children.length ? `
+        <div class="chips-row sub" id="subChipsRow">
+          <button class="chip ${!subSlug ? "active" : ""}" data-sub="">${escapeHtml(section.name)} — всё</button>
+          ${children.map((c) => `<button class="chip ${subSlug === c.slug ? "active" : ""}" data-sub="${c.slug}">${escapeHtml(c.name)}</button>`).join("")}
+        </div>` : ""}
       <div class="dish-list" id="dishList"></div>
     `;
     document.getElementById("backBtn").addEventListener("click", () => goBack("/"));
@@ -455,6 +494,15 @@
     const listEl = document.getElementById("dishList");
     const countEl = document.getElementById("listCount");
     const searchInput = document.getElementById("listSearch");
+    const url = new URL(location.href);
+
+    function syncUrl() {
+      if (searchInput.value.trim()) url.searchParams.set("q", searchInput.value.trim());
+      else url.searchParams.delete("q");
+      if (subSlug) url.searchParams.set("sub", subSlug);
+      else url.searchParams.delete("sub");
+      history.replaceState(history.state, "", url.toString());
+    }
 
     if (!loaded) {
       listEl.innerHTML = Array.from({ length: 4 }).map(() => `
@@ -465,10 +513,22 @@
       return;
     }
 
+    function poolForCurrentSub() {
+      if (isAll) return flatDishes();
+      if (!section) return [];
+      if (!children.length) return section.dishes;
+      if (subSlug) {
+        const child = children.find((c) => c.slug === subSlug);
+        return child ? child.dishes : [];
+      }
+      // "Всё" в разделе с подразделами — собственные блюда раздела плюс
+      // блюда всех его подразделов разом.
+      return section.dishes.concat(...children.map((c) => c.dishes));
+    }
+
     function renderItems() {
       const q = searchInput.value.trim().toLowerCase();
-      const pool = isAll ? flatDishes() : (section ? section.dishes : []);
-      const items = pool.filter((d) => matchesQuery(d, q));
+      const items = poolForCurrentSub().filter((d) => matchesQuery(d, q));
 
       countEl.textContent = `${items.length} ${pluralDishes(items.length)}`;
 
@@ -481,7 +541,7 @@
             <button id="resetSearchBtn">Сбросить поиск</button>
           </div>`;
         const resetBtn = document.getElementById("resetSearchBtn");
-        if (resetBtn) resetBtn.addEventListener("click", () => { searchInput.value = ""; renderItems(); });
+        if (resetBtn) resetBtn.addEventListener("click", () => { searchInput.value = ""; syncUrl(); renderItems(); });
         return;
       }
 
@@ -491,20 +551,25 @@
       });
     }
 
-    const url = new URL(location.href);
-    const onSearch = debounce(() => {
-      url.searchParams.set("q", searchInput.value.trim());
-      if (!searchInput.value.trim()) url.searchParams.delete("q");
-      history.replaceState(history.state, "", url.toString());
-      renderItems();
-    }, 250);
+    if (children.length) {
+      document.getElementById("subChipsRow").querySelectorAll(".chip").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          subSlug = btn.dataset.sub;
+          document.querySelectorAll("#subChipsRow .chip").forEach((b) => b.classList.toggle("active", b === btn));
+          syncUrl();
+          renderItems();
+        });
+      });
+    }
+
+    const onSearch = debounce(() => { syncUrl(); renderItems(); }, 250);
     searchInput.addEventListener("input", onSearch);
 
     renderItems();
   }
 
   function renderDishCard(dish) {
-    const meta = STATUS_META[dish.status];
+    const meta = statusMeta[dish.status];
     const thumb = dish.photos && dish.photos[0]
       ? `<img class="thumb" src="${API}/photos/${dish.photos[0]}" loading="lazy" alt="">`
       : `<div class="thumb placeholder">${icon("photo")}</div>`;
@@ -561,7 +626,7 @@
       <div class="detail-body">
         <div class="detail-top-row">
           <h1 class="detail-name">${escapeHtml(dish.name)}</h1>
-          ${STATUS_META[dish.status] ? `<span class="detail-badge">${STATUS_META[dish.status].emoji} ${STATUS_META[dish.status].label}</span>` : ""}
+          ${statusMeta[dish.status] ? `<span class="detail-badge">${statusMeta[dish.status].emoji} ${statusMeta[dish.status].label}</span>` : ""}
         </div>
         ${dish.sectionName ? `<div class="detail-category">${escapeHtml(dish.sectionName)}</div>` : ""}
         ${dish.description ? `<p class="detail-desc">${escapeHtml(dish.description)}</p>` : ""}
@@ -687,7 +752,7 @@
   // ---------- boot ----------
   async function boot() {
     routeChanged(); // paint skeleton/home immediately, don't block on network
-    await loadGuide();
+    await Promise.all([loadGuide(), loadStatuses()]);
     routeChanged();
   }
   boot();

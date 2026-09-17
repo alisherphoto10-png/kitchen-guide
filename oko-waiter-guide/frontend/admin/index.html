@@ -73,6 +73,16 @@
   .new-section-form input { flex: 1; }
 
   .orphans { border-color: #a6741a; }
+
+  .subsections { margin-top: 10px; padding-left: 14px; border-left: 2px solid #21262d; }
+  .subsection-card { border: 1px solid #21262d; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: #0d1117; }
+  .subsection-card .section-title h2 { font-size: 14px; }
+
+  .status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .status-row input[type="text"] { padding: 6px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 13px; }
+  .status-row .emoji-input { width: 52px; text-align: center; }
+  .status-row .label-input { flex: 1; }
+  .new-status-form { display: flex; gap: 8px; }
 </style>
 </head>
 <body>
@@ -102,6 +112,21 @@
   </div>
 
   <div class="card">
+    <h2 style="margin-bottom:6px">Статусы блюд</h2>
+    <p class="hint" style="margin-bottom:10px">
+      Бейджи вроде «🔥 Хит» — свои, можно добавлять и переименовывать. Удаление
+      статуса не удаляет блюда — у них просто снимается этот статус.
+    </p>
+    <div id="statusesList"></div>
+    <div class="new-status-form">
+      <input type="text" id="newStatusEmoji" class="emoji-input" placeholder="🔥">
+      <input type="text" id="newStatusLabel" class="label-input" placeholder="Название, например: Хит">
+      <button class="action" onclick="addStatus()">+ Добавить</button>
+    </div>
+    <div class="status" id="statusesStatus"></div>
+  </div>
+
+  <div class="card">
     <h2 style="margin-bottom:6px">Импорт блюд из файла</h2>
     <p class="hint" style="margin-bottom:10px">
       .md-файл с блюдами по образцу формы (название, подзаголовок, описание, история,
@@ -128,6 +153,7 @@
   let sections = [];
   let dishes = [];
   let orphans = [];
+  let statuses = [];
   const photoUrls = {}; // dishId -> [objectUrl, ...]
   const openSections = new Set();
   const openDishes = new Set();
@@ -152,13 +178,17 @@
     ["beer", "🍺 Закуски к пиву"],
     ["sauce", "🥣 Соусы"],
   ];
-  const STATUS_OPTIONS = [["", "— нет статуса —"], ["hit", "🔥 Хит"], ["popular", "🌟 Популярное"]];
-
   function iconOptionsHtml(selected) {
     return SECTION_ICONS.map(([v, label]) => `<option value="${v}" ${v === selected ? "selected" : ""}>${label}</option>`).join("");
   }
+  // Статусы — управляемый список (карточка "Статусы блюд"), не зашиты в
+  // код. "" всегда доступен как "нет статуса".
   function statusOptionsHtml(selected) {
-    return STATUS_OPTIONS.map(([v, label]) => `<option value="${v}" ${v === selected ? "selected" : ""}>${label}</option>`).join("");
+    const options = [["", "— нет статуса —"]].concat(statuses.map((s) => [s.id, `${s.emoji} ${s.label}`.trim()]));
+    return options.map(([v, label]) => `<option value="${v}" ${v === selected ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+  }
+  function statusById(id) {
+    return statuses.find((s) => s.id === id) || null;
   }
 
   function authHeaders(extra) {
@@ -196,34 +226,116 @@
   }
 
   async function reload() {
-    const [sRes, dRes, oRes] = await Promise.all([
+    const [sRes, dRes, oRes, stRes] = await Promise.all([
       fetch("/api/oko-waiter-guide/admin/sections", { headers: authHeaders() }),
       fetch("/api/oko-waiter-guide/admin/dishes", { headers: authHeaders() }),
       fetch("/api/oko-waiter-guide/admin/orphan-dishes", { headers: authHeaders() }),
+      fetch("/api/oko-waiter-guide/admin/statuses", { headers: authHeaders() }).catch(() => null),
     ]);
     sections = (await sRes.json()).sort((a, b) => (a.order || 0) - (b.order || 0));
     dishes = await dRes.json();
     orphans = await oRes.json();
+    statuses = stRes && stRes.ok ? (await stRes.json()).sort((a, b) => (a.order || 0) - (b.order || 0)) : [];
     render();
   }
 
   function dishesFor(sectionId) {
     return dishes.filter((d) => d.sectionId === sectionId).sort((a, b) => (a.order || 0) - (b.order || 0));
   }
+  function topSections() {
+    return sections.filter((s) => !s.parentId).sort((a, b) => (a.order || 0) - (b.order || 0));
+  }
+  function subsectionsOf(sectionId) {
+    return sections.filter((s) => s.parentId === sectionId).sort((a, b) => (a.order || 0) - (b.order || 0));
+  }
+  // Раздел сразу за своими подразделами (а не вперемешку по общему order,
+  // где счётчики верхнего уровня и подразделов независимы) — для мест, где
+  // весь список разделов нужен одним плоским <select> (форма блюда, импорт).
+  function sectionsTreeOrdered() {
+    const out = [];
+    topSections().forEach((s) => {
+      out.push(s);
+      subsectionsOf(s.id).forEach((sub) => out.push(sub));
+    });
+    return out;
+  }
 
   function render() {
     const wrap = document.getElementById("sectionsList");
-    wrap.innerHTML = sections.map((section, i) => renderSection(section, i)).join("");
+    wrap.innerHTML = topSections().map((section, i) => renderSection(section, i)).join("");
     document.getElementById("orphansWrap").innerHTML = orphans.length ? renderOrphans() : "";
     orphans.forEach(loadPhotos);
     dishes.forEach(loadPhotos);
+    renderStatusesList();
 
     const importSelect = document.getElementById("importSectionSelect");
     const prevValue = importSelect.value;
+    // Подразделы — с отступом (└) в выпадающем списке, чтобы было видно
+    // вложенность даже в плоском <select>.
     importSelect.innerHTML =
       `<option value="">— взять из файла —</option>` +
-      sections.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
+      sectionsTreeOrdered().map((s) => `<option value="${s.id}">${s.parentId ? "└ " : ""}${escapeHtml(s.name)}</option>`).join("");
     importSelect.value = prevValue;
+  }
+
+  function renderStatusesList() {
+    const wrap = document.getElementById("statusesList");
+    if (!wrap) return;
+    if (!statuses.length) {
+      wrap.innerHTML = `<p class="hint">Статусов пока нет.</p>`;
+      return;
+    }
+    wrap.innerHTML = statuses
+      .map(
+        (s) => `
+      <div class="status-row">
+        <input type="text" class="emoji-input" value="${escapeHtml(s.emoji)}" onchange="saveStatusField('${s.id}', 'emoji', this.value)">
+        <input type="text" class="label-input" value="${escapeHtml(s.label)}" onchange="saveStatusField('${s.id}', 'label', this.value)">
+        <button class="danger" onclick="removeStatus('${s.id}')">Удалить</button>
+      </div>`,
+      )
+      .join("");
+  }
+
+  async function saveStatusField(id, field, value) {
+    await fetch(`/api/oko-waiter-guide/admin/statuses/${id}`, {
+      method: "PATCH",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ [field]: value }),
+    });
+    await reload();
+  }
+
+  async function addStatus() {
+    const emojiInput = document.getElementById("newStatusEmoji");
+    const labelInput = document.getElementById("newStatusLabel");
+    const statusEl = document.getElementById("statusesStatus");
+    if (!labelInput.value.trim()) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Укажите название статуса";
+      return;
+    }
+    const res = await fetch("/api/oko-waiter-guide/admin/statuses", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ emoji: emojiInput.value, label: labelInput.value }),
+    });
+    if (!res.ok) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Не удалось добавить";
+      return;
+    }
+    emojiInput.value = "";
+    labelInput.value = "";
+    statusEl.className = "status ok";
+    statusEl.innerText = "Добавлено";
+    await reload();
+  }
+
+  async function removeStatus(id) {
+    if (!confirm("Удалить статус? У блюд с этим статусом он просто снимется.")) return;
+    await fetch(`/api/oko-waiter-guide/admin/statuses/${id}`, { method: "DELETE", headers: authHeaders() });
+    await reload();
   }
 
   function renderOrphans() {
@@ -235,11 +347,15 @@
       </div>`;
   }
 
-  function renderSection(section, index) {
+  // isSub — подраздел рендерится тем же способом, но чуть компактнее
+  // (subsection-card вместо card) и без своей кнопки "+ Добавить подраздел"
+  // (второй уровень вложенности не предусмотрен).
+  function renderSection(section, index, isSub) {
     const list = dishesFor(section.id);
     const isOpen = openSections.has(section.id);
+    const subs = isSub ? [] : subsectionsOf(section.id);
     return `
-      <div class="card">
+      <div class="${isSub ? "subsection-card" : "card"}">
         <div class="section-header" onclick="toggleSection('${section.id}')">
           <div class="section-title">
             <h2>${escapeHtml(section.name)}</h2>
@@ -258,8 +374,48 @@
           ${list.map((d) => renderDishRow(d)).join("")}
           <button class="secondary" onclick="showNewDishForm('${section.id}')">+ Добавить блюдо</button>
           <div id="new-dish-${section.id}"></div>
+          ${!isSub ? `
+            <div class="subsections">
+              ${subs.map((s, i) => renderSection(s, i, true)).join("")}
+              <button class="secondary" onclick="showNewSubsectionForm('${section.id}')">+ Добавить подраздел</button>
+              <div id="new-subsection-${section.id}"></div>
+            </div>` : ""}
         </div>
       </div>`;
+  }
+
+  function showNewSubsectionForm(parentId) {
+    const el = document.getElementById(`new-subsection-${parentId}`);
+    el.innerHTML = `
+      <div class="subsection-card">
+        <div class="new-section-form">
+          <input type="text" id="quick-new-sub-name-${parentId}" placeholder="Название подраздела">
+          <button class="action" onclick="createSubsection('${parentId}')">Создать</button>
+        </div>
+        <div class="status" id="quick-new-sub-status-${parentId}"></div>
+      </div>`;
+  }
+
+  async function createSubsection(parentId) {
+    const input = document.getElementById(`quick-new-sub-name-${parentId}`);
+    const statusEl = document.getElementById(`quick-new-sub-status-${parentId}`);
+    if (!input.value.trim()) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Укажите название";
+      return;
+    }
+    const res = await fetch("/api/oko-waiter-guide/admin/sections", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ name: input.value, parentId }),
+    });
+    if (!res.ok) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Не удалось создать";
+      return;
+    }
+    openSections.add(parentId);
+    await reload();
   }
 
   function toggleSection(id) {
@@ -306,15 +462,23 @@
   }
 
   async function moveSection(id, delta) {
-    const ordered = sections.map((s) => s.id);
-    const i = ordered.indexOf(id);
+    const section = sections.find((s) => s.id === id);
+    if (!section) return;
+    // Переставляем только среди "родных" — своего уровня (тот же раздел-
+    // родитель, либо оба верхнего уровня) — иначе раздел мог бы случайно
+    // перескочить мимо подразделов другого раздела.
+    const siblings = sections
+      .filter((s) => (s.parentId || null) === (section.parentId || null))
+      .sort((a, b) => (a.order || 0) - (b.order || 0))
+      .map((s) => s.id);
+    const i = siblings.indexOf(id);
     const j = i + delta;
-    if (j < 0 || j >= ordered.length) return;
-    [ordered[i], ordered[j]] = [ordered[j], ordered[i]];
+    if (j < 0 || j >= siblings.length) return;
+    [siblings[i], siblings[j]] = [siblings[j], siblings[i]];
     await fetch("/api/oko-waiter-guide/admin/sections/reorder", {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ orderedIds: ordered }),
+      body: JSON.stringify({ orderedIds: siblings }),
     });
     await reload();
   }
@@ -398,8 +562,7 @@
             <span class="chevron">${isOpen ? "▾" : "▸"}</span>
             ${hasPhoto ? `<img class="dish-thumb" id="photo-${dish.id}-0">` : `<div class="dish-thumb"></div>`}
             <span class="name ${dish.hidden ? "hidden-dish" : ""}">${escapeHtml(dish.name) || "(без названия)"}</span>
-            ${dish.status === "hit" ? `<span class="badge-hit">🔥 Хит</span>` : ""}
-            ${dish.status === "popular" ? `<span class="badge-hit">🌟 Популярное</span>` : ""}
+            ${(() => { const st = statusById(dish.status); return st ? `<span class="badge-hit">${escapeHtml(st.emoji)} ${escapeHtml(st.label)}</span>` : ""; })()}
             ${dish.hidden ? `<span class="badge-hit" style="background:#30363d;color:#8b949e">скрыто</span>` : ""}
           </div>
           <div class="dish-actions" onclick="event.stopPropagation()">
@@ -439,7 +602,7 @@
       <div class="field"><label>Раздел</label>
         <select id="section-${d}">
           <option value="">— без раздела —</option>
-          ${sections.map((s) => `<option value="${s.id}" ${s.id === dish.sectionId ? "selected" : ""}>${escapeHtml(s.name)}</option>`).join("")}
+          ${sectionsTreeOrdered().map((s) => `<option value="${s.id}" ${s.id === dish.sectionId ? "selected" : ""}>${s.parentId ? "└ " : ""}${escapeHtml(s.name)}</option>`).join("")}
         </select>
       </div>
       <div class="field"><label>Статус</label>

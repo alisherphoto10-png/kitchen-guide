@@ -28,6 +28,13 @@ function createOkoWaiterGuideRouter() {
     res.sendFile(filePath);
   });
 
+  // Статусы (🔥 Хит и т.п.) — просто подписи и эмодзи, не персональные/
+  // финансовые данные, поэтому отдаём без пароля тем же принципом, что и
+  // /guide — странице официанта нужно знать, как подписать бейдж.
+  router.get("/statuses", (req, res) => {
+    res.json(store.readStatuses());
+  });
+
   // ---------- admin — editing, password-gated ----------
   const admin = express.Router();
   admin.use(requireAdmin);
@@ -36,9 +43,9 @@ function createOkoWaiterGuideRouter() {
     res.json(store.getSectionsShaped());
   });
   admin.post("/sections", (req, res) => {
-    const { name, icon } = req.body || {};
+    const { name, icon, parentId } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: "Укажите название раздела" });
-    res.json(store.addSection({ name, icon }));
+    res.json(store.addSection({ name, icon, parentId }));
   });
   admin.patch("/sections/:id", (req, res) => {
     const section = store.updateSection(req.params.id, req.body || {});
@@ -84,6 +91,31 @@ function createOkoWaiterGuideRouter() {
 
   admin.get("/orphan-dishes", (req, res) => {
     res.json(store.getOrphanDishes());
+  });
+
+  admin.get("/statuses", (req, res) => {
+    res.json(store.readStatuses());
+  });
+  admin.post("/statuses", (req, res) => {
+    const { emoji, label } = req.body || {};
+    if (!label || !label.trim()) return res.status(400).json({ error: "Укажите название статуса" });
+    res.json(store.addStatus({ emoji, label }));
+  });
+  admin.patch("/statuses/:id", (req, res) => {
+    const status = store.updateStatus(req.params.id, req.body || {});
+    if (!status) return res.status(404).json({ error: "Статус не найден" });
+    res.json(status);
+  });
+  admin.delete("/statuses/:id", (req, res) => {
+    const ok = store.deleteStatus(req.params.id);
+    if (!ok) return res.status(404).json({ error: "Статус не найден" });
+    res.json({ ok: true });
+  });
+  admin.post("/statuses/reorder", (req, res) => {
+    const { orderedIds } = req.body || {};
+    if (!Array.isArray(orderedIds)) return res.status(400).json({ error: "Нужен orderedIds" });
+    store.reorderStatuses(orderedIds);
+    res.json({ ok: true });
   });
 
   // Массовый импорт блюд из .md-файла — формат см. в

@@ -4,7 +4,18 @@ const path = require("path");
 const DATA_DIR = path.join(__dirname, "data");
 const SECTIONS_PATH = path.join(DATA_DIR, "sections.json");
 const DISHES_PATH = path.join(DATA_DIR, "dishes.json");
+const STATUSES_PATH = path.join(DATA_DIR, "statuses.json");
 const PHOTOS_DIR = path.join(DATA_DIR, "photos");
+
+// Список статусов ("Хит", "Популярное", ...) — управляемый, не зашит в код.
+// При первом обращении, если файла ещё нет, заводим эти два с ФИКСИРОВАННЫМИ
+// id "hit"/"popular" — именно эти строки уже могли осесть в поле
+// dish.status у блюд, заведённых до того, как статусы стали редактируемыми,
+// так что старые блюда продолжают находить свой статус без миграции.
+const DEFAULT_STATUSES = [
+  { id: "hit", emoji: "🔥", label: "Хит", order: 1 },
+  { id: "popular", emoji: "🌟", label: "Популярное", order: 2 },
+];
 
 function ensureDirs() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -118,11 +129,32 @@ function dishWaiterPhrase(dish) {
 }
 
 // ---------- sections ----------
+// Один уровень вложенности: раздел (parentId: null) может содержать
+// подразделы (parentId: <id раздела>). Подраздел не может сам иметь
+// подразделы — при создании подраздела parentId родителя игнорируется
+// (см. addSection). Блюдо может быть заведено и прямо в раздел с
+// подразделами (просто не попадёт ни в один из них), и в сам подраздел —
+// оба варианта равноправны.
 
-function addSection({ name, icon }) {
+function addSection({ name, icon, parentId }) {
   const sections = readSections();
-  const nextOrder = sections.reduce((max, s) => Math.max(max, s.order || 0), 0) + 1;
-  const section = { id: makeId(), name: (name || "").trim(), icon: icon || "", order: nextOrder };
+  // Подраздел у подраздела не бывает — если parentId указывает на что-то,
+  // что само уже подраздел, кладём на верхний уровень его родителя.
+  let resolvedParentId = parentId || null;
+  if (resolvedParentId) {
+    const parent = sections.find((s) => s.id === resolvedParentId);
+    if (!parent) resolvedParentId = null;
+    else if (parent.parentId) resolvedParentId = parent.parentId;
+  }
+  const siblings = sections.filter((s) => (s.parentId || null) === resolvedParentId);
+  const nextOrder = siblings.reduce((max, s) => Math.max(max, s.order || 0), 0) + 1;
+  const section = {
+    id: makeId(),
+    parentId: resolvedParentId,
+    name: (name || "").trim(),
+    icon: icon || "",
+    order: nextOrder,
+  };
   sections.push(section);
   writeSections(sections);
   return section;
@@ -143,6 +175,10 @@ function deleteSection(id) {
   const sections = readSections();
   const section = sections.find((s) => s.id === id);
   if (!section) return false;
+  // Подразделы удаляемого раздела не удаляются — становятся разделами
+  // верхнего уровня сами по себе (проще и безопаснее, чем каскадно
+  // удалять их блюда).
+  sections.forEach((s) => { if (s.parentId === id) s.parentId = null; });
   writeSections(sections.filter((s) => s.id !== id));
   // Dishes in a deleted section become orphaned rather than silently
   // vanishing — the admin page surfaces them under "Без раздела" so nothing
@@ -150,6 +186,10 @@ function deleteSection(id) {
   return true;
 }
 
+// orderedIds — id ОДНОЙ группы «родных» разделов (сиблингов с одним
+// parentId) — так вызывает админка (пересобирает список внутри одного
+// уровня и шлёт его целиком). Порядок между разными родителями не имеет
+// значения, важен только внутри своей группы.
 function reorderSections(orderedIds) {
   const sections = readSections();
   orderedIds.forEach((id, i) => {
@@ -157,6 +197,61 @@ function reorderSections(orderedIds) {
     if (s) s.order = i + 1;
   });
   writeSections(sections);
+}
+
+// ---------- statuses ----------
+
+function readStatuses() {
+  if (!fs.existsSync(STATUSES_PATH)) {
+    writeJson(STATUSES_PATH, DEFAULT_STATUSES);
+    return DEFAULT_STATUSES.slice();
+  }
+  return readJson(STATUSES_PATH, DEFAULT_STATUSES.slice());
+}
+function writeStatuses(statuses) {
+  writeJson(STATUSES_PATH, statuses);
+}
+
+function addStatus({ emoji, label }) {
+  const statuses = readStatuses();
+  const nextOrder = statuses.reduce((max, s) => Math.max(max, s.order || 0), 0) + 1;
+  const status = { id: makeId(), emoji: (emoji || "").trim(), label: (label || "").trim(), order: nextOrder };
+  statuses.push(status);
+  writeStatuses(statuses);
+  return status;
+}
+
+function updateStatus(id, patch) {
+  const statuses = readStatuses();
+  const status = statuses.find((s) => s.id === id);
+  if (!status) return null;
+  if (patch.emoji !== undefined) status.emoji = patch.emoji.trim();
+  if (patch.label !== undefined) status.label = patch.label.trim();
+  writeStatuses(statuses);
+  return status;
+}
+
+function deleteStatus(id) {
+  const statuses = readStatuses();
+  const status = statuses.find((s) => s.id === id);
+  if (!status) return false;
+  writeStatuses(statuses.filter((s) => s.id !== id));
+  // Блюда, у которых был именно этот статус, не остаются со ссылкой в
+  // никуда — статус у них просто снимается (как «— нет статуса —»).
+  const dishes = readDishes();
+  let touched = false;
+  dishes.forEach((d) => { if (d.status === id) { d.status = ""; touched = true; } });
+  if (touched) writeDishes(dishes);
+  return true;
+}
+
+function reorderStatuses(orderedIds) {
+  const statuses = readStatuses();
+  orderedIds.forEach((id, i) => {
+    const s = statuses.find((x) => x.id === id);
+    if (s) s.order = i + 1;
+  });
+  writeStatuses(statuses);
 }
 
 // ---------- dishes ----------
@@ -356,8 +451,14 @@ module.exports = {
   getSectionsShaped,
   getAllDishesShaped,
   getOrphanDishes,
+  readStatuses,
+  addStatus,
+  updateStatus,
+  deleteStatus,
+  reorderStatuses,
   photoPath,
   PHOTOS_DIR,
   SECTIONS_PATH,
   DISHES_PATH,
+  STATUSES_PATH,
 };
