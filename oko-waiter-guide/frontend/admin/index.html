@@ -1639,7 +1639,7 @@
     if (!res.ok) return;
     const created = await res.json();
     await reload();
-    openEditor(created.id);
+    openEditor(created.id, { startUnlocked: true });
   }
 
   function localDraftKey(id) { return "owg_admin_draft_" + id; }
@@ -1655,11 +1655,17 @@
     try { localStorage.removeItem(localDraftKey(id)); } catch (e) {}
   }
 
-  async function openEditor(id) {
+  // startUnlocked — только для только что созданного блюда (createDish):
+  // открывать его сразу заблокированным, пустым и нечего пока смотреть,
+  // было бы лишним кликом. Любое СУЩЕСТВУЮЩЕЕ блюдо — всегда открывается
+  // заблокированным (нужно нажать "Редактировать"), не только сразу после
+  // сохранения — раньше блокировка слетала при повторном входе в карточку.
+  async function openEditor(id, opts) {
+    opts = opts || {};
     editingDishId = id;
     activeTab = "basic";
     isDirty = false;
-    editorLocked = false;
+    editorLocked = !opts.startUnlocked;
     delete dishDraft[id];
     renderMain();
 
@@ -1671,6 +1677,7 @@
       if (keep) {
         stored.allergensChecked = new Set(stored.allergensChecked || []);
         dishDraft[id] = stored;
+        editorLocked = false; // решили продолжить правку черновика — незачем его тут же запирать
         markDirty();
         renderMain();
       } else {
