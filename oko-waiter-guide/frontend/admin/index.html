@@ -1477,6 +1477,17 @@
       </div>
 
       <div class="cat-form">
+        <div class="view-head" style="margin-bottom:12px"><div><h1 style="font-size:1.05rem">Уведомление официантам</h1><div class="hint">Окно с текстом при заходе в пособие. «Напомнить потом» — покажется снова в другой раз, «Хорошо» — не покажется больше, пока не опубликуете новое</div></div></div>
+        <div class="field"><label>Заголовок (необязательно)</label><input type="text" id="announcementTitleInput" placeholder="Например: Новое меню"></div>
+        <div class="field"><label>Текст</label><textarea id="announcementTextInput" rows="3" placeholder="Текст уведомления…"></textarea></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-primary" id="announcementPublishBtn" style="flex:none">Опубликовать</button>
+          <button class="btn-ghost" id="announcementClearBtn" style="flex:none">Снять уведомление</button>
+        </div>
+        <div class="status-msg" id="announcementStatus"></div>
+      </div>
+
+      <div class="cat-form">
         <div class="view-head" style="margin-bottom:12px"><div><h1 style="font-size:1.05rem">Открытия пособия</h1><div class="hint">Страница без логина — узнать, кто именно открыл, нельзя; только сколько раз и когда</div></div></div>
         <div id="guideViewStats"><div class="empty-note">Загрузка…</div></div>
       </div>
@@ -1557,7 +1568,36 @@
       setTimeout(() => { btn.innerText = original; }, 1500);
     });
 
+    document.getElementById("announcementPublishBtn").addEventListener("click", () => publishAnnouncement());
+    document.getElementById("announcementClearBtn").addEventListener("click", () => publishAnnouncement({ clear: true }));
+
     renderGuideViewStats();
+    loadAnnouncementIntoForm();
+  }
+
+  async function loadAnnouncementIntoForm() {
+    const res = await fetch("/api/oko-waiter-guide/announcement");
+    const data = res.ok ? await res.json() : null;
+    const titleInput = document.getElementById("announcementTitleInput");
+    const textInput = document.getElementById("announcementTextInput");
+    if (!titleInput || !textInput) return;
+    titleInput.value = data ? data.title || "" : "";
+    textInput.value = data ? data.text || "" : "";
+  }
+
+  async function publishAnnouncement(opts) {
+    const statusEl = document.getElementById("announcementStatus");
+    const title = document.getElementById("announcementTitleInput").value;
+    const text = opts && opts.clear ? "" : document.getElementById("announcementTextInput").value;
+    statusEl.className = "status-msg"; statusEl.innerText = "Сохранение…";
+    const res = await fetch("/api/oko-waiter-guide/admin/announcement", {
+      method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ title, text }),
+    });
+    const data = await res.json();
+    if (!res.ok) { statusEl.className = "status-msg error"; statusEl.innerText = data.error || "Не удалось сохранить"; return; }
+    if (opts && opts.clear) document.getElementById("announcementTextInput").value = "";
+    statusEl.className = "status-msg ok";
+    statusEl.innerText = opts && opts.clear ? "Уведомление снято" : "Опубликовано — официанты увидят при следующем заходе";
   }
 
   async function renderGuideViewStats() {

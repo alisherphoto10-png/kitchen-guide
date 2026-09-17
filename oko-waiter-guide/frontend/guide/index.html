@@ -405,6 +405,31 @@
   .feedback-status { margin-top: 10px; font-size: 0.8rem; text-align: center; }
   .feedback-status.ok { color: var(--accent); }
   .feedback-status.err { color: var(--bad); }
+
+  /* ---------- announcement modal ---------- */
+  .announce-overlay {
+    position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+    padding: 24px; background: rgba(0,0,0,0); pointer-events: none; opacity: 0;
+    transition: opacity 220ms ease, background 220ms ease;
+  }
+  .announce-overlay.open { background: rgba(0,0,0,0.62); pointer-events: auto; opacity: 1; }
+  .announce-sheet {
+    width: 100%; max-width: 400px; background: #1c1712; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 20px; padding: 22px 20px; box-shadow: 0 20px 44px -14px rgba(0,0,0,0.65);
+    transform: scale(0.94); opacity: 0; transition: transform 220ms cubic-bezier(0.16,1,0.3,1), opacity 220ms ease;
+  }
+  .announce-overlay.open .announce-sheet { transform: scale(1); opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .announce-overlay, .announce-sheet { transition: none; }
+  }
+  .announce-sheet h3 { margin: 0 0 10px; font-size: 1.05rem; font-weight: 800; color: #f0d9a8; }
+  .announce-sheet p { margin: 0 0 20px; font-size: 0.875rem; line-height: 1.55; color: #f0e9db; white-space: pre-wrap; }
+  .announce-actions { display: flex; gap: 10px; }
+  .announce-actions button {
+    flex: 1; border-radius: 100px; padding: 12px; font-size: 0.875rem; font-weight: 700; cursor: pointer; border: none;
+  }
+  .announce-skip { background: rgba(255,255,255,0.08); color: var(--muted); border: 1px solid rgba(255,255,255,0.14) !important; }
+  .announce-ok { background: var(--accent); color: #1a1108; }
 </style>
 </head>
 <body>
@@ -1243,6 +1268,57 @@
     });
   }
 
+  // ---------- уведомление от владельца (модалка при заходе) ----------
+  // Прямых push нет (страница без логина), поэтому вместо этого — модалка
+  // при открытии. "Хорошо" запоминает id уведомления в localStorage навсегда
+  // (пока не опубликуют новое — тогда id сменится и модалка выйдет снова).
+  // "Напомнить потом" / тап мимо / крестик ничего не запоминают — значит
+  // при следующем заходе всё повторится, как и просили.
+  async function checkAnnouncement() {
+    try {
+      const res = await fetch(`${API}/announcement`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data || !data.id || !data.text) return;
+      let dismissedId = null;
+      try { dismissedId = localStorage.getItem("owg_announcement_dismissed"); } catch {}
+      if (dismissedId === data.id) return;
+      openAnnouncementModal(data);
+    } catch {}
+  }
+
+  function openAnnouncementModal(data) {
+    const existing = document.getElementById("announceOverlay");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.className = "announce-overlay";
+    overlay.id = "announceOverlay";
+    overlay.innerHTML = `
+      <div class="announce-sheet">
+        ${data.title ? `<h3>${escapeHtml(data.title)}</h3>` : ""}
+        <p>${escapeHtml(data.text)}</p>
+        <div class="announce-actions">
+          <button class="announce-skip" id="announceSkip">Напомнить потом</button>
+          <button class="announce-ok" id="announceOk">Хорошо</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add("open"));
+
+    function close() {
+      overlay.classList.remove("open");
+      setTimeout(() => overlay.remove(), 220);
+    }
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+    document.getElementById("announceSkip").addEventListener("click", close);
+    document.getElementById("announceOk").addEventListener("click", () => {
+      try { localStorage.setItem("owg_announcement_dismissed", data.id); } catch {}
+      close();
+    });
+  }
+
   // ---------- preloader ----------
   // Логотип в оверлее стоит РОВНО на месте будущего .home-logo (та же
   // высота 68px) — значит "перелёт" почти чистый translate, без заметного
@@ -1313,6 +1389,7 @@
     routeChanged();
     logGuideView(); // самый первый просмотр за этот заход — один раз
     await finishPreload();
+    checkAnnouncement();
   }
   boot();
 </script>

@@ -12,6 +12,7 @@ const USERS_PATH = path.join(DATA_DIR, "users.json");
 const ACTIVITY_PATH = path.join(DATA_DIR, "activity.json");
 const STATUSES_PATH = path.join(DATA_DIR, "statuses.json");
 const GUIDE_VIEWS_PATH = path.join(DATA_DIR, "guide-views.json");
+const ANNOUNCEMENT_PATH = path.join(DATA_DIR, "announcement.json");
 const FRONTEND_DIR = "/home/kitchendesk/frontend/waiter-guide";
 
 // Список статусов ("Хит", "Популярное", ...) — управляемый, не зашит в код.
@@ -642,6 +643,26 @@ function getGuideViews() {
   return readJson(GUIDE_VIEWS_PATH, { totalCount: 0, byDay: {}, recent: [] });
 }
 
+// ---------- уведомление на главном экране (модалка при заходе) ----------
+// Официант заходит без логина, толкнуть push напрямую нельзя — вместо этого
+// при заходе показывается модалка с текстом от владельца. "id" меняется при
+// каждой публикации — клиент помнит в localStorage последний id, на который
+// нажали "Хорошо" (навсегда), и сравнивает с текущим; кнопка "Напомнить
+// потом" ничего не запоминает, поэтому модалка снова покажется в другой раз.
+function readAnnouncement() {
+  return readJson(ANNOUNCEMENT_PATH, null);
+}
+function writeAnnouncement({ title, text }) {
+  const cleanText = String(text || "").trim();
+  if (!cleanText) {
+    writeJson(ANNOUNCEMENT_PATH, null);
+    return null;
+  }
+  const value = { id: String(Date.now()), title: String(title || "").trim(), text: cleanText, updatedAt: new Date().toISOString() };
+  writeJson(ANNOUNCEMENT_PATH, value);
+  return value;
+}
+
 module.exports = {
   addFeedback,
   sectionGroup,
@@ -655,6 +676,8 @@ module.exports = {
   getActivity,
   logGuideView,
   getGuideViews,
+  readAnnouncement,
+  writeAnnouncement,
   readSections,
   addSection,
   updateSection,

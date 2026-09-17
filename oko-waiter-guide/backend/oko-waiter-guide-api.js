@@ -138,6 +138,12 @@ function createOkoWaiterGuideRouter(bot) {
     res.json(store.readStatuses());
   });
 
+  // Уведомление для модалки на главном экране — как и /guide, без пароля:
+  // страница осознанно без входа. null, если владелец ничего не опубликовал.
+  router.get("/announcement", (req, res) => {
+    res.json(store.readAnnouncement());
+  });
+
   // ---------- admin — editing, password-gated ----------
   const admin = express.Router();
   admin.use(authenticate);
@@ -324,6 +330,14 @@ function createOkoWaiterGuideRouter(bot) {
 
   admin.get("/guide-view-stats", requireOwner, (req, res) => {
     res.json(store.getGuideViews());
+  });
+
+  // Публикация уведомления для официантов — только владелец. Пустой текст
+  // снимает уведомление (модалка больше никому не покажется).
+  admin.post("/announcement", requireOwner, (req, res) => {
+    const { title, text } = req.body || {};
+    if (String(text || "").trim().length > 2000) return res.status(400).json({ error: "Слишком длинный текст" });
+    res.json({ announcement: store.writeAnnouncement({ title, text }) });
   });
 
   // ---------- фирменные изображения (только владелец) ----------
