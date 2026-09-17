@@ -407,6 +407,8 @@
     const statusEl = document.getElementById("telegramConfigStatus");
     const chatId = document.getElementById("telegramChatIdInput").value.trim();
     const threadId = document.getElementById("telegramThreadIdInput").value.trim();
+    statusEl.className = "status";
+    statusEl.innerText = "Сохраняю...";
     const res = await fetch("/api/oko-inventory/telegram-config", {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
@@ -417,9 +419,22 @@
       statusEl.innerText = "Не удалось сохранить";
       return;
     }
-    statusEl.className = "status ok";
-    statusEl.innerText = "Сохранено";
+    const data = await res.json();
     renderTelegramChatSelect(chatId, threadId);
+
+    if (data.confirmationSent) {
+      statusEl.className = "status ok";
+      statusEl.innerText = "Сохранено — сообщение о подключении отправлено в тему, проверьте Telegram.";
+    } else if (data.sendMessageError) {
+      statusEl.className = "status error";
+      statusEl.innerText = `Сохранено, но сообщение НЕ отправилось: ${data.sendMessageError}. Проверьте Chat ID/Thread ID и что бот состоит в группе.`;
+    } else if (!chatId) {
+      statusEl.className = "status ok";
+      statusEl.innerText = "Сохранено";
+    } else {
+      statusEl.className = "status error";
+      statusEl.innerText = "Сохранено, но сообщение не отправлено — похоже, бэкенд подключён без бота (bot). Проверьте деплой.";
+    }
   }
 
   async function loadPhoto(item) {

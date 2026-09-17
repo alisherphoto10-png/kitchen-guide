@@ -93,10 +93,28 @@ function createOkoInventoryRouter(bot) {
     res.json(inventoryTelegram.readConfig());
   });
 
-  router.post("/telegram-config", (req, res) => {
+  // Сразу шлёт видимое сообщение-подтверждение в саму тему — тот же приём,
+  // что и "Подтвердить подключение" в oko-order-relay. Это заодно и
+  // диагностика: если сообщение не дошло, значит дело не в подписи повара
+  // и не в правах бота, а в том, что бэкенд деплоен без `bot` вообще —
+  // отдельная, более базовая проблема (см. bot.sendMessageError в ответе).
+  router.post("/telegram-config", async (req, res) => {
     const { chatId, threadId } = req.body || {};
     inventoryTelegram.writeConfig({ chatId, threadId });
-    res.json({ ok: true });
+
+    if (!bot || !chatId) {
+      return res.json({ ok: true, confirmationSent: false });
+    }
+    try {
+      await bot.sendMessage(
+        chatId,
+        "✅ Эта тема подключена для приёма фото списаний/прихода утвари.\nКидайте сюда фото с короткой подписью (например «разбили 2 тарелки») — я подготовлю черновик, подтвердить нужно будет в админке инвентаризации.",
+        threadId ? { message_thread_id: threadId } : undefined,
+      );
+      res.json({ ok: true, confirmationSent: true });
+    } catch (err) {
+      res.json({ ok: true, confirmationSent: false, sendMessageError: err.message });
+    }
   });
 
   // Список групп/тем, которые бот когда-либо видел — для выпадающего списка
