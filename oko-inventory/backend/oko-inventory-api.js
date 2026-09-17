@@ -359,6 +359,9 @@ function createOkoInventoryRouter(bot) {
   // OOXML drawing parts). Generating the PDF here, straight from the same
   // photo files on disk, means photos always come through regardless of
   // what any spreadsheet app's own export pipeline does with them.
+  // Табличная вёрстка (выбрана из двух макетов-мокапов) — плотная таблица
+  // №/Фото/Наименование/Категория/Было/Приход/Списание/Стало/Примечание со
+  // строкой "Итого" внизу, вместо прежнего построчного списка "карточками".
   router.get("/export-pdf", (req, res) => {
     const { from, to } = req.query;
     if (!from || !to) {
@@ -366,73 +369,148 @@ function createOkoInventoryRouter(bot) {
     }
 
     const report = store.reportForPeriod(from, to);
+    const categoriesById = new Map(store.readCategories().map((c) => [c.id, c.name]));
+    const categoryName = (id) => categoriesById.get(id) || "";
+    // Категория видна отдельной колонкой (не группировкой, как в другом
+    // макете) — сортируем по ней, чтобы одинаковые позиции всё равно шли
+    // рядом, без категории — в конец.
+    const sorted = report.slice().sort((a, b) => {
+      const an = categoryName(a.item.categoryId);
+      const bn = categoryName(b.item.categoryId);
+      if (an !== bn) return an ? (bn ? an.localeCompare(bn, "ru") : -1) : 1;
+      return a.item.number - b.item.number;
+    });
+    const incomeTotal = sorted.reduce((s, r) => s + (r.income || 0), 0);
+    const writeOffTotal = sorted.reduce((s, r) => s + (r.writeOff || 0), 0);
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="inventory-${from}_${to}.pdf"`);
 
-    const doc = new PDFDocument({ size: "A4", margin: 36 });
+    const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true });
     doc.pipe(res);
     doc.registerFont("body", FONT_REGULAR);
     doc.registerFont("bold", FONT_BOLD);
 
-    doc.font("bold").fontSize(15).fillColor("#000")
-      .text(`Инвентаризация — ${formatRuDate(from)} – ${formatRuDate(to)}`);
-    doc.moveDown(0.6);
-
     const left = doc.page.margins.left;
     const right = doc.page.width - doc.page.margins.right;
-    const photoSize = 46;
-    const textX = left + photoSize + 12;
-    const textWidth = right - textX;
     const pageBottom = doc.page.height - doc.page.margins.bottom;
 
-    for (const row of report) {
-      const note = buildExportNote(row.item, row.movements);
-      const statsLine = `Было: ${row.startBalance}   →   Приход: +${row.income || 0}   Списание: −${row.writeOff || 0}   →   Стало: ${row.endBalance} ${row.item.unit}`;
+    // Колонки — ширины в points, сумма фиксированных = 383, остаток уходит
+    // под "Примечание" (самый непредсказуемый по длине текст).
+    const colNum = { x: left, w: 22 };
+    const colPhoto = { x: colNum.x + colNum.w, w: 30 };
+    const colName = { x: colPhoto.x + colPhoto.w, w: 105 };
+    const colCategory = { x: colName.x + colName.w, w: 64 };
+    const colStart = { x: colCategory.x + colCategory.w, w: 36 };
+    const colIncome = { x: colStart.x + colStart.w, w: 40 };
+    // "Списание" в заголовке (bold 8pt) само по себе занимает ~44pt —
+    // колонка обязана быть шире этого, иначе слово переносится и обрезается
+    // линией под шапкой таблицы.
+    const colWriteOff = { x: colIncome.x + colIncome.w, w: 50 };
+    const colEnd = { x: colWriteOff.x + colWriteOff.w, w: 36 };
+    const colNote = { x: colEnd.x + colEnd.w, w: right - (colEnd.x + colEnd.w) };
+    const photoBox = 22;
 
-      // Estimate this row's height before drawing anything, so we can
-      // decide to start a fresh page first — pdfkit doesn't auto-paginate
-      // text drawn past the bottom margin, it just draws off-page.
-      doc.font("bold").fontSize(11);
-      const nameHeight = doc.heightOfString(`№${row.item.number} ${row.item.name}`, { width: textWidth });
-      doc.font("body").fontSize(9);
-      const metaText = [row.item.size, row.item.unit].filter(Boolean).join(" · ");
-      const metaHeight = metaText ? doc.heightOfString(metaText, { width: textWidth }) + 2 : 0;
-      const statsHeight = doc.heightOfString(statsLine, { width: textWidth }) + 2;
-      doc.fontSize(8);
-      const noteHeight = note ? doc.heightOfString(note, { width: textWidth }) + 2 : 0;
-      const rowHeight = Math.max(photoSize, nameHeight + metaHeight + statsHeight + noteHeight) + 10;
+    function drawTableHeader() {
+      const y = doc.y;
+      doc.font("bold").fontSize(8).fillColor("#666");
+      doc.text("№", colNum.x, y, { width: colNum.w });
+      doc.text("Наименование", colName.x, y, { width: colName.w });
+      doc.text("Категория", colCategory.x, y, { width: colCategory.w });
+      doc.text("Было", colStart.x, y, { width: colStart.w - 4, align: "right" });
+      doc.text("Приход", colIncome.x, y, { width: colIncome.w - 4, align: "right" });
+      doc.text("Списание", colWriteOff.x, y, { width: colWriteOff.w - 4, align: "right" });
+      doc.text("Стало", colEnd.x, y, { width: colEnd.w - 4, align: "right" });
+      doc.text("Примечание", colNote.x, y, { width: colNote.w });
+      doc.y = y + 12;
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor("#1a1a1a").lineWidth(1.2).stroke();
+      doc.y += 4;
+    }
+
+    doc.font("bold").fontSize(16).fillColor("#1a1a1a")
+      .text(`Инвентаризация кухни`);
+    doc.font("bold").fontSize(12).fillColor("#1a1a1a")
+      .text(`Отчёт по инвентарю — ${formatRuDate(from)} – ${formatRuDate(to)}`);
+    doc.font("body").fontSize(8).fillColor("#888")
+      .text(`Сформировано ${formatRuDate(new Date().toISOString().slice(0, 10))} · ${sorted.length} ${sorted.length === 1 ? "позиция" : "позиций"}`);
+    doc.moveDown(0.8);
+
+    drawTableHeader();
+
+    sorted.forEach((row, i) => {
+      const note = buildExportNote(row.item, row.movements);
+      doc.font("bold").fontSize(9);
+      const nameHeight = doc.heightOfString(row.item.name, { width: colName.w - 4 });
+      doc.font("body").fontSize(8.5);
+      const catHeight = doc.heightOfString(categoryName(row.item.categoryId) || "—", { width: colCategory.w - 4 });
+      const noteHeight = note ? doc.heightOfString(note, { width: colNote.w - 4 }) : 0;
+      const rowHeight = Math.max(photoBox, nameHeight, catHeight, noteHeight) + 10;
 
       if (doc.y + rowHeight > pageBottom) {
         doc.addPage();
+        drawTableHeader();
       }
 
-      const startY = doc.y;
+      const y = doc.y;
+      if (i % 2 === 0) {
+        doc.rect(left, y - 2, right - left, rowHeight).fillColor("#fafaf9").fill();
+      }
+
       if (row.item.photo) {
         try {
-          doc.image(store.photoPath(row.item.photo), left, startY, { fit: [photoSize, photoSize] });
+          doc.image(store.photoPath(row.item.photo), colPhoto.x, y, { fit: [photoBox, photoBox] });
         } catch {
           // missing/corrupt photo file — skip the image, keep the row
         }
       }
 
-      doc.font("bold").fontSize(11).fillColor("#000")
-        .text(`№${row.item.number} ${row.item.name}`, textX, startY, { width: textWidth });
-      if (metaText) {
-        doc.font("body").fontSize(9).fillColor("#555")
-          .text(metaText, textX, doc.y, { width: textWidth });
-      }
-      doc.font("body").fontSize(9).fillColor("#000")
-        .text(statsLine, textX, doc.y, { width: textWidth });
-      if (note) {
-        doc.font("body").fontSize(8).fillColor("#777")
-          .text(note, textX, doc.y, { width: textWidth });
-      }
+      doc.font("body").fontSize(8.5).fillColor("#888").text(String(row.item.number), colNum.x, y, { width: colNum.w });
+      doc.font("bold").fontSize(9).fillColor("#1a1a1a").text(row.item.name, colName.x, y, { width: colName.w - 4 });
+      doc.font("body").fontSize(8.5).fillColor("#666").text(categoryName(row.item.categoryId) || "—", colCategory.x, y, { width: colCategory.w - 4 });
+      doc.font("body").fontSize(8.5).fillColor("#1a1a1a").text(String(row.startBalance), colStart.x, y, { width: colStart.w - 4, align: "right" });
+      doc.font("body").fontSize(8.5).fillColor("#1e7a34").text(row.income ? String(row.income) : "—", colIncome.x, y, { width: colIncome.w - 4, align: "right" });
+      doc.font("body").fontSize(8.5).fillColor("#c0392b").text(row.writeOff ? String(row.writeOff) : "—", colWriteOff.x, y, { width: colWriteOff.w - 4, align: "right" });
+      doc.font("bold").fontSize(8.5).fillColor("#1a1a1a").text(String(row.endBalance), colEnd.x, y, { width: colEnd.w - 4, align: "right" });
+      doc.font("body").fontSize(8.5).fillColor("#888").text(note || "—", colNote.x, y, { width: colNote.w - 4 });
 
-      const consumedHeight = Math.max(photoSize, doc.y - startY);
-      doc.y = startY + consumedHeight + 8;
-      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor("#dddddd").lineWidth(0.5).stroke();
-      doc.moveDown(0.5);
+      doc.y = y + rowHeight;
+      doc.moveTo(left, doc.y - 3).lineTo(right, doc.y - 3).strokeColor("#e2e2e0").lineWidth(0.5).stroke();
+    });
+
+    if (doc.y + 24 > pageBottom) {
+      doc.addPage();
+      drawTableHeader();
+    }
+    doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor("#1a1a1a").lineWidth(1.2).stroke();
+    doc.y += 6;
+    doc.font("bold").fontSize(9).fillColor("#1a1a1a")
+      .text("Итого за период", colCategory.x, doc.y, { width: colStart.x - colCategory.x, align: "right" });
+    doc.font("bold").fontSize(9).fillColor("#1e7a34")
+      .text(incomeTotal ? `+${incomeTotal}` : "—", colIncome.x, doc.y, { width: colIncome.w - 4, align: "right" });
+    doc.font("bold").fontSize(9).fillColor("#c0392b")
+      .text(writeOffTotal ? `−${writeOffTotal}` : "—", colWriteOff.x, doc.y, { width: colWriteOff.w - 4, align: "right" });
+
+    // Подпись бренда на каждой странице — единообразно с другими модулями
+    // KitchenDesk (пособие официанта, заказы между заведениями и т.д.),
+    // рисуется отдельным проходом по уже готовым страницам (bufferPages),
+    // а не по ходу вёрстки — иначе пришлось бы знать итоговое число
+    // страниц заранее.
+    const pageCount = doc.bufferedPageRange().count;
+    for (let i = 0; i < pageCount; i++) {
+      doc.switchToPage(i);
+      // Футер рисуется НИЖЕ обычного нижнего поля (в самом низу листа) — а
+      // pdfkit по умолчанию добавляет НОВУЮ страницу для любого text(),
+      // который оказался за пределами margins.bottom, даже с явными x/y.
+      // Без этой временной обнуления поля вызов ниже сам плодил лишние
+      // пустые страницы (было 3 вместо 1 при 5 позициях).
+      const savedBottom = doc.page.margins.bottom;
+      doc.page.margins.bottom = 0;
+      const footerY = doc.page.height - 26;
+      doc.font("body").fontSize(7.5).fillColor("#aaa")
+        .text("Сформировано через KitchenDesk", left, footerY, { width: (right - left) / 2, align: "left", lineBreak: false });
+      doc.font("body").fontSize(7.5).fillColor("#aaa")
+        .text(`Страница ${i + 1} из ${pageCount}`, left + (right - left) / 2, footerY, { width: (right - left) / 2, align: "right", lineBreak: false });
+      doc.page.margins.bottom = savedBottom;
     }
 
     doc.end();
