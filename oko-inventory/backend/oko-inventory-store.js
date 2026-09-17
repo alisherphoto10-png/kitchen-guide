@@ -95,7 +95,11 @@ function photoPath(filename) {
  * before today would wrongly show 0 as the starting balance and count the
  * whole opening stock as "приход" within the period).
  */
-function addItem({ name, size, unit, note, photo, initialQty, initialQtyDate, categoryId }) {
+// `photoFilename` — уже сохранённый файл в PHOTOS_DIR (например, скачанный
+// из Telegram для черновика) — используется вместо `photo` (data-URI из
+// формы), когда создаём позицию из черновика: файл уже на диске, повторно
+// сохранять/кодировать его не нужно.
+function addItem({ name, size, unit, note, photo, photoFilename, initialQty, initialQtyDate, categoryId }) {
   const items = readItems();
   const nextNumber = items.reduce((max, it) => Math.max(max, it.number || 0), 0) + 1;
   const item = {
@@ -105,7 +109,7 @@ function addItem({ name, size, unit, note, photo, initialQty, initialQtyDate, ca
     size: (size || "").trim(),
     unit: (unit || "шт").trim(),
     note: (note || "").trim(),
-    photo: savePhoto(photo),
+    photo: photoFilename || savePhoto(photo),
     categoryId: categoryId || null,
     archived: false,
     createdAt: Date.now(),
@@ -324,6 +328,8 @@ function addDraft(data) {
     qty: data.qty || null,
     guessedItemId: data.guessedItemId || null,
     guessedItemName: data.guessedItemName || null,
+    candidates: Array.isArray(data.candidates) ? data.candidates : [],
+    nameGuess: data.nameGuess || "",
   };
   drafts.push(draft);
   writeDrafts(drafts);

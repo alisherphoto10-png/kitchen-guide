@@ -191,6 +191,27 @@ function createOkoInventoryRouter(bot) {
     }
   });
 
+  // Позиции ещё нет в каталоге (бот не нашёл похожих) — создаёт её прямо из
+  // черновика, переиспользуя уже скачанное фото (без повторной загрузки).
+  // Черновик остаётся "pending" — админка сама выбирает новую позицию в
+  // выпадающем списке и подтверждает как обычно через /drafts/:id/confirm.
+  router.post("/drafts/:id/create-item", (req, res) => {
+    const draft = store.readDrafts().find((d) => d.id === req.params.id);
+    if (!draft || draft.status !== "pending") return res.status(404).json({ error: "Черновик не найден или уже обработан" });
+
+    const { name, categoryId, unit, size } = req.body || {};
+    if (!name || !name.trim()) return res.status(400).json({ error: "Укажите название позиции" });
+
+    const item = store.addItem({
+      name,
+      categoryId,
+      unit: unit || "шт",
+      size,
+      photoFilename: draft.photo || null,
+    });
+    res.json(item);
+  });
+
   router.post("/drafts/:id/reject", (req, res) => {
     const draft = store.readDrafts().find((d) => d.id === req.params.id);
     if (!draft || draft.status !== "pending") return res.status(404).json({ error: "Черновик не найден или уже обработан" });

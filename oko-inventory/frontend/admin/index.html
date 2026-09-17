@@ -113,6 +113,42 @@
     display: inline-block; background: #f8514933; color: #f85149; border-radius: 100px;
     padding: 1px 8px; font-size: 11px; font-weight: 700; margin-left: 6px;
   }
+
+  .draft-candidates { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 8px; }
+  .draft-candidate {
+    display: flex; align-items: center; gap: 6px; background: #0d1117; border: 1px solid #30363d;
+    border-radius: 100px; padding: 4px 10px 4px 6px; font-size: 12px; color: #e6edf3; cursor: pointer;
+  }
+  .draft-candidate.active { border-color: #3fb950; background: #23863622; }
+  .draft-candidate .pct {
+    font-size: 10.5px; font-weight: 700; border-radius: 100px; padding: 1px 6px;
+    background: #21262d; color: #8b949e;
+  }
+  .draft-candidate.active .pct { background: #238636; color: white; }
+  .draft-no-candidates { font-size: 12px; color: #8b949e; margin: 6px 0 8px; }
+
+  .qty-stepper { display: flex; align-items: center; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
+  .qty-stepper button {
+    background: #0d1117; color: #e6edf3; border: none; width: 26px; height: 28px; font-size: 15px; cursor: pointer;
+  }
+  .qty-stepper input {
+    width: 46px; text-align: center; border: none; border-left: 1px solid #30363d; border-right: 1px solid #30363d;
+    background: #0d1117; color: #e6edf3; padding: 6px 2px; font-size: 13px;
+  }
+  .balance-preview { font-size: 12px; color: #8b949e; margin-top: 6px; font-family: ui-monospace, monospace; }
+  .balance-preview b { color: #e6edf3; }
+  .balance-preview .arrow { color: #484f58; }
+
+  .create-item-form {
+    display: none; margin-top: 10px; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px;
+    gap: 8px; flex-wrap: wrap; align-items: end;
+  }
+  .create-item-form.open { display: flex; }
+  .create-item-form .field { margin-bottom: 0; min-width: 140px; flex: 1; }
+  .create-item-form .field label { display: block; font-size: 11px; color: #8b949e; margin-bottom: 3px; }
+  .create-item-form input, .create-item-form select {
+    width: 100%; padding: 6px; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 13px;
+  }
 </style>
 </head>
 <body>
@@ -293,6 +329,7 @@
     renderCategorySelects();
     renderCategoryFilterChips();
     render();
+    renderDrafts(); // категории нужны и для формы "создать новую позицию" в черновике
   }
 
   function categoryName(id) {
@@ -400,7 +437,10 @@
 
   // ---------- черновики из Telegram ----------
   let drafts = [];
-  const draftType = {}; // draftId -> "приход" | "списание", отдельно от items, чтобы переключать до подтверждения
+  const draftType = {}; // draftId -> "приход" | "списание"
+  const draftQty = {}; // draftId -> число
+  const draftSelectedItem = {}; // draftId -> itemId или ""
+  const draftShowCreateForm = {};
   const draftPhotoUrls = {};
 
   async function loadDrafts() {
@@ -416,6 +456,17 @@
       options += `<option value="${it.id}" ${sel}>№${it.number} ${escapeHtml(it.name)}</option>`;
     });
     return options;
+  }
+
+  function categoryOptionsHtml() {
+    return ['<option value="">Без категории</option>']
+      .concat(categories.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`))
+      .join("");
+  }
+
+  function capitalize(s) {
+    s = (s || "").trim();
+    return s ? s[0].toUpperCase() + s.slice(1) : "";
   }
 
   function renderDrafts() {
@@ -434,7 +485,29 @@
     list.innerHTML = drafts
       .map((d) => {
         if (!(d.id in draftType)) draftType[d.id] = d.direction;
+        if (!(d.id in draftQty)) draftQty[d.id] = d.qty || 0;
+        if (!(d.id in draftSelectedItem)) {
+          draftSelectedItem[d.id] = d.guessedItemId || (d.candidates && d.candidates[0] ? d.candidates[0].itemId : "");
+        }
         const type = draftType[d.id];
+        const qty = draftQty[d.id];
+        const selectedItemId = draftSelectedItem[d.id];
+        const selectedItem = items.find((it) => it.id === selectedItemId);
+
+        const candidatesHtml = (d.candidates && d.candidates.length)
+          ? `<div class="draft-candidates">${d.candidates
+              .map(
+                (c) => `<button class="draft-candidate ${selectedItemId === c.itemId ? "active" : ""}" onclick="selectDraftCandidate('${d.id}','${c.itemId}')">
+                  ${escapeHtml(c.name)}<span class="pct">${c.confidence}%</span>
+                </button>`,
+              )
+              .join("")}</div>`
+          : `<div class="draft-no-candidates">Похожих позиций не нашлось — выберите вручную или создайте новую.</div>`;
+
+        const balanceHtml = selectedItem
+          ? `Было: <b>${selectedItem.balance}</b> ${escapeHtml(selectedItem.unit)} <span class="arrow">→</span> Станет: <b>${type === "приход" ? selectedItem.balance + qty : selectedItem.balance - qty}</b> ${escapeHtml(selectedItem.unit)}`
+          : "";
+
         return `
         <div class="draft-row">
           <div class="draft-photo" id="draft-photo-wrap-${d.id}">
@@ -445,17 +518,31 @@
               ${escapeHtml(d.fromName || "Повар")} · ${new Date(d.createdAt).toLocaleString("ru-RU")}<br>
               <span class="raw">${d.rawText ? escapeHtml(d.rawText) : "(без подписи)"}</span>
             </div>
+            ${candidatesHtml}
             <div class="draft-form">
               <div class="type-toggle">
                 <button class="income ${type === "приход" ? "active" : ""}" onclick="setDraftType('${d.id}','приход')">+ Приход</button>
                 <button class="writeoff ${type === "списание" ? "active" : ""}" onclick="setDraftType('${d.id}','списание')">− Списание</button>
               </div>
-              <select id="draft-item-${d.id}">${itemOptionsHtml(d.guessedItemId)}</select>
-              <input type="number" class="qty" min="0.01" step="1" placeholder="Кол-во" id="draft-qty-${d.id}" value="${d.qty || ""}">
+              <select id="draft-item-${d.id}" onchange="onDraftItemSelectChange('${d.id}', this.value)">${itemOptionsHtml(selectedItemId)}</select>
+              <div class="qty-stepper">
+                <button onclick="adjustDraftQty('${d.id}', -1)">−</button>
+                <input type="number" id="draft-qty-${d.id}" value="${qty}" oninput="onDraftQtyInput('${d.id}', this.value)">
+                <button onclick="adjustDraftQty('${d.id}', 1)">+</button>
+              </div>
             </div>
+            <div class="balance-preview" id="draft-balance-${d.id}">${balanceHtml}</div>
             <div class="draft-actions">
               <button class="action" onclick="confirmDraft('${d.id}')">Подтвердить</button>
+              <button class="secondary" onclick="toggleCreateItemForm('${d.id}')">Создать новую позицию</button>
               <button class="danger" onclick="rejectDraft('${d.id}')">Отклонить</button>
+            </div>
+            <div class="create-item-form ${draftShowCreateForm[d.id] ? "open" : ""}" id="draft-create-form-${d.id}">
+              <div class="field"><label>Название</label><input type="text" id="draft-create-name-${d.id}" value="${escapeHtml(capitalize(d.nameGuess))}"></div>
+              <div class="field"><label>Категория</label><select id="draft-create-category-${d.id}">${categoryOptionsHtml()}</select></div>
+              <div class="field" style="max-width:80px"><label>Ед. изм</label><input type="text" id="draft-create-unit-${d.id}" value="шт"></div>
+              <button class="action" onclick="createItemFromDraft('${d.id}')">Создать</button>
+              <button class="secondary" onclick="toggleCreateItemForm('${d.id}', false)">Отмена</button>
             </div>
           </div>
         </div>`;
@@ -470,6 +557,64 @@
     renderDrafts();
   }
 
+  function selectDraftCandidate(id, itemId) {
+    draftSelectedItem[id] = itemId;
+    renderDrafts();
+  }
+
+  function onDraftItemSelectChange(id, value) {
+    draftSelectedItem[id] = value;
+    renderDrafts();
+  }
+
+  function onDraftQtyInput(id, value) {
+    draftQty[id] = Number(value) || 0;
+    updateBalancePreview(id);
+  }
+
+  function adjustDraftQty(id, delta) {
+    draftQty[id] = Math.max(0, (draftQty[id] || 0) + delta);
+    renderDrafts();
+  }
+
+  function updateBalancePreview(id) {
+    const el = document.getElementById(`draft-balance-${id}`);
+    if (!el) return;
+    const item = items.find((it) => it.id === draftSelectedItem[id]);
+    const qty = draftQty[id] || 0;
+    if (!item) { el.innerHTML = ""; return; }
+    const type = draftType[id];
+    const next = type === "приход" ? item.balance + qty : item.balance - qty;
+    el.innerHTML = `Было: <b>${item.balance}</b> ${escapeHtml(item.unit)} <span class="arrow">→</span> Станет: <b>${next}</b> ${escapeHtml(item.unit)}`;
+  }
+
+  function toggleCreateItemForm(id, show) {
+    draftShowCreateForm[id] = show === undefined ? !draftShowCreateForm[id] : show;
+    renderDrafts();
+  }
+
+  async function createItemFromDraft(id) {
+    const name = document.getElementById(`draft-create-name-${id}`).value.trim();
+    if (!name) { alert("Укажите название"); return; }
+    const categoryId = document.getElementById(`draft-create-category-${id}`).value || null;
+    const unit = document.getElementById(`draft-create-unit-${id}`).value || "шт";
+    const res = await fetch(`/api/oko-inventory/drafts/${id}/create-item`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ name, categoryId, unit }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || "Не удалось создать позицию");
+      return;
+    }
+    const newItem = await res.json();
+    await reload();
+    draftSelectedItem[id] = newItem.id;
+    draftShowCreateForm[id] = false;
+    renderDrafts();
+  }
+
   async function loadDraftPhoto(draft) {
     if (!draft.photo || draftPhotoUrls[draft.id]) return;
     const res = await fetch(`/api/oko-inventory/photos/${draft.photo}`, { headers: authHeaders() });
@@ -481,8 +626,8 @@
   }
 
   async function confirmDraft(id) {
-    const itemId = document.getElementById(`draft-item-${id}`).value;
-    const qty = document.getElementById(`draft-qty-${id}`).value;
+    const itemId = draftSelectedItem[id];
+    const qty = draftQty[id];
     const direction = draftType[id];
     if (!itemId) { alert("Выберите позицию"); return; }
     if (!qty || Number(qty) <= 0) { alert("Укажите количество"); return; }

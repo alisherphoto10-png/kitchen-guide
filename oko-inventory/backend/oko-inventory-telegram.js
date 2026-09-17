@@ -43,7 +43,15 @@ function parseMessage(text) {
   [...ARRIVAL_KEYWORDS, ...WRITEOFF_KEYWORDS].forEach((k) => {
     nameGuess = nameGuess.replace(new RegExp(k, "gi"), " ");
   });
-  nameGuess = nameGuess.replace(/\s+/g, " ").trim();
+  // Огрызки слов после вырезания ключевого корня (например, "пришл" вырезано
+  // из "пришла" — остаётся висячая "а") только мешают: matchCandidates() их
+  // и так игнорирует (слова короче 3 букв), а тут это ещё и подпись для
+  // формы "создать новую позицию" — чистим для красоты, не только для матчинга.
+  nameGuess = nameGuess
+    .split(/\s+/)
+    .filter((w) => w.length > 2)
+    .join(" ")
+    .trim();
 
   return { qty, direction, nameGuess };
 }
@@ -74,26 +82,42 @@ function bestWordDistance(queryWords, nameWords) {
   return best;
 }
 
-function matchItem(nameGuess, items) {
+// Топ-N похожих позиций с процентом уверенности (100% = точное вхождение,
+// дальше по относительному расстоянию Левенштейна между словами) — то, что
+// админка показывает как "Найдено N похожих позиций" при разборе черновика.
+// Порог мягче, чем у matchItem() ниже: тут не "верю/не верю", а просто
+// ранжируем варианты, финальный выбор всё равно за человеком.
+function matchCandidates(nameGuess, items, limit) {
   const q = (nameGuess || "").toLowerCase().trim();
-  if (!q || !items.length) return null;
+  if (!q || !items.length) return [];
   const qWords = q.split(/\s+/).filter((w) => w.length > 2);
-  if (!qWords.length) return null;
+  if (!qWords.length) return [];
 
-  let best = null;
-  let bestScore = Infinity;
-  items.forEach((it) => {
-    const name = it.name.toLowerCase();
-    if (q.includes(name) || name.includes(q)) {
-      if (bestScore > 0) { bestScore = 0; best = it; }
-      return;
-    }
-    const nameWords = name.split(/\s+/).filter((w) => w.length > 2);
-    if (!nameWords.length) return;
-    const score = bestWordDistance(qWords, nameWords);
-    if (score < bestScore) { bestScore = score; best = it; }
-  });
-  return bestScore <= 0.4 ? best : null;
+  const scored = items
+    .map((it) => {
+      const name = it.name.toLowerCase();
+      let score;
+      if (q.includes(name) || name.includes(q)) {
+        score = 0;
+      } else {
+        const nameWords = name.split(/\s+/).filter((w) => w.length > 2);
+        score = nameWords.length ? bestWordDistance(qWords, nameWords) : 1;
+      }
+      return { item: it, score };
+    })
+    .filter((s) => s.score <= 0.6)
+    .sort((a, b) => a.score - b.score)
+    .slice(0, limit || 3);
+
+  return scored.map((s) => ({ item: s.item, confidence: Math.round((1 - s.score) * 100) }));
+}
+
+// Единственный "угаданный" вариант для авто-подстановки и текста ответа в
+// Telegram — строже matchCandidates (60%+), чтобы не подставлять в подписи
+// боту то, в чём он сам не уверен.
+function matchItem(nameGuess, items) {
+  const candidates = matchCandidates(nameGuess, items, 1);
+  return candidates.length && candidates[0].confidence >= 60 ? candidates[0].item : null;
 }
 
 /**
@@ -118,7 +142,8 @@ function registerInventoryDraftListener(bot) {
       const caption = msg.caption || "";
       const parsed = parseMessage(caption);
       const items = store.readItems().filter((it) => !it.archived);
-      const guess = matchItem(parsed.nameGuess, items);
+      const candidates = matchCandidates(parsed.nameGuess, items, 3);
+      const guess = candidates.length && candidates[0].confidence >= 60 ? candidates[0].item : null;
 
       const sizes = msg.photo || [];
       const largest = sizes[sizes.length - 1];
@@ -149,6 +174,8 @@ function registerInventoryDraftListener(bot) {
         qty: parsed.qty,
         guessedItemId: guess ? guess.id : null,
         guessedItemName: guess ? guess.name : null,
+        candidates: candidates.map((c) => ({ itemId: c.item.id, name: c.item.name, confidence: c.confidence })),
+        nameGuess: parsed.nameGuess,
       });
 
       const lines = ["📝 Принято в обработку."];
@@ -174,5 +201,6 @@ module.exports = {
   writeConfig,
   parseMessage,
   matchItem,
+  matchCandidates,
   registerInventoryDraftListener,
 };
