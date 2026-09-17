@@ -4,6 +4,8 @@ const path = require("path");
 const ExcelJS = require("exceljs");
 const PDFDocument = require("pdfkit");
 const store = require("./oko-inventory-store");
+const inventoryTelegram = require("./oko-inventory-telegram");
+const { readKnownChats } = require("./oko-known-chats");
 
 const FONT_REGULAR = path.join(__dirname, "fonts", "DejaVuSans.ttf");
 const FONT_BOLD = path.join(__dirname, "fonts", "DejaVuSans-Bold.ttf");
@@ -37,7 +39,7 @@ function buildExportNote(item, movements) {
   return lines.join("\n");
 }
 
-function createOkoInventoryRouter() {
+function createOkoInventoryRouter(bot) {
   const router = express.Router();
 
   // All routes here are admin-only — this tool has a single user (the
@@ -83,6 +85,69 @@ function createOkoInventoryRouter() {
   router.delete("/movements/:id", (req, res) => {
     const ok = store.deleteMovement(req.params.id);
     if (!ok) return res.status(404).json({ error: "Запись не найдена" });
+    res.json({ ok: true });
+  });
+
+  // ---------- приход/списание из Telegram-темы (черновики на подтверждение) ----------
+  router.get("/telegram-config", (req, res) => {
+    res.json(inventoryTelegram.readConfig());
+  });
+
+  router.post("/telegram-config", (req, res) => {
+    const { chatId, threadId } = req.body || {};
+    inventoryTelegram.writeConfig({ chatId, threadId });
+    res.json({ ok: true });
+  });
+
+  // Список групп/тем, которые бот когда-либо видел — для выпадающего списка
+  // в настройках (тот же общий файл, что и у oko-order-relay).
+  router.get("/known-chats", (req, res) => {
+    res.json(readKnownChats());
+  });
+
+  router.get("/drafts", (req, res) => {
+    res.json(store.listPendingDrafts());
+  });
+
+  router.post("/drafts/:id/confirm", (req, res) => {
+    const draft = store.readDrafts().find((d) => d.id === req.params.id);
+    if (!draft || draft.status !== "pending") return res.status(404).json({ error: "Черновик не найден или уже обработан" });
+
+    const { itemId, qty, direction, note } = req.body || {};
+    const item = store.readItems().find((it) => it.id === itemId);
+    if (!item) return res.status(400).json({ error: "Выберите позицию" });
+
+    try {
+      const composedNote = [note, draft.rawText, draft.fromName ? `Telegram: ${draft.fromName}` : ""]
+        .filter(Boolean)
+        .join(" — ");
+      const movement = store.addMovement({
+        itemId,
+        type: direction === "приход" ? "приход" : "списание",
+        qty,
+        note: composedNote,
+        photo: draft.photo,
+      });
+      store.updateDraft(draft.id, { status: "confirmed", movementId: movement.id });
+
+      if (bot && draft.chatId) {
+        bot
+          .sendMessage(draft.chatId, `✅ Записано: «${item.name}» — ${movement.type} ${movement.qty} ${item.unit}.`, {
+            reply_to_message_id: draft.messageId,
+            message_thread_id: draft.threadId || undefined,
+          })
+          .catch(() => {});
+      }
+      res.json({ ok: true, movement });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.post("/drafts/:id/reject", (req, res) => {
+    const draft = store.readDrafts().find((d) => d.id === req.params.id);
+    if (!draft || draft.status !== "pending") return res.status(404).json({ error: "Черновик не найден или уже обработан" });
+    store.updateDraft(draft.id, { status: "rejected" });
     res.json({ ok: true });
   });
 
@@ -269,4 +334,4 @@ function createOkoInventoryRouter() {
   return router;
 }
 
-module.exports = { createOkoInventoryRouter };
+module.exports = { createOkoInventoryRouter, registerInventoryDraftListener: inventoryTelegram.registerInventoryDraftListener };

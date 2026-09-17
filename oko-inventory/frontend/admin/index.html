@@ -65,6 +65,35 @@
 
   .export-row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
   .export-row .field { flex: 1; min-width: 140px; margin-bottom: 0; }
+
+  .draft-row {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 12px 0; border-bottom: 1px solid #21262d;
+  }
+  .draft-row:last-child { border-bottom: none; }
+  .draft-photo {
+    width: 64px; height: 64px; border-radius: 8px; background: #0d1117;
+    border: 1px solid #30363d; flex: none; object-fit: cover;
+    display: flex; align-items: center; justify-content: center; font-size: 22px; color: #484f58;
+  }
+  .draft-main { flex: 1; min-width: 0; }
+  .draft-meta { font-size: 12px; color: #8b949e; margin-bottom: 6px; }
+  .draft-meta .raw { color: #c9d1d9; }
+  .draft-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .draft-form select, .draft-form input { padding: 6px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 13px; }
+  .draft-form select { min-width: 180px; }
+  .draft-form input.qty { width: 70px; }
+  .draft-form .type-toggle { display: flex; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
+  .draft-form .type-toggle button {
+    background: #0d1117; color: #8b949e; border: none; padding: 6px 10px; font-size: 12px; cursor: pointer;
+  }
+  .draft-form .type-toggle button.active.income { background: #23863633; color: #3fb950; }
+  .draft-form .type-toggle button.active.writeoff { background: #f8514933; color: #f85149; }
+  .draft-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .draft-badge {
+    display: inline-block; background: #f8514933; color: #f85149; border-radius: 100px;
+    padding: 1px 8px; font-size: 11px; font-weight: 700; margin-left: 6px;
+  }
 </style>
 </head>
 <body>
@@ -79,6 +108,36 @@
 <div id="app">
   <h1>Инвентаризация кухни</h1>
   <p class="hint">Каталог утвари: добавляй позиции, отмечай приход/списание, смотри остатки. Экспорт — Excel-таблица за выбранный период.</p>
+
+  <div class="card" id="draftsCard" style="display:none">
+    <h2>Из Telegram <span id="draftsCount" class="draft-badge" style="display:none"></span></h2>
+    <p class="hint" style="margin:0 0 8px">Повара прислали фото в тему — проверьте, что бот угадал, и подтвердите.</p>
+    <div id="draftsList"></div>
+  </div>
+
+  <div class="card">
+    <h2>Настройки Telegram</h2>
+    <p class="hint" style="margin:0 0 8px">
+      Тема, куда повара кидают фото со списанием/приходом утвари. Если нужной группы/темы нет
+      в списке — напишите туда что угодно (или <code>/okoid</code>) и обновите страницу.
+    </p>
+    <div class="add-form">
+      <div class="field wide">
+        <label>Группа / тема</label>
+        <select id="telegramChatSelect" onchange="onTelegramChatSelectChange()"></select>
+      </div>
+      <div class="field">
+        <label>Chat ID (вручную)</label>
+        <input type="text" id="telegramChatIdInput" placeholder="-100...">
+      </div>
+      <div class="field">
+        <label>Thread ID (вручную, необязательно)</label>
+        <input type="text" id="telegramThreadIdInput" placeholder="123">
+      </div>
+    </div>
+    <button class="action" onclick="saveTelegramConfig()">Сохранить</button>
+    <div class="status" id="telegramConfigStatus"></div>
+  </div>
 
   <div class="card">
     <h2>Добавить позицию</h2>
@@ -163,8 +222,15 @@
     items = await res.json();
     document.getElementById("gate").style.display = "none";
     document.getElementById("app").style.display = "block";
+    afterLogin();
+  }
+
+  function afterLogin() {
     setDefaultExportRange();
     render();
+    loadDrafts();
+    loadKnownChats();
+    loadTelegramConfig();
   }
 
   function setDefaultExportRange() {
@@ -178,6 +244,182 @@
     const res = await fetch("/api/oko-inventory/items", { headers: authHeaders() });
     items = await res.json();
     render();
+  }
+
+  // ---------- черновики из Telegram ----------
+  let drafts = [];
+  const draftType = {}; // draftId -> "приход" | "списание", отдельно от items, чтобы переключать до подтверждения
+  const draftPhotoUrls = {};
+
+  async function loadDrafts() {
+    const res = await fetch("/api/oko-inventory/drafts", { headers: authHeaders() });
+    drafts = res.ok ? await res.json() : [];
+    renderDrafts();
+  }
+
+  function itemOptionsHtml(selectedId) {
+    let options = '<option value="">— выбрать позицию —</option>';
+    items.forEach((it) => {
+      const sel = String(selectedId) === String(it.id) ? "selected" : "";
+      options += `<option value="${it.id}" ${sel}>№${it.number} ${escapeHtml(it.name)}</option>`;
+    });
+    return options;
+  }
+
+  function renderDrafts() {
+    const card = document.getElementById("draftsCard");
+    const badge = document.getElementById("draftsCount");
+    const list = document.getElementById("draftsList");
+
+    if (!drafts.length) {
+      card.style.display = "none";
+      return;
+    }
+    card.style.display = "block";
+    badge.style.display = "inline-block";
+    badge.innerText = drafts.length;
+
+    list.innerHTML = drafts
+      .map((d) => {
+        if (!(d.id in draftType)) draftType[d.id] = d.direction;
+        const type = draftType[d.id];
+        return `
+        <div class="draft-row">
+          <div class="draft-photo" id="draft-photo-wrap-${d.id}">
+            ${d.photo ? `<img class="draft-photo" id="draft-photo-${d.id}" style="width:64px;height:64px">` : "📷"}
+          </div>
+          <div class="draft-main">
+            <div class="draft-meta">
+              ${escapeHtml(d.fromName || "Повар")} · ${new Date(d.createdAt).toLocaleString("ru-RU")}<br>
+              <span class="raw">${d.rawText ? escapeHtml(d.rawText) : "(без подписи)"}</span>
+            </div>
+            <div class="draft-form">
+              <div class="type-toggle">
+                <button class="income ${type === "приход" ? "active" : ""}" onclick="setDraftType('${d.id}','приход')">+ Приход</button>
+                <button class="writeoff ${type === "списание" ? "active" : ""}" onclick="setDraftType('${d.id}','списание')">− Списание</button>
+              </div>
+              <select id="draft-item-${d.id}">${itemOptionsHtml(d.guessedItemId)}</select>
+              <input type="number" class="qty" min="0.01" step="1" placeholder="Кол-во" id="draft-qty-${d.id}" value="${d.qty || ""}">
+            </div>
+            <div class="draft-actions">
+              <button class="action" onclick="confirmDraft('${d.id}')">Подтвердить</button>
+              <button class="danger" onclick="rejectDraft('${d.id}')">Отклонить</button>
+            </div>
+          </div>
+        </div>`;
+      })
+      .join("");
+
+    drafts.forEach(loadDraftPhoto);
+  }
+
+  function setDraftType(id, type) {
+    draftType[id] = type;
+    renderDrafts();
+  }
+
+  async function loadDraftPhoto(draft) {
+    if (!draft.photo || draftPhotoUrls[draft.id]) return;
+    const res = await fetch(`/api/oko-inventory/photos/${draft.photo}`, { headers: authHeaders() });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    draftPhotoUrls[draft.id] = URL.createObjectURL(blob);
+    const img = document.getElementById(`draft-photo-${draft.id}`);
+    if (img) img.src = draftPhotoUrls[draft.id];
+  }
+
+  async function confirmDraft(id) {
+    const itemId = document.getElementById(`draft-item-${id}`).value;
+    const qty = document.getElementById(`draft-qty-${id}`).value;
+    const direction = draftType[id];
+    if (!itemId) { alert("Выберите позицию"); return; }
+    if (!qty || Number(qty) <= 0) { alert("Укажите количество"); return; }
+    const res = await fetch(`/api/oko-inventory/drafts/${id}/confirm`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ itemId, qty, direction }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || "Не удалось подтвердить");
+      return;
+    }
+    await loadDrafts();
+    await reload();
+  }
+
+  async function rejectDraft(id) {
+    if (!confirm("Отклонить это сообщение? Черновик пропадёт без изменения остатков.")) return;
+    await fetch(`/api/oko-inventory/drafts/${id}/reject`, { method: "POST", headers: authHeaders() });
+    await loadDrafts();
+  }
+
+  // ---------- настройки Telegram (группа/тема со списаниями) ----------
+  let knownChats = {};
+
+  async function loadKnownChats() {
+    const res = await fetch("/api/oko-inventory/known-chats", { headers: authHeaders() });
+    knownChats = res.ok ? await res.json() : {};
+    renderTelegramChatSelect();
+  }
+
+  function renderTelegramChatSelect(selectedChatId, selectedThreadId) {
+    const select = document.getElementById("telegramChatSelect");
+    let options = '<option value="">— выбрать из списка —</option>';
+    let found = false;
+    Object.keys(knownChats).forEach((chatId) => {
+      const chat = knownChats[chatId];
+      const topics = chat.topics || {};
+      const topicIds = Object.keys(topics);
+      if (!topicIds.length) {
+        const sel = String(selectedChatId) === String(chatId) && !selectedThreadId ? "selected" : "";
+        if (sel) found = true;
+        options += `<option value="${chatId}|" ${sel}>${escapeHtml(chat.title)}</option>`;
+      } else {
+        topicIds.forEach((threadId) => {
+          const sel = String(selectedChatId) === String(chatId) && String(selectedThreadId) === String(threadId) ? "selected" : "";
+          if (sel) found = true;
+          options += `<option value="${chatId}|${threadId}" ${sel}>${escapeHtml(chat.title)} → ${escapeHtml(topics[threadId])}</option>`;
+        });
+      }
+    });
+    options += `<option value="__manual__" ${!found && selectedChatId ? "selected" : ""}>Ввести ID вручную...</option>`;
+    select.innerHTML = options;
+  }
+
+  function onTelegramChatSelectChange() {
+    const value = document.getElementById("telegramChatSelect").value;
+    if (value === "__manual__" || !value) return;
+    const [chatId, threadId] = value.split("|");
+    document.getElementById("telegramChatIdInput").value = chatId;
+    document.getElementById("telegramThreadIdInput").value = threadId || "";
+  }
+
+  async function loadTelegramConfig() {
+    const res = await fetch("/api/oko-inventory/telegram-config", { headers: authHeaders() });
+    const config = res.ok ? await res.json() : { chatId: null, threadId: null };
+    document.getElementById("telegramChatIdInput").value = config.chatId || "";
+    document.getElementById("telegramThreadIdInput").value = config.threadId || "";
+    renderTelegramChatSelect(config.chatId, config.threadId);
+  }
+
+  async function saveTelegramConfig() {
+    const statusEl = document.getElementById("telegramConfigStatus");
+    const chatId = document.getElementById("telegramChatIdInput").value.trim();
+    const threadId = document.getElementById("telegramThreadIdInput").value.trim();
+    const res = await fetch("/api/oko-inventory/telegram-config", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ chatId: chatId || null, threadId: threadId || null }),
+    });
+    if (!res.ok) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Не удалось сохранить";
+      return;
+    }
+    statusEl.className = "status ok";
+    statusEl.innerText = "Сохранено";
+    renderTelegramChatSelect(chatId, threadId);
   }
 
   async function loadPhoto(item) {
@@ -404,8 +646,7 @@
           items = data;
           document.getElementById("gate").style.display = "none";
           document.getElementById("app").style.display = "block";
-          setDefaultExportRange();
-          render();
+          afterLogin();
         });
       }
     });

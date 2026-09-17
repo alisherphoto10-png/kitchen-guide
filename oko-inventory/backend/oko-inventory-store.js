@@ -4,6 +4,7 @@ const path = require("path");
 const DATA_DIR = path.join(__dirname, "data");
 const ITEMS_PATH = path.join(DATA_DIR, "oko-inventory-items.json");
 const MOVEMENTS_PATH = path.join(DATA_DIR, "oko-inventory-movements.json");
+const DRAFTS_PATH = path.join(DATA_DIR, "oko-inventory-drafts.json");
 const PHOTOS_DIR = path.join(DATA_DIR, "photos");
 
 function ensureDirs() {
@@ -66,6 +67,15 @@ function deletePhoto(filename) {
   } catch {
     // already gone — fine
   }
+}
+
+// Тот же приём, что и savePhoto(), но из уже готового Buffer — используется
+// для фото, скачанных из Telegram (там сразу байты, не data-URI из формы).
+function savePhotoBuffer(buffer, ext) {
+  ensureDirs();
+  const filename = `${makeId()}.${ext}`;
+  fs.writeFileSync(path.join(PHOTOS_DIR, filename), buffer);
+  return filename;
 }
 
 function photoPath(filename) {
@@ -142,7 +152,7 @@ function deleteItem(id) {
   return true;
 }
 
-function addMovement({ itemId, type, qty, date, note }) {
+function addMovement({ itemId, type, qty, date, note, photo }) {
   if (type !== "приход" && type !== "списание") {
     throw new Error("type должен быть 'приход' или 'списание'");
   }
@@ -158,6 +168,7 @@ function addMovement({ itemId, type, qty, date, note }) {
     qty: n,
     date: date || new Date().toISOString().slice(0, 10),
     note: (note || "").trim(),
+    photo: photo || null,
     createdAt: Date.now(),
   };
   movements.push(movement);
@@ -237,6 +248,54 @@ function reportForPeriod(from, to) {
   });
 }
 
+// ---------- черновики списаний/приходов из Telegram ----------
+// Повар кидает фото + подпись в тему — бот угадывает позицию и количество и
+// кладёт сюда черновиком (status: "pending"), НЕ трогая остатки сразу:
+// подпись — свободный текст, доверять ему вслепую рискованно для реальных
+// цифр склада. Подтверждение владельцем в админке (см. oko-inventory-api.js
+// /drafts/:id/confirm) — только тогда черновик превращается в обычное
+// движение через addMovement() выше.
+function readDrafts() {
+  return readJson(DRAFTS_PATH, []);
+}
+function writeDrafts(drafts) {
+  writeJson(DRAFTS_PATH, drafts);
+}
+function addDraft(data) {
+  const drafts = readDrafts();
+  const draft = {
+    id: makeId(),
+    status: "pending",
+    createdAt: Date.now(),
+    chatId: data.chatId,
+    threadId: data.threadId || null,
+    messageId: data.messageId,
+    fromName: data.fromName || "",
+    rawText: data.rawText || "",
+    photo: data.photo || null,
+    direction: data.direction === "приход" ? "приход" : "списание",
+    qty: data.qty || null,
+    guessedItemId: data.guessedItemId || null,
+    guessedItemName: data.guessedItemName || null,
+  };
+  drafts.push(draft);
+  writeDrafts(drafts);
+  return draft;
+}
+function updateDraft(id, patch) {
+  const drafts = readDrafts();
+  const draft = drafts.find((d) => d.id === id);
+  if (!draft) return null;
+  Object.assign(draft, patch);
+  writeDrafts(drafts);
+  return draft;
+}
+function listPendingDrafts() {
+  return readDrafts()
+    .filter((d) => d.status === "pending")
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
 module.exports = {
   readItems,
   addItem,
@@ -247,7 +306,13 @@ module.exports = {
   listItemsWithBalance,
   reportForPeriod,
   photoPath,
+  savePhotoBuffer,
+  readDrafts,
+  addDraft,
+  updateDraft,
+  listPendingDrafts,
   PHOTOS_DIR,
   ITEMS_PATH,
   MOVEMENTS_PATH,
+  DRAFTS_PATH,
 };
