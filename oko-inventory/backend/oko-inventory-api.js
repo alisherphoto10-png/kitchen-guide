@@ -293,9 +293,9 @@ function createOkoInventoryRouter(bot) {
   });
 
   router.post("/recount/:id/accept", (req, res) => {
-    const { itemId, reason } = req.body || {};
+    const { itemId, reason, qty } = req.body || {};
     try {
-      const result = store.acceptRecountEntry(req.params.id, itemId, reason);
+      const result = store.acceptRecountEntry(req.params.id, itemId, reason, qty);
       if (!result) return res.status(404).json({ error: "Запись не найдена" });
       res.json(result);
     } catch (err) {

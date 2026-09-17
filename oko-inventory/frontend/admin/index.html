@@ -314,6 +314,7 @@
   .recount-review-row .num.diff.pos { color: #3fb950; }
   .recount-review-row .num.diff.neg { color: #f85149; }
   .recount-review-row .reason input { width: 100%; padding: 6px 8px; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 12px; }
+  .rr-qty-input { width: 56px; padding: 5px 4px; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 13px; text-align: center; font-variant-numeric: tabular-nums; }
   button.danger-solid { background: #8b1e1e; color: white; border: none; border-radius: 6px; padding: 7px 12px; cursor: pointer; font-size: 12px; font-weight: 700; }
 </style>
 </head>
@@ -803,23 +804,25 @@
           const diffClass = r.diff === 0 ? "zero" : r.diff > 0 ? "pos" : "neg";
           const diffText = r.diff === 0 ? "0" : r.diff > 0 ? `+${r.diff}` : String(r.diff);
           return `
-        <div class="recount-review-row ${r.diff !== 0 ? "mismatch" : ""}">
+        <div class="recount-review-row ${r.diff !== 0 ? "mismatch" : ""}" id="rr-row-${r.itemId}">
           <div class="photo" id="rr-photo-wrap-${r.itemId}">${r.item.photo ? `<img id="rr-photo-${r.itemId}">` : "📦"}</div>
           <div class="name">${escapeHtml(r.item.name)}</div>
           <div class="num">${r.expected}</div>
-          <div class="num strong">${r.counted}</div>
-          <div class="num diff ${diffClass}">${diffText}</div>
+          <div class="num strong">${
+            r.accepted
+              ? r.counted
+              : `<input type="number" min="0" class="rr-qty-input" id="rr-qty-${r.itemId}" value="${r.counted}" oninput="updateRecountDiffPreview('${r.itemId}', ${r.expected})">`
+          }</div>
+          <div class="num diff ${diffClass}" id="rr-diff-${r.itemId}">${diffText}</div>
           <div class="reason">${
             r.accepted
               ? '<span class="hint" style="margin:0">—</span>'
-              : r.diff !== 0
-                ? `<input type="text" placeholder="Причина" id="rr-reason-${r.itemId}">`
-                : '<span class="hint" style="margin:0">—</span>'
+              : `<input type="text" placeholder="Причина (если поправили)" id="rr-reason-${r.itemId}">`
           }</div>
           <div class="act">${
             r.accepted
               ? '<button class="secondary" disabled>Принято ✓</button>'
-              : `<button class="${r.diff !== 0 ? "danger-solid" : "secondary"}" onclick="acceptRecountRow('${data.session.id}','${r.itemId}')">Принять</button>`
+              : `<button class="${r.diff !== 0 ? "danger-solid" : "secondary"}" id="rr-accept-btn-${r.itemId}" onclick="acceptRecountRow('${data.session.id}','${r.itemId}')">Принять</button>`
           }</div>
         </div>`;
         })
@@ -851,13 +854,32 @@
     `;
   }
 
+  // Живой пересчёт разницы, пока владелец правит то, что вбил повар
+  // (опечатка/неверное число, повар предупредил) — до отправки на сервер,
+  // тот же приём "Было → Станет", что и в черновиках из Telegram.
+  function updateRecountDiffPreview(itemId, expected) {
+    const qtyEl = document.getElementById(`rr-qty-${itemId}`);
+    const diffEl = document.getElementById(`rr-diff-${itemId}`);
+    if (!qtyEl || !diffEl) return;
+    const qty = Number(qtyEl.value);
+    if (!Number.isFinite(qty)) return;
+    const diff = qty - expected;
+    diffEl.innerText = diff === 0 ? "0" : diff > 0 ? `+${diff}` : String(diff);
+    diffEl.className = `num diff ${diff === 0 ? "zero" : diff > 0 ? "pos" : "neg"}`;
+    document.getElementById(`rr-row-${itemId}`).classList.toggle("mismatch", diff !== 0);
+    const btn = document.getElementById(`rr-accept-btn-${itemId}`);
+    if (btn) btn.className = diff !== 0 ? "danger-solid" : "secondary";
+  }
+
   async function acceptRecountRow(sessionId, itemId) {
     const reasonEl = document.getElementById(`rr-reason-${itemId}`);
+    const qtyEl = document.getElementById(`rr-qty-${itemId}`);
     const reason = reasonEl ? reasonEl.value : "";
+    const qty = qtyEl ? qtyEl.value : undefined;
     const res = await fetch(`/api/oko-inventory/recount/${sessionId}/accept`, {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ itemId, reason }),
+      body: JSON.stringify({ itemId, reason, qty }),
     });
     if (!res.ok) return;
     recountReviewData = null;

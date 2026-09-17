@@ -540,7 +540,10 @@ function recountReview(id) {
 // addMovement(), что и ручной приход/списание в админке) — остаток не
 // трогается, пока это не подтверждено явным "Принять", чтобы случайный
 // или заведомо неверный подсчёт не испортил остатки молча.
-function acceptRecountEntry(sessionId, itemId, reason) {
+// `qtyOverride` — владелец правит то, что реально вбил повар (опечатка,
+// повар написал не то и предупредил и т.п.), прямо перед принятием, без
+// отдельного шага "сохранить" — записывается в entry.qty здесь же.
+function acceptRecountEntry(sessionId, itemId, reason, qtyOverride) {
   const recounts = readRecounts();
   const session = recounts.find((s) => s.id === sessionId);
   if (!session) return null;
@@ -548,6 +551,14 @@ function acceptRecountEntry(sessionId, itemId, reason) {
   if (!entry) return null;
   const item = readItems().find((it) => it.id === itemId);
   if (!item) return null;
+
+  if (qtyOverride !== undefined && qtyOverride !== null && qtyOverride !== "") {
+    const overrideN = Number(qtyOverride);
+    if (!Number.isFinite(overrideN) || overrideN < 0) {
+      throw new Error("Количество должно быть неотрицательным числом");
+    }
+    entry.qty = overrideN;
+  }
 
   const expected = balanceAsOf(movementsByItem()[itemId] || [], null);
   const diff = entry.qty - expected;
