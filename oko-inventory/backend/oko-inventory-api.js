@@ -527,18 +527,21 @@ function createOkoInventoryRouter(bot) {
       doc.font("bold").fontSize(9.5).fillColor(COLORS.text).text(formatRuDate(todayIso), metaX, y0 + 11, { width: metaW, align: "right", lineBreak: false });
       doc.font("body").fontSize(8).fillColor(COLORS.muted).text(`${sorted.length} ${pluralPositions(sorted.length)}`, metaX, y0 + 24, { width: metaW, align: "right", lineBreak: false });
 
-      doc.y = y0 + 40;
+      doc.y = y0 + 36;
       doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor(COLORS.line).lineWidth(1).stroke();
-      doc.y += 16;
+      doc.y += 8;
     }
 
+    // "Сформировано <дата> · N позиций" убрали — та же информация уже
+    // есть в правом верхнем углу шапки (drawTopHeader), дублировать под
+    // заголовком незачем, и это освобождает вертикальное место для
+    // таблицы (по просьбе пользователя — на листе помещалось 4-5 позиций
+    // меньше нужного, каждый лишний сантиметр в шапке был в минус).
     function drawTitleBlock() {
       doc.font("bold").fontSize(23).fillColor(COLORS.text).text("ИНВЕНТАРИЗАЦИЯ КУХНИ", left, doc.y, { width: tableWidth, lineBreak: false });
-      doc.y += 30;
+      doc.y += 24;
       doc.font("bold").fontSize(13).fillColor(COLORS.text).text(`Отчёт по инвентарю — ${formatRuDate(from)} – ${formatRuDate(to)}`, left, doc.y, { width: tableWidth, lineBreak: false });
-      doc.y += 20;
-      doc.font("body").fontSize(9).fillColor(COLORS.muted).text(`Сформировано ${formatRuDate(todayIso)} · ${sorted.length} ${pluralPositions(sorted.length)}`, left, doc.y, { width: tableWidth, lineBreak: false });
-      doc.y += 20;
+      doc.y += 16;
     }
 
     function drawTableHeader() {
