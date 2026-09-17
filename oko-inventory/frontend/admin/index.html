@@ -30,6 +30,25 @@
   .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
   .toolbar input[type="search"] { flex: 1; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; }
 
+  .cat-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .cat-chip {
+    background: #0d1117; border: 1px solid #30363d; color: #8b949e; border-radius: 100px;
+    padding: 5px 12px; font-size: 12.5px; cursor: pointer;
+  }
+  .cat-chip.active { background: #238636; border-color: #238636; color: white; }
+
+  .cat-manage-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid #21262d; }
+  .cat-manage-row:last-child { border-bottom: none; }
+  .cat-manage-row input { padding: 5px 8px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 13px; flex: 1; }
+  .cat-manage-row .cat-actions { display: flex; gap: 6px; flex: none; }
+  .cat-add-row { display: flex; gap: 8px; margin-top: 10px; }
+  .cat-add-row input { flex: 1; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 14px; }
+
+  .item-category-select {
+    margin-top: 6px; padding: 4px 8px; background: #0d1117; border: 1px solid #30363d;
+    color: #8b949e; border-radius: 6px; font-size: 12px; max-width: 220px;
+  }
+
   .item-row {
     display: flex; gap: 12px; align-items: flex-start;
     padding: 12px 0; border-bottom: 1px solid #21262d;
@@ -140,11 +159,26 @@
   </div>
 
   <div class="card">
+    <h2>Категории</h2>
+    <p class="hint" style="margin:0 0 8px">Разбейте утварь по категориям — появится фильтр в списке позиций.</p>
+    <div id="categoriesManageList"></div>
+    <div class="cat-add-row">
+      <input type="text" id="newCategoryName" placeholder="Название новой категории" onkeydown="if(event.key==='Enter') addCategory()">
+      <button class="action" onclick="addCategory()">+ Добавить</button>
+    </div>
+    <div class="status" id="categoryStatus"></div>
+  </div>
+
+  <div class="card">
     <h2>Добавить позицию</h2>
     <div class="add-form">
       <div class="field wide">
         <label>Название</label>
         <input type="text" id="newName" placeholder="Например: Сковородка">
+      </div>
+      <div class="field">
+        <label>Категория</label>
+        <select id="newCategoryId"></select>
       </div>
       <div class="field">
         <label>Размер (необязательно)</label>
@@ -198,6 +232,7 @@
       <h2 style="margin:0">Позиции</h2>
       <input type="search" id="search" placeholder="Поиск по названию..." oninput="render()">
     </div>
+    <div class="cat-chips" id="categoryFilterChips"></div>
     <div id="itemsList"></div>
   </div>
 </div>
@@ -227,6 +262,7 @@
 
   function afterLogin() {
     setDefaultExportRange();
+    loadCategories();
     render();
     loadDrafts();
     loadKnownChats();
@@ -244,6 +280,122 @@
     const res = await fetch("/api/oko-inventory/items", { headers: authHeaders() });
     items = await res.json();
     render();
+  }
+
+  // ---------- категории утвари ----------
+  let categories = [];
+  let activeCategoryFilter = "__all__"; // "__all__" | "__none__" | id категории
+
+  async function loadCategories() {
+    const res = await fetch("/api/oko-inventory/categories", { headers: authHeaders() });
+    categories = res.ok ? await res.json() : [];
+    renderCategoriesManageList();
+    renderCategorySelects();
+    renderCategoryFilterChips();
+    render();
+  }
+
+  function categoryName(id) {
+    const cat = categories.find((c) => c.id === id);
+    return cat ? cat.name : null;
+  }
+
+  function renderCategoriesManageList() {
+    const list = document.getElementById("categoriesManageList");
+    if (!categories.length) {
+      list.innerHTML = '<p class="hint" style="margin:0">Категорий пока нет.</p>';
+      return;
+    }
+    list.innerHTML = categories
+      .map(
+        (c) => `
+      <div class="cat-manage-row">
+        <span>${escapeHtml(c.name)}</span>
+        <div class="cat-actions">
+          <button class="secondary" onclick="renameCategoryPrompt('${c.id}', ${JSON.stringify(c.name)})">Переименовать</button>
+          <button class="danger" onclick="deleteCategoryConfirm('${c.id}')">Удалить</button>
+        </div>
+      </div>`,
+      )
+      .join("");
+  }
+
+  function renderCategorySelects() {
+    const options = ['<option value="">Без категории</option>']
+      .concat(categories.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`))
+      .join("");
+    const newSelect = document.getElementById("newCategoryId");
+    if (newSelect) newSelect.innerHTML = options;
+  }
+
+  function renderCategoryFilterChips() {
+    const wrap = document.getElementById("categoryFilterChips");
+    if (!wrap) return;
+    const chips = [
+      { id: "__all__", label: "Все" },
+      ...categories.map((c) => ({ id: c.id, label: c.name })),
+      { id: "__none__", label: "Без категории" },
+    ];
+    wrap.innerHTML = chips
+      .map(
+        (c) => `<button class="cat-chip ${activeCategoryFilter === c.id ? "active" : ""}" onclick="setCategoryFilter('${c.id}')">${escapeHtml(c.label)}</button>`,
+      )
+      .join("");
+  }
+
+  function setCategoryFilter(id) {
+    activeCategoryFilter = id;
+    renderCategoryFilterChips();
+    render();
+  }
+
+  async function addCategory() {
+    const input = document.getElementById("newCategoryName");
+    const statusEl = document.getElementById("categoryStatus");
+    const name = input.value.trim();
+    if (!name) return;
+    const res = await fetch("/api/oko-inventory/categories", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      statusEl.className = "status error";
+      statusEl.innerText = data.error || "Не удалось добавить";
+      return;
+    }
+    input.value = "";
+    statusEl.className = "status";
+    statusEl.innerText = "";
+    await loadCategories();
+  }
+
+  async function renameCategoryPrompt(id, currentName) {
+    const name = prompt("Новое название категории:", currentName);
+    if (name === null || !name.trim() || name.trim() === currentName) return;
+    await fetch(`/api/oko-inventory/categories/${id}`, {
+      method: "PATCH",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ name }),
+    });
+    await loadCategories();
+  }
+
+  async function deleteCategoryConfirm(id) {
+    if (!confirm("Удалить категорию? Позиции в ней останутся, просто станут «без категории».")) return;
+    await fetch(`/api/oko-inventory/categories/${id}`, { method: "DELETE", headers: authHeaders() });
+    await loadCategories();
+    await reload();
+  }
+
+  async function setItemCategory(itemId, categoryId) {
+    await fetch(`/api/oko-inventory/items/${itemId}`, {
+      method: "PATCH",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ categoryId: categoryId || null }),
+    });
+    await reload();
   }
 
   // ---------- черновики из Telegram ----------
@@ -450,7 +602,12 @@
   function render() {
     const q = (document.getElementById("search").value || "").trim().toLowerCase();
     const list = document.getElementById("itemsList");
-    const filtered = items.filter((it) => !q || it.name.toLowerCase().includes(q));
+    const filtered = items.filter((it) => {
+      if (q && !it.name.toLowerCase().includes(q)) return false;
+      if (activeCategoryFilter === "__none__") return !it.categoryId;
+      if (activeCategoryFilter !== "__all__") return it.categoryId === activeCategoryFilter;
+      return true;
+    });
 
     if (!filtered.length) {
       list.innerHTML = `<p class="hint" style="margin:0">Ничего нет.</p>`;
@@ -481,6 +638,9 @@
             <div class="item-name">№${item.number} ${escapeHtml(item.name)}</div>
             <div class="item-meta">${[item.size, item.note].filter(Boolean).map(escapeHtml).join(" · ") || "&nbsp;"}</div>
             <div class="item-balance">Остаток: <b>${item.balance}</b> ${escapeHtml(item.unit)}</div>
+            <select class="item-category-select" onchange="setItemCategory('${item.id}', this.value)">
+              ${['<option value="">Без категории</option>'].concat(categories.map((c) => `<option value="${c.id}" ${c.id === item.categoryId ? "selected" : ""}>${escapeHtml(c.name)}</option>`)).join("")}
+            </select>
             <div class="item-actions">
               <button class="secondary" onclick="toggleMoveForm('${item.id}', 'приход')">+ Приход</button>
               <button class="secondary" onclick="toggleMoveForm('${item.id}', 'списание')">− Списание</button>
@@ -590,6 +750,7 @@
       headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         name,
+        categoryId: document.getElementById("newCategoryId").value || null,
         size: document.getElementById("newSize").value,
         unit: document.getElementById("newUnit").value || "шт",
         note: document.getElementById("newNote").value,
@@ -607,6 +768,7 @@
 
     ["newName", "newSize", "newUnit", "newQty", "newNote"].forEach((id) => (document.getElementById(id).value = ""));
     document.getElementById("newUnit").value = "шт";
+    document.getElementById("newCategoryId").value = "";
     document.getElementById("newPhoto").value = "";
     statusEl.className = "status ok";
     statusEl.innerText = "Добавлено";

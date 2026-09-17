@@ -52,12 +52,41 @@ function createOkoInventoryRouter(bot) {
   });
 
   router.post("/items", (req, res) => {
-    const { name, size, unit, note, photo, initialQty } = req.body || {};
+    const { name, size, unit, note, photo, initialQty, categoryId } = req.body || {};
     if (!name || !name.trim()) {
       return res.status(400).json({ error: "Укажите название позиции" });
     }
-    const item = store.addItem({ name, size, unit, note, photo, initialQty });
+    const item = store.addItem({ name, size, unit, note, photo, initialQty, categoryId });
     res.json(item);
+  });
+
+  // ---------- категории утвари ----------
+  router.get("/categories", (req, res) => {
+    res.json(store.readCategories());
+  });
+
+  router.post("/categories", (req, res) => {
+    try {
+      res.json(store.addCategory((req.body || {}).name));
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.patch("/categories/:id", (req, res) => {
+    try {
+      const category = store.renameCategory(req.params.id, (req.body || {}).name);
+      if (!category) return res.status(404).json({ error: "Категория не найдена" });
+      res.json(category);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.delete("/categories/:id", (req, res) => {
+    const ok = store.deleteCategory(req.params.id);
+    if (!ok) return res.status(404).json({ error: "Категория не найдена" });
+    res.json({ ok: true });
   });
 
   router.patch("/items/:id", (req, res) => {

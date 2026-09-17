@@ -5,6 +5,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const ITEMS_PATH = path.join(DATA_DIR, "oko-inventory-items.json");
 const MOVEMENTS_PATH = path.join(DATA_DIR, "oko-inventory-movements.json");
 const DRAFTS_PATH = path.join(DATA_DIR, "oko-inventory-drafts.json");
+const CATEGORIES_PATH = path.join(DATA_DIR, "oko-inventory-categories.json");
 const PHOTOS_DIR = path.join(DATA_DIR, "photos");
 
 function ensureDirs() {
@@ -94,7 +95,7 @@ function photoPath(filename) {
  * before today would wrongly show 0 as the starting balance and count the
  * whole opening stock as "приход" within the period).
  */
-function addItem({ name, size, unit, note, photo, initialQty, initialQtyDate }) {
+function addItem({ name, size, unit, note, photo, initialQty, initialQtyDate, categoryId }) {
   const items = readItems();
   const nextNumber = items.reduce((max, it) => Math.max(max, it.number || 0), 0) + 1;
   const item = {
@@ -105,6 +106,7 @@ function addItem({ name, size, unit, note, photo, initialQty, initialQtyDate }) 
     unit: (unit || "шт").trim(),
     note: (note || "").trim(),
     photo: savePhoto(photo),
+    categoryId: categoryId || null,
     archived: false,
     createdAt: Date.now(),
   };
@@ -132,6 +134,7 @@ function updateItem(id, patch) {
   if (patch.size !== undefined) item.size = patch.size.trim();
   if (patch.unit !== undefined) item.unit = patch.unit.trim();
   if (patch.note !== undefined) item.note = patch.note.trim();
+  if (patch.categoryId !== undefined) item.categoryId = patch.categoryId || null;
   if (patch.archived !== undefined) item.archived = !!patch.archived;
   if (patch.photo) {
     deletePhoto(item.photo);
@@ -139,6 +142,50 @@ function updateItem(id, patch) {
   }
   writeItems(items);
   return item;
+}
+
+// ---------- категории утвари ----------
+function readCategories() {
+  return readJson(CATEGORIES_PATH, []).sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+function writeCategories(categories) {
+  writeJson(CATEGORIES_PATH, categories);
+}
+function addCategory(name) {
+  const clean = (name || "").trim();
+  if (!clean) throw new Error("Укажите название категории");
+  const categories = readCategories();
+  const nextOrder = categories.reduce((max, c) => Math.max(max, c.order || 0), 0) + 1;
+  const category = { id: makeId(), name: clean, order: nextOrder };
+  categories.push(category);
+  writeCategories(categories);
+  return category;
+}
+function renameCategory(id, name) {
+  const categories = readCategories();
+  const category = categories.find((c) => c.id === id);
+  if (!category) return null;
+  const clean = (name || "").trim();
+  if (!clean) throw new Error("Укажите название категории");
+  category.name = clean;
+  writeCategories(categories);
+  return category;
+}
+// Позиции этой категории не удаляются — переходят в "без категории"
+// (categoryId: null), тот же подход, что и с фото/остатками: удаление
+// категории — не повод терять сами позиции и их историю движений.
+function deleteCategory(id) {
+  const categories = readCategories();
+  const next = categories.filter((c) => c.id !== id);
+  if (next.length === categories.length) return false;
+  writeCategories(next);
+  const items = readItems();
+  let changed = false;
+  items.forEach((it) => {
+    if (it.categoryId === id) { it.categoryId = null; changed = true; }
+  });
+  if (changed) writeItems(items);
+  return true;
 }
 
 function deleteItem(id) {
@@ -307,6 +354,10 @@ module.exports = {
   reportForPeriod,
   photoPath,
   savePhotoBuffer,
+  readCategories,
+  addCategory,
+  renameCategory,
+  deleteCategory,
   readDrafts,
   addDraft,
   updateDraft,
