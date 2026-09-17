@@ -232,6 +232,12 @@
   .status-row .label-input { flex: 1; }
   .status-row input { background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; color: var(--text); font-size: 0.813rem; }
 
+  .xlsx-preview-scroll { max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+  .xlsx-preview-table { border-collapse: collapse; font-size: 0.719rem; white-space: nowrap; }
+  .xlsx-preview-table th, .xlsx-preview-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-soft); text-align: left; }
+  .xlsx-preview-table th { position: sticky; top: 0; background: var(--card2); color: var(--dim); font-weight: 700; z-index: 1; }
+  .xlsx-preview-table tbody tr:hover { background: rgba(255,255,255,0.04); }
+
   .cat-form {
     background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 18px;
   }
@@ -795,6 +801,68 @@
     }
   }
 
+  function truncate(text, n) {
+    const s = String(text || "").trim();
+    return s.length > n ? s.slice(0, n).trim() + "…" : s;
+  }
+
+  // Тот же порядок колонок и та же логика "раздел/подраздел родителя", что
+  // и на реальном экспорте (buildDishesWorkbook на сервере) — здесь просто
+  // строим её из уже загруженных в админке sections/dishes/statuses, без
+  // похода на сервер, поэтому открывается мгновенно. Одна строка на блюдо
+  // (не на ингредиент, как в самом файле) — для предпросмотра важнее охватить
+  // все блюда разом, чем показать раскладку по строкам таблицы.
+  function buildExportPreviewRows() {
+    // dishes уже содержит ВСЕ блюда, включая те, что без раздела (orphans —
+    // то же самое подмножество, отдельно только для своей подсветки в
+    // "Без категории") — конкатенировать их значит задвоить orphans.
+    return dishes.map((d) => {
+      const section = sections.find((s) => s.id === d.sectionId);
+      const parent = section && section.parentId ? sections.find((s) => s.id === section.parentId) : null;
+      const status = statuses.find((s) => s.id === d.status);
+      const ingredientCount = (d.calcTables || []).reduce((n, t) => n + (t.rows || []).length, 0);
+      return {
+        sectionName: parent ? parent.name : (section ? section.name : ""),
+        subsectionName: parent ? section.name : "",
+        name: d.name,
+        status: status ? `${status.emoji} ${status.label}`.trim() : "",
+        hidden: d.hidden ? "да" : "",
+        subtitle: truncate(d.subtitle, 30),
+        description: truncate(d.description, 40),
+        ingredientCount,
+        allergensCount: (d.allergens || []).length,
+        faqCount: (d.faq || []).length,
+      };
+    });
+  }
+
+  function toggleXlsxPreview(btn) {
+    const wrap = document.getElementById("xlsxPreviewWrap");
+    if (wrap.style.display !== "none") { wrap.style.display = "none"; btn.innerText = "Предпросмотр — что уйдёт в файл"; return; }
+
+    const rows = buildExportPreviewRows();
+    const cols = [
+      ["Раздел", "sectionName"], ["Подраздел", "subsectionName"], ["Название", "name"],
+      ["Статус", "status"], ["Скрыто", "hidden"], ["Подзаголовок", "subtitle"], ["Описание", "description"],
+      ["Ингредиентов", "ingredientCount"], ["Аллергенов", "allergensCount"], ["FAQ", "faqCount"],
+    ];
+    wrap.innerHTML = rows.length ? `
+      <p class="hint" style="margin:10px 0 6px">
+        ${rows.length} ${rows.length === 1 ? "блюдо" : "блюд"} — по строке на блюдо (в самом файле состав разворачивается построчно на ингредиент).
+        Текстовые поля обрезаны для читаемости, в файле — целиком.
+      </p>
+      <div class="xlsx-preview-scroll">
+        <table class="xlsx-preview-table">
+          <thead><tr>${cols.map(([label]) => `<th>${escapeHtml(label)}</th>`).join("")}</tr></thead>
+          <tbody>
+            ${rows.map((r) => `<tr>${cols.map(([, key]) => `<td>${escapeHtml(r[key])}</td>`).join("")}</tr>`).join("")}
+          </tbody>
+        </table>
+      </div>` : `<p class="hint">Блюд пока нет — экспортировать нечего.</p>`;
+    wrap.style.display = "block";
+    btn.innerText = "Скрыть предпросмотр";
+  }
+
   function openXlsxDialog() {
     const overlay = document.getElementById("confirmOverlay");
     overlay.innerHTML = `
@@ -802,6 +870,8 @@
         <h3>Блюда — таблица Excel</h3>
         <p class="hint">Скачайте текущие блюда таблицей, отредактируйте (или добавьте новые строки по тому же образцу) и загрузите обратно — существующие блюда обновятся, новые заведутся. Ничего не удаляется само.</p>
         <button class="btn-accent" id="xlsxDownloadBtn" style="width:100%;justify-content:center">${icon("photo")}Скачать таблицу (.xlsx)</button>
+        <button class="btn-ghost" id="xlsxPreviewBtn" style="width:100%;justify-content:center;margin-top:8px">${icon("eye")}Предпросмотр — что уйдёт в файл</button>
+        <div id="xlsxPreviewWrap" style="display:none"></div>
         <div style="height:14px"></div>
         <p class="hint">Загрузить заполненный файл обратно:</p>
         <input type="file" id="xlsxFileInput" accept=".xlsx">
@@ -818,6 +888,7 @@
     }
     document.getElementById("xlsxClose").addEventListener("click", closeDialog);
     document.getElementById("xlsxDownloadBtn").addEventListener("click", (e) => downloadExportXlsx(e.currentTarget));
+    document.getElementById("xlsxPreviewBtn").addEventListener("click", (e) => toggleXlsxPreview(e.currentTarget));
     document.getElementById("xlsxUploadBtn").addEventListener("click", async () => {
       const fileInput = document.getElementById("xlsxFileInput");
       const resultEl = document.getElementById("xlsxResult");
