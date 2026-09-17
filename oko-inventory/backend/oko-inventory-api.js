@@ -190,6 +190,10 @@ function createOkoInventoryRouter(bot) {
         qty,
         note: composedNote,
         photo: draft.photo,
+        // Дата — когда повар прислал фото, а НЕ когда владелец подтвердил
+        // черновик (это может случиться и неделю спустя) — иначе экспорт
+        // за период показывал бы движение задним числом в чужом периоде.
+        date: new Date(draft.createdAt).toISOString().slice(0, 10),
       });
       store.updateDraft(draft.id, { status: "confirmed", movementId: movement.id });
 
