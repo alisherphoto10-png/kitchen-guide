@@ -791,13 +791,24 @@
   }
 
   async function loadDraftPhoto(draft) {
-    if (!draft.photo || draftPhotoUrls[draft.id]) return;
+    const img = document.getElementById(`draft-photo-${draft.id}`);
+    if (!img || !draft.photo) return;
+    // Блоб уже скачан раньше (например, при первой отрисовке черновика) —
+    // но каждый renderDrafts() (степпер, выбор кандидата, переключатель
+    // приход/списание — всё перерисовывает список целиком) создаёт НОВЫЙ
+    // <img> без src. Раньше тут был ранний return по одному кэшу
+    // draftPhotoUrls, из-за чего src на новом элементе никогда не
+    // проставлялся заново — фото визуально "пропадало" до перезагрузки
+    // страницы, хотя сам файл никуда не девался.
+    if (draftPhotoUrls[draft.id]) {
+      img.src = draftPhotoUrls[draft.id];
+      return;
+    }
     const res = await fetch(`/api/oko-inventory/photos/${draft.photo}`, { headers: authHeaders() });
     if (!res.ok) return;
     const blob = await res.blob();
     draftPhotoUrls[draft.id] = URL.createObjectURL(blob);
-    const img = document.getElementById(`draft-photo-${draft.id}`);
-    if (img) img.src = draftPhotoUrls[draft.id];
+    img.src = draftPhotoUrls[draft.id];
   }
 
   async function confirmDraft(id) {
@@ -910,13 +921,25 @@
   }
 
   async function loadPhoto(item) {
-    if (!item.photo || photoUrls[item.id]) return;
+    const img = document.getElementById(`photo-${item.id}`);
+    if (!img || !item.photo) return;
+    // Тот же баг, что и с фото черновиков (см. loadDraftPhoto) — блоб уже
+    // скачан раньше, но render() (вызывается после смены категории,
+    // приход/списание, поиска, фильтра и т.д.) каждый раз пересоздаёт
+    // <img> заново через innerHTML, без src. Ранний return по кэшу
+    // photoUrls означал, что src на НОВОМ элементе никогда не
+    // проставлялся — фото визуально пропадало после любого действия,
+    // хотя сам файл на диске никуда не девался (помогала только
+    // перезагрузка страницы, которая заново пересоздавала photoUrls "с нуля").
+    if (photoUrls[item.id]) {
+      img.src = photoUrls[item.id];
+      return;
+    }
     const res = await fetch(`/api/oko-inventory/photos/${item.photo}`, { headers: authHeaders() });
     if (!res.ok) return;
     const blob = await res.blob();
     photoUrls[item.id] = URL.createObjectURL(blob);
-    const img = document.getElementById(`photo-${item.id}`);
-    if (img) img.src = photoUrls[item.id];
+    img.src = photoUrls[item.id];
   }
 
   function render() {
