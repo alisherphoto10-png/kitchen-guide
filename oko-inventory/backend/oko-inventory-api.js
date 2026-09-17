@@ -8,6 +8,15 @@ const inventoryTelegram = require("./oko-inventory-telegram");
 const { readKnownChats } = require("./oko-known-chats");
 
 const FONT_REGULAR = path.join(__dirname, "fonts", "DejaVuSans.ttf");
+
+// Тот же приём экранирования, что и в oko-waiter-guide — имя позиции
+// вводит администратор свободным текстом, теоретически может содержать
+// служебные для Markdown символы (_, *, `, [), которые без экранирования
+// либо сломают форматирование сообщения, либо случайно что-то выделят.
+function escapeMd(value) {
+  return String(value).replace(/([_*`[])/g, "\\$1");
+}
+const DIVIDER = "━━━━━━━━━━━━━━";
 const FONT_BOLD = path.join(__dirname, "fonts", "DejaVuSans-Bold.ttf");
 
 function requireAdmin(req, res, next) {
@@ -135,11 +144,18 @@ function createOkoInventoryRouter(bot) {
       return res.json({ ok: true, confirmationSent: false });
     }
     try {
-      await bot.sendMessage(
-        chatId,
-        "✅ Эта тема подключена для приёма фото списаний/прихода утвари.\nКидайте сюда фото с короткой подписью (например «разбили 2 тарелки») — я подготовлю черновик, подтвердить нужно будет в админке инвентаризации.",
-        threadId ? { message_thread_id: threadId } : undefined,
-      );
+      const text = [
+        "✅ *Тема подключена*",
+        DIVIDER,
+        "Кидайте сюда 📷 фото с короткой подписью, например:",
+        "_«разбили 2 тарелки»_ или _«пришло 5 половников»_",
+        "",
+        "Я подготовлю черновик — подтвердить нужно будет в админке инвентаризации.",
+      ].join("\n");
+      await bot.sendMessage(chatId, text, {
+        parse_mode: "Markdown",
+        ...(threadId ? { message_thread_id: threadId } : {}),
+      });
       res.json({ ok: true, confirmationSent: true });
     } catch (err) {
       res.json({ ok: true, confirmationSent: false, sendMessageError: err.message });
@@ -178,8 +194,16 @@ function createOkoInventoryRouter(bot) {
       store.updateDraft(draft.id, { status: "confirmed", movementId: movement.id });
 
       if (bot && draft.chatId) {
+        const sign = movement.type === "приход" ? "➕ Приход" : "➖ Списание";
+        const text = [
+          "✅ *Записано*",
+          DIVIDER,
+          `*${escapeMd(item.name)}*`,
+          `${sign}: *${movement.qty} ${escapeMd(item.unit)}*`,
+        ].join("\n");
         bot
-          .sendMessage(draft.chatId, `✅ Записано: «${item.name}» — ${movement.type} ${movement.qty} ${item.unit}.`, {
+          .sendMessage(draft.chatId, text, {
+            parse_mode: "Markdown",
             reply_to_message_id: draft.messageId,
             message_thread_id: draft.threadId || undefined,
           })

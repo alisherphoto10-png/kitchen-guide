@@ -5,6 +5,14 @@ const store = require("./oko-inventory-store");
 const DATA_DIR = path.join(__dirname, "data");
 const CONFIG_PATH = path.join(DATA_DIR, "oko-inventory-telegram-config.json");
 
+// Тот же приём, что и в oko-waiter-guide-api.js — угаданное название позиции
+// уже пришло из каталога (админ вводил вручную), но экранируем на всякий
+// случай: спецсимволы Markdown там теоретически возможны.
+function escapeMd(value) {
+  return String(value).replace(/([_*`[])/g, "\\$1");
+}
+const DIVIDER = "━━━━━━━━━━━━━━";
+
 function readConfig() {
   try {
     return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
@@ -178,14 +186,21 @@ function registerInventoryDraftListener(bot) {
         nameGuess: parsed.nameGuess,
       });
 
-      const lines = ["📝 Принято в обработку."];
-      lines.push(guess ? `Похоже на: «${guess.name}»` : "Позицию не нашёл — выберу вручную.");
-      lines.push(parsed.qty ? `Количество: ${parsed.qty}` : "Количество не распознано — впишу вручную.");
-      lines.push(`Тип: ${parsed.direction}.`);
+      const topCandidate = candidates[0];
+      const lines = ["📝 *Принято в обработку*", DIVIDER];
+      lines.push(
+        guess
+          ? `Похоже на: *${escapeMd(guess.name)}*${topCandidate ? ` (${topCandidate.confidence}%)` : ""}`
+          : "Позицию не нашёл — выберу вручную.",
+      );
+      lines.push(parsed.qty ? `Количество: *${parsed.qty}*` : "Количество не распознано — впишу вручную.");
+      lines.push(`Тип: *${parsed.direction}*`);
+      lines.push("");
       lines.push("Подтвердите в админке инвентаризации.");
 
       bot
         .sendMessage(msg.chat.id, lines.join("\n"), {
+          parse_mode: "Markdown",
           reply_to_message_id: msg.message_id,
           message_thread_id: msg.message_thread_id,
         })
