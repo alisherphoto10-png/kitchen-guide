@@ -1,11 +1,17 @@
 const fs = require("fs");
 const path = require("path");
+const bcrypt = require("bcryptjs");
+const sharp = require("sharp");
 
 const DATA_DIR = path.join(__dirname, "data");
 const SECTIONS_PATH = path.join(DATA_DIR, "sections.json");
 const DISHES_PATH = path.join(DATA_DIR, "dishes.json");
-const STATUSES_PATH = path.join(DATA_DIR, "statuses.json");
 const PHOTOS_DIR = path.join(DATA_DIR, "photos");
+const FEEDBACK_PATH = path.join(DATA_DIR, "feedback.json");
+const USERS_PATH = path.join(DATA_DIR, "users.json");
+const ACTIVITY_PATH = path.join(DATA_DIR, "activity.json");
+const STATUSES_PATH = path.join(DATA_DIR, "statuses.json");
+const FRONTEND_DIR = "/home/kitchendesk/frontend/waiter-guide";
 
 // Список статусов ("Хит", "Популярное", ...) — управляемый, не зашит в код.
 // При первом обращении, если файла ещё нет, заводим эти два с ФИКСИРОВАННЫМИ
@@ -113,6 +119,33 @@ function deletePhoto(filename) {
     // already gone
   }
 }
+
+// Приводит загруженное изображение (в любом размере/ориентации) к рабочему
+// виду — автоповорот по EXIF, разумный размер, пережатие в JPEG. Даёт
+// владельцу "загрузил и всё" — не нужно самому обрезать/сжимать фото.
+async function processImageBuffer(dataUri, { maxDim, quality = 82, flattenBlack = false }) {
+  if (!dataUri) return null;
+  const match = /^data:image\/(png|jpeg|jpg|webp);base64,(.+)$/.exec(dataUri);
+  if (!match) return null;
+  let img = sharp(Buffer.from(match[2], "base64")).rotate();
+  if (flattenBlack) img = img.flatten({ background: "#000000" });
+  img = img.resize({ width: maxDim, height: maxDim, fit: "inside", withoutEnlargement: true });
+  return img.jpeg({ quality }).toBuffer();
+}
+
+async function saveProcessedPhoto(dataUri, opts) {
+  const buf = await processImageBuffer(dataUri, opts);
+  if (!buf) return null;
+  ensureDirs();
+  const filename = `${makeId()}.jpg`;
+  fs.writeFileSync(path.join(PHOTOS_DIR, filename), buf);
+  return filename;
+}
+
+function saveStaticImage(buffer, absPath) {
+  fs.mkdirSync(path.dirname(absPath), { recursive: true });
+  fs.writeFileSync(absPath, buffer);
+}
 function photoPath(filename) {
   return path.join(PHOTOS_DIR, filename);
 }
@@ -129,14 +162,17 @@ function dishWaiterPhrase(dish) {
 }
 
 // ---------- sections ----------
+
+// "group" разделяет разделы по цеху (кухня/бар) для ограниченного доступа
+// бар-аккаунта — отсутствие поля у старых разделов трактуется как "kitchen"
+// (sectionGroup() ниже), так что существующие данные ничего не потеряли.
+//
 // Один уровень вложенности: раздел (parentId: null) может содержать
 // подразделы (parentId: <id раздела>). Подраздел не может сам иметь
-// подразделы — при создании подраздела parentId родителя игнорируется
-// (см. addSection). Блюдо может быть заведено и прямо в раздел с
-// подразделами (просто не попадёт ни в один из них), и в сам подраздел —
-// оба варианта равноправны.
-
-function addSection({ name, icon, parentId }) {
+// подразделы — при создании подраздела parentId родителя игнорируется (см.
+// ниже). Блюдо может быть заведено и прямо в раздел с подразделами (просто
+// не попадёт ни в один из них), и в сам подраздел — оба варианта равноправны.
+function addSection({ name, icon, group, parentId }) {
   const sections = readSections();
   // Подраздел у подраздела не бывает — если parentId указывает на что-то,
   // что само уже подраздел, кладём на верхний уровень его родителя.
@@ -154,21 +190,37 @@ function addSection({ name, icon, parentId }) {
     name: (name || "").trim(),
     icon: icon || "",
     order: nextOrder,
+    group: group === "bar" ? "bar" : "kitchen",
   };
   sections.push(section);
   writeSections(sections);
   return section;
 }
 
-function updateSection(id, patch) {
+async function updateSection(id, patch) {
   const sections = readSections();
   const section = sections.find((s) => s.id === id);
   if (!section) return null;
   if (patch.name !== undefined) section.name = patch.name.trim();
   if (patch.icon !== undefined) section.icon = patch.icon;
   if (patch.order !== undefined) section.order = patch.order;
+  if (patch.group !== undefined) section.group = patch.group === "bar" ? "bar" : "kitchen";
+  if (patch.removePhoto) {
+    deletePhoto(section.photo);
+    section.photo = "";
+  } else if (patch.photo !== undefined) {
+    const filename = await saveProcessedPhoto(patch.photo, { maxDim: 900 });
+    if (filename) {
+      deletePhoto(section.photo);
+      section.photo = filename;
+    }
+  }
   writeSections(sections);
   return section;
+}
+
+function sectionGroup(section) {
+  return section && section.group === "bar" ? "bar" : "kitchen";
 }
 
 function deleteSection(id) {
@@ -186,16 +238,24 @@ function deleteSection(id) {
   return true;
 }
 
-// orderedIds — id ОДНОЙ группы «родных» разделов (сиблингов с одним
-// parentId) — так вызывает админка (пересобирает список внутри одного
-// уровня и шлёт его целиком). Порядок между разными родителями не имеет
-// значения, важен только внутри своей группы.
+// orderedIds может быть ЧАСТЬЮ всех разделов (например, бар-доступ
+// переставляет только свои барные разделы) — вместо того чтобы просто
+// пронумеровать переданный список 1..N (что перемешало бы его с чужими
+// разделами кухни, которые делят с ним одно общее поле order), сохраняем
+// позиции, которые эти разделы УЖЕ занимали в общем списке, и просто
+// переставляем сами разделы внутри этих позиций в новом порядке — разделы,
+// не упомянутые в orderedIds, остаются на своих местах как были.
 function reorderSections(orderedIds) {
-  const sections = readSections();
-  orderedIds.forEach((id, i) => {
-    const s = sections.find((x) => x.id === id);
-    if (s) s.order = i + 1;
+  const sections = readSections().slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+  const idSet = new Set(orderedIds);
+  const slots = [];
+  sections.forEach((s, i) => { if (idSet.has(s.id)) slots.push(i); });
+  const byId = new Map(sections.map((s) => [s.id, s]));
+  slots.forEach((slotIndex, k) => {
+    const id = orderedIds[k];
+    if (id !== undefined && byId.has(id)) sections[slotIndex] = byId.get(id);
   });
+  sections.forEach((s, i) => { s.order = i + 1; });
   writeSections(sections);
 }
 
@@ -283,6 +343,7 @@ function addDish(input) {
     allergens: Array.isArray(input.allergens) ? input.allergens.filter(Boolean) : [],
     features: Array.isArray(input.features) ? input.features.filter(Boolean) : [],
     recommendations: Array.isArray(input.recommendations) ? input.recommendations.filter(Boolean) : [],
+    warning: (input.warning || "").trim(),
     faq: Array.isArray(input.faq) ? input.faq.filter((f) => f && f.question) : [],
     hidden: Boolean(input.hidden),
     createdAt: Date.now(),
@@ -310,6 +371,7 @@ function updateDish(id, patch) {
   if (patch.allergens !== undefined) dish.allergens = patch.allergens.filter(Boolean);
   if (patch.features !== undefined) dish.features = patch.features.filter(Boolean);
   if (patch.recommendations !== undefined) dish.recommendations = patch.recommendations.filter(Boolean);
+  if (patch.warning !== undefined) dish.warning = patch.warning.trim();
   if (patch.faq !== undefined) dish.faq = patch.faq.filter((f) => f && f.question);
   if (patch.hidden !== undefined) dish.hidden = Boolean(patch.hidden);
   if (patch.order !== undefined) dish.order = patch.order;
@@ -337,6 +399,16 @@ function updateDish(id, patch) {
   if (patch.removePhoto) {
     dish.photos.forEach(deletePhoto);
     dish.photos = [];
+  }
+  // Переупорядочивание (в т.ч. "сделать главным" = переставить на индекс 0 —
+  // отдельного флага для главного фото нет, весь код уже читает photos[0]
+  // как основное). Принимаем только перестановку УЖЕ существующего набора
+  // файлов — никакие новые имена через этот путь не появляются и не исчезают.
+  if (Array.isArray(patch.photosOrder)) {
+    const current = new Set(dish.photos);
+    const requested = patch.photosOrder.filter((name) => current.has(name));
+    const isSameSet = requested.length === dish.photos.length && new Set(requested).size === current.size;
+    if (isSameSet) dish.photos = requested;
   }
   delete dish.photo; // поле больше не используется отдельно от массива
 
@@ -381,6 +453,7 @@ function shapeDish(dish, slug) {
     allergens: dish.allergens || [],
     features: dish.features || [],
     recommendations: dish.recommendations || [],
+    warning: dish.warning || "",
     faq: dish.faq || [],
     hidden: Boolean(dish.hidden),
   };
@@ -435,7 +508,118 @@ function getOrphanDishes() {
   return dishes.filter((d) => !d.sectionId || !sectionIds.has(d.sectionId)).map((d) => shapeDish(d, dishSlugs.get(d.id)));
 }
 
+// ---------- feedback ----------
+// Простой append-лог отзывов официантов — страховка на случай, если
+// отправка в Telegram не удалась (бот недоступен и т.п.), чтобы отзыв не
+// потерялся молча. Не показывается нигде в UI, только файл на диске.
+function addFeedback({ message, dishName, name }) {
+  const list = readJson(FEEDBACK_PATH, []);
+  list.push({ id: makeId(), message, dishName: dishName || "", name: name || "", createdAt: Date.now() });
+  writeJson(FEEDBACK_PATH, list);
+}
+
+// ---------- users (именованный персонал: кухня/бар/оба) ----------
+// Владелец (X-Admin-Password из .env) сюда не входит — это отдельный слой
+// НАЗВАННЫХ учёток, которые владелец сам создаёт для персонала.
+function readUsers() {
+  return readJson(USERS_PATH, []);
+}
+function writeUsers(users) {
+  writeJson(USERS_PATH, users);
+}
+function normalizeRole(role) {
+  return ["kitchen", "bar", "both"].includes(role) ? role : "kitchen";
+}
+function shapeUser(u) {
+  return { id: u.id, name: u.name, login: u.login, role: normalizeRole(u.role), createdAt: u.createdAt };
+}
+function findUserByLogin(login) {
+  return readUsers().find((u) => u.login === login) || null;
+}
+function addUser({ name, login, password, role }) {
+  const users = readUsers();
+  if (users.some((u) => u.login === login)) {
+    const err = new Error("Логин уже занят");
+    err.code = "LOGIN_TAKEN";
+    throw err;
+  }
+  const user = {
+    id: makeId(),
+    name: (name || "").trim(),
+    login: (login || "").trim(),
+    passwordHash: bcrypt.hashSync(String(password || ""), 10),
+    role: normalizeRole(role),
+    createdAt: Date.now(),
+  };
+  users.push(user);
+  writeUsers(users);
+  return shapeUser(user);
+}
+function updateUser(id, patch) {
+  const users = readUsers();
+  const user = users.find((u) => u.id === id);
+  if (!user) return null;
+  if (patch.login !== undefined) {
+    const login = String(patch.login).trim();
+    if (users.some((u) => u.id !== id && u.login === login)) {
+      const err = new Error("Логин уже занят");
+      err.code = "LOGIN_TAKEN";
+      throw err;
+    }
+    user.login = login;
+  }
+  if (patch.name !== undefined) user.name = patch.name.trim();
+  if (patch.role !== undefined) user.role = normalizeRole(patch.role);
+  if (patch.password) user.passwordHash = bcrypt.hashSync(String(patch.password), 10);
+  writeUsers(users);
+  return shapeUser(user);
+}
+function deleteUser(id) {
+  const users = readUsers();
+  const next = users.filter((u) => u.id !== id);
+  if (next.length === users.length) return false;
+  writeUsers(next);
+  return true;
+}
+function verifyUserPassword(login, password) {
+  const user = findUserByLogin(login);
+  if (!user) return null;
+  if (!bcrypt.compareSync(String(password || ""), user.passwordHash)) return null;
+  return shapeUser(user);
+}
+
+// ---------- activity log (кто что создал/изменил/удалил) ----------
+// Append-only, видит только владелец. Без field-level диффов — только
+// "кто, что за действие, над каким блюдом/разделом" — ровно то, что просили.
+function logActivity({ userId, userName, action, targetName, sectionName }) {
+  try {
+    const list = readJson(ACTIVITY_PATH, []);
+    list.push({
+      id: makeId(), at: Date.now(),
+      userId: userId || null, userName: userName || "Владелец",
+      action, targetName: targetName || "", sectionName: sectionName || "",
+    });
+    writeJson(ACTIVITY_PATH, list);
+  } catch (e) {
+    console.error("[oko-waiter-guide] activity log failed:", e.message);
+  }
+}
+function getActivity(limit) {
+  const list = readJson(ACTIVITY_PATH, []);
+  return list.slice(-(limit || 200)).reverse();
+}
+
 module.exports = {
+  addFeedback,
+  sectionGroup,
+  addUser,
+  updateUser,
+  deleteUser,
+  readUsers,
+  shapeUser,
+  verifyUserPassword,
+  logActivity,
+  getActivity,
   readSections,
   addSection,
   updateSection,
@@ -461,4 +645,8 @@ module.exports = {
   SECTIONS_PATH,
   DISHES_PATH,
   STATUSES_PATH,
+  FRONTEND_DIR,
+  processImageBuffer,
+  saveProcessedPhoto,
+  saveStaticImage,
 };

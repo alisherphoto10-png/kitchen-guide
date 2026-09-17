@@ -3,766 +3,1880 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OKO — пособие официанта (редактор)</title>
+<title>OKO — Админка</title>
 <style>
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 16px; }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  h2 { font-size: 16px; margin: 0; }
-  h3 { font-size: 13px; margin: 0 0 6px; color: #c9d1d9; }
-  .hint { font-size: 12px; color: #8b949e; margin: 0 0 16px; }
-  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px; margin-bottom: 14px; }
-  .field { margin-bottom: 10px; }
-  .field label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 4px; }
-  .field input, .field select, .field textarea {
-    width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d;
-    color: #e6edf3; border-radius: 6px; font-size: 14px; font-family: inherit;
+  :root {
+    --bg:#0f0c09; --card:#1c1712; --card2:#160f0b; --border:#2c2319; --border-soft:#221a13;
+    --text:#f3ede2; --muted:#b6a993; --dim:#8a7c68; --accent:#d9a24a; --accent-soft:#241b0f;
+    --bad:#e0663f; --bad-soft:rgba(224,102,63,0.14); --info:#4b9fe8; --info-soft:rgba(75,159,232,0.14);
+    --gold-text:#f0d9a8;
   }
-  .field textarea { resize: vertical; min-height: 54px; }
-  .field .sub-hint { font-size: 11px; color: #6e7681; margin-top: 3px; }
-  .checkbox-field { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .checkbox-field input { width: auto; }
-  .checkbox-field label { font-size: 13px; color: #e6edf3; margin: 0; }
-  .subform-group { border: 1px dashed #30363d; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
-  button.action { background: #238636; color: white; border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
-  button.secondary { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 7px 11px; cursor: pointer; font-size: 12.5px; }
-  button.danger { background: #21262d; color: #f85149; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 12px; }
-  button.icon { background: none; border: none; color: #8b949e; cursor: pointer; font-size: 14px; padding: 2px 6px; }
-  #gate { max-width: 320px; margin: 80px auto; text-align: center; }
-  #gate input { width: 100%; padding: 10px; margin: 10px 0; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; }
-  #app { display: none; max-width: 820px; margin: 0 auto; }
-  .status { font-size: 13px; margin-top: 8px; min-height: 16px; }
-  .status.error { color: #f85149; }
-  .status.ok { color: #3fb950; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { font-size: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(120% 50% at 50% 0%, rgba(217,162,74,0.05), transparent 60%), var(--bg);
+    color: var(--text); margin: 0; -webkit-font-smoothing: antialiased;
+  }
+  button, input, textarea, select { font-family: inherit; }
+  h1, h2, h3, h4, h5 { margin: 0; }
+  button { cursor: pointer; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
 
-  .section-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; }
-  .section-title { display: flex; align-items: center; gap: 8px; }
-  .section-count { font-size: 12px; color: #8b949e; font-weight: 400; }
-  .section-actions { display: flex; gap: 4px; flex-wrap: wrap; }
-  .section-body { display: none; margin-top: 12px; }
-  .section-body.open { display: block; }
+  /* ---------- gate ---------- */
+  #gate {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .gate-card {
+    width: 100%; max-width: 340px; background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+    padding: 28px 24px; text-align: center;
+  }
+  .gate-card .wordmark { font-size: 1.375rem; font-weight: 800; letter-spacing: 0.03em; margin-bottom: 2px; }
+  .gate-card .tagline { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin-bottom: 22px; }
+  .gate-card input {
+    width: 100%; background: rgba(255,255,255,0.06); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 14px; color: var(--text); font-size: 0.938rem; margin-bottom: 12px;
+  }
+  .gate-card input:focus { outline: none; border-color: var(--accent); }
+  .btn-primary {
+    width: 100%; background: var(--accent); color: #1a1108; border: none; border-radius: 100px;
+    padding: 12px; font-size: 0.906rem; font-weight: 800;
+  }
+  .status-msg { font-size: 0.813rem; margin-top: 10px; min-height: 16px; }
+  .status-msg.error { color: var(--bad); }
+  .status-msg.ok { color: var(--accent); }
 
-  .dish-row { border: 1px solid #21262d; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; background: #0d1117; }
-  .dish-row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; }
-  .dish-row-head .name { font-size: 14px; font-weight: 600; }
-  .dish-row-head .name.hidden-dish { color: #8b949e; text-decoration: line-through; }
-  .badge-hit { font-size: 10.5px; background: #3d2c05; color: #e3b341; border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
-  .chevron { flex: none; color: #8b949e; font-size: 12px; width: 10px; }
-  .dish-thumb { width: 32px; height: 32px; border-radius: 6px; object-fit: cover; background: #161b22; flex: none; }
-  .dish-actions { display: flex; gap: 4px; }
-  .dish-edit { display: none; margin-top: 10px; border-top: 1px solid #21262d; padding-top: 10px; }
-  .dish-edit.open { display: block; }
+  .settings-media-row { display: flex; gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .settings-media-row:last-of-type { border-bottom: none; }
+  .settings-media-preview { width: 68px; height: 68px; border-radius: 12px; object-fit: cover; background: var(--card2); border: 1px solid var(--border); flex: none; }
+  .settings-media-info { flex: 1; min-width: 0; }
+  .settings-media-title { font-weight: 700; font-size: 0.875rem; margin-bottom: 3px; }
+  .settings-media-hint { font-size: 0.75rem; color: var(--dim); margin-bottom: 8px; line-height: 1.4; }
 
-  .calc-table { border: 1px dashed #30363d; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
-  .calc-row { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
-  .calc-row input { flex: 1; padding: 6px; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 13px; }
-  .calc-row input.amount { flex: 0 0 70px; }
-  .calc-row input.unit { flex: 0 0 60px; }
+  /* ---------- shell ---------- */
+  #app { display: none; min-height: 100vh; }
+  .admin-shell { display: flex; min-height: 100vh; }
+  .admin-sidebar {
+    width: 240px; flex: none; background: var(--card2); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; padding: 22px 16px; position: sticky; top: 0; height: 100vh;
+  }
+  .sidebar-brand { text-align: center; margin-bottom: 26px; }
+  .sidebar-brand .wordmark { font-size: 1.25rem; font-weight: 800; letter-spacing: 0.03em; }
+  .sidebar-brand .tagline { font-size: 0.688rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+  .sidebar-brand .sub { font-size: 0.688rem; color: var(--dim); margin-top: 1px; }
+  .sidebar-nav { display: flex; flex-direction: column; gap: 4px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: none;
+    color: var(--muted); padding: 11px 12px; border-radius: 12px; font-size: 0.875rem; font-weight: 600;
+  }
+  .nav-item svg { width: 18px; height: 18px; flex: none; }
+  .nav-item .nav-count { margin-left: auto; font-size: 0.719rem; color: var(--dim); font-weight: 700; }
+  .nav-item.active { background: var(--accent); color: #1a1108; }
+  .nav-item.active .nav-count { color: rgba(26,17,8,0.65); }
+  .nav-item:not(.active):hover { background: rgba(255,255,255,0.05); }
+  .sidebar-footer { margin-top: auto; }
+  .sidebar-stats { display: flex; gap: 8px; margin-bottom: 16px; }
+  .sidebar-stat { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px; text-align: center; }
+  .sidebar-stat .num { font-size: 1.25rem; font-weight: 800; color: var(--gold-text); }
+  .sidebar-stat .lbl { font-size: 0.656rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+  .btn-logout {
+    width: 100%; background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 12px;
+    padding: 10px; font-size: 0.813rem; font-weight: 600;
+  }
 
-  .faq-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-  .faq-row .faq-top { display: flex; gap: 6px; }
-  .faq-row input, .faq-row textarea { padding: 6px; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 13px; }
-  .faq-row input { flex: 1; }
+  .admin-main { flex: 1; min-width: 0; padding: 24px 28px 60px; max-width: 980px; }
 
-  .photo-gallery { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-  .photo-thumb-wrap { position: relative; }
-  .photo-thumb-wrap img { width: 56px; height: 56px; border-radius: 6px; object-fit: cover; background: #161b22; }
-  .photo-thumb-wrap button { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; background: #f85149; color: white; border: none; font-size: 11px; line-height: 1; cursor: pointer; }
+  /* ---------- mobile top bar ---------- */
+  .mobile-topbar { display: none; }
+  .mobile-menu-btn { display: none; }
+  @media (max-width: 1023px) {
+    .admin-sidebar { display: none; }
+    .admin-main { position: relative; isolation: isolate; overflow: clip; }
+    .mobile-hero-photo {
+      position: absolute; top: 0; left: 0; right: 0; height: 640px; z-index: -1; pointer-events: none;
+      background-image: url('../hero/hero-1.jpg'); background-size: cover; background-position: center 22%;
+      filter: blur(4px); transform: scale(1.04);
+    }
+    .mobile-hero-photo::after {
+      content: ""; position: absolute; inset: 0;
+      background: linear-gradient(180deg, rgba(15,12,9,0.32) 0%, rgba(15,12,9,0.55) 42%, rgba(15,12,9,0.2) 62%, var(--bg) 100%);
+    }
+    .mobile-topbar {
+      display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 10;
+      background: rgba(15,12,9,0.4); backdrop-filter: blur(16px) saturate(1.2); -webkit-backdrop-filter: blur(16px) saturate(1.2);
+      border-bottom: 1px solid rgba(255,255,255,0.07); padding: 12px 16px;
+    }
+    .mobile-topbar .wordmark { font-weight: 800; font-size: 0.938rem; }
+    .mobile-topbar .tagline { font-size: 0.594rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; }
+    .mobile-topbar .spacer { flex: 1; }
+    .mobile-menu-btn { display: flex; }
+    .admin-main { padding: 18px 16px 90px; max-width: 100%; }
 
-  .new-section-form { display: flex; gap: 8px; }
-  .new-section-form input { flex: 1; }
+    .view-head { margin: -18px -16px 18px; padding: 22px 16px 18px; }
+  }
 
-  .orphans { border-color: #a6741a; }
+  /* ---------- mobile side nav drawer ---------- */
+  .mobile-nav-backdrop {
+    position: fixed; inset: 0; z-index: 65; background: rgba(0,0,0,0);
+    opacity: 0; pointer-events: none; transition: opacity 220ms ease, background 220ms ease;
+  }
+  .mobile-nav-backdrop.open { background: rgba(0,0,0,0.6); opacity: 1; pointer-events: auto; }
+  .mobile-nav-drawer {
+    position: fixed; top: 0; right: 0; height: 100%; width: 78%; max-width: 300px; z-index: 66;
+    background: var(--card); border-left: 1px solid var(--border); box-shadow: -12px 0 32px rgba(0,0,0,0.35);
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+    display: flex; flex-direction: column; overflow-y: auto;
+    transform: translateX(100%); transition: transform 260ms cubic-bezier(0.16,1,0.3,1);
+  }
+  .mobile-nav-drawer.open { transform: translateX(0); }
+  .mobile-nav-drawer .drawer-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .mobile-nav-drawer .drawer-head .wordmark { font-weight: 800; font-size: 1.05rem; }
+  .mobile-nav-drawer .drawer-head .tagline { font-size: 0.625rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; }
+  .mobile-nav-drawer .sidebar-nav { margin-bottom: 8px; }
+  .mobile-nav-drawer .sidebar-footer { margin-top: auto; padding-top: 14px; }
 
-  .subsections { margin-top: 10px; padding-left: 14px; border-left: 2px solid #21262d; }
-  .subsection-card { border: 1px solid #21262d; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: #0d1117; }
-  .subsection-card .section-title h2 { font-size: 14px; }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 12px; background: var(--card); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; color: var(--text); flex: none;
+  }
+  .icon-btn svg { width: 18px; height: 18px; }
+  .icon-btn.danger { color: var(--bad); }
+
+  /* ---------- generic view header ---------- */
+  .view-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  .view-head h1 { font-size: 1.375rem; font-weight: 800; }
+  .view-head .hint { font-size: 0.813rem; color: var(--dim); margin-top: 3px; }
+  .btn-accent {
+    display: inline-flex; align-items: center; gap: 6px; background: var(--accent); color: #1a1108; border: none;
+    border-radius: 100px; padding: 10px 16px; font-size: 0.844rem; font-weight: 800; white-space: nowrap;
+  }
+  .btn-accent svg { width: 15px; height: 15px; }
+  .btn-ghost {
+    display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.06); color: var(--text);
+    border: 1px solid var(--border); border-radius: 100px; padding: 10px 16px; font-size: 0.844rem; font-weight: 700;
+  }
+
+  /* ---------- search + filters ---------- */
+  .search-box { position: relative; margin-bottom: 14px; }
+  .search-box input {
+    width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 11px 14px 11px 38px; color: var(--text); font-size: 0.875rem;
+  }
+  .search-box input:focus { outline: none; border-color: var(--accent); }
+  .search-box .ic { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--dim); }
+  .search-box .ic svg { width: 16px; height: 16px; }
+
+  .chip-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 16px; }
+  .chip-row::-webkit-scrollbar { height: 6px; }
+  .filter-chip {
+    flex: none; background: var(--card); border: 1px solid var(--border); color: var(--muted); border-radius: 100px;
+    padding: 8px 14px; font-size: 0.781rem; font-weight: 700;
+  }
+  .filter-chip.active { background: var(--accent); border-color: var(--accent); color: #1a1108; }
+
+  /* ---------- dish list ---------- */
+  .dish-grid { display: flex; flex-direction: column; gap: 10px; }
+  .dish-row-card {
+    display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 10px 12px; text-align: left; width: 100%;
+  }
+  .dish-row-card .thumb { width: 48px; height: 48px; border-radius: 10px; object-fit: cover; background: var(--card2); flex: none; }
+  .dish-row-card .thumb.placeholder { display: flex; align-items: center; justify-content: center; color: var(--dim); }
+  .dish-row-card .thumb.placeholder svg { width: 18px; height: 18px; }
+  .dish-row-card .body { flex: 1; min-width: 0; }
+  .dish-row-card .top { display: flex; align-items: center; gap: 6px; }
+  .dish-row-card .name { font-weight: 700; font-size: 0.906rem; color: var(--gold-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dish-row-card .name.hidden-flag { color: var(--dim); text-decoration: line-through; }
+  .dish-row-card .cat { font-size: 0.719rem; color: var(--accent); margin-top: 1px; }
+  .dish-row-card .status-tag { flex: none; font-size: 0.688rem; font-weight: 700; color: var(--gold-text); }
+  .dish-row-card .chev { flex: none; color: var(--dim); }
+  .dish-row-card .chev svg { width: 16px; height: 16px; }
+  .empty-note { text-align: center; padding: 40px 20px; color: var(--dim); font-size: 0.875rem; }
+
+  /* ---------- categories view ---------- */
+  .cat-row {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 10px; background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; cursor: grab;
+  }
+  .cat-row.dragging, .cat-group.dragging { opacity: 0.4; }
+  .cat-row .grip { color: var(--dim); font-size: 1rem; line-height: 1; flex: none; }
+  .cat-row .icon-chip {
+    width: 36px; height: 36px; border-radius: 10px; background: var(--card2); display: flex; align-items: center;
+    justify-content: center; color: var(--gold-text); flex: none; overflow: hidden;
+  }
+  .cat-row .icon-chip svg { width: 17px; height: 17px; }
+  .cat-row .icon-chip img { width: 100%; height: 100%; object-fit: cover; }
+  .cat-row .info { flex: 1 1 140px; min-width: 140px; }
+  .cat-row .name { font-weight: 700; font-size: 0.875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cat-row .count { font-size: 0.719rem; color: var(--dim); }
+  .cat-row-extra { display: flex; align-items: center; gap: 6px; margin-left: auto; flex: none; }
+  .cat-row .cat-actions { display: flex; gap: 4px; flex: none; }
+  .cat-row .cat-actions button { width: 32px; height: 32px; border-radius: 9px; background: var(--card2); border: 1px solid var(--border); color: var(--muted); }
+  .cat-row .cat-actions button svg { width: 14px; height: 14px; }
+
+  .subsections { margin: 6px 0 10px 20px; padding-left: 14px; border-left: 2px solid var(--border); }
+  .subsections .cat-row { padding: 8px 10px; margin-bottom: 6px; cursor: default; }
+  .subsections .cat-row .icon-chip { width: 28px; height: 28px; }
+  .subsections .cat-row .icon-chip svg { width: 13px; height: 13px; }
+  .btn-add-subsection {
+    background: none; border: 1px dashed var(--border); color: var(--dim); border-radius: 10px;
+    padding: 7px 12px; font-size: 0.75rem; font-weight: 700; width: 100%;
+  }
+  .quick-add-row { display: flex; gap: 8px; margin-top: 8px; }
+  .quick-add-row input { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; color: var(--text); font-size: 0.813rem; }
 
   .status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .status-row input[type="text"] { padding: 6px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 13px; }
-  .status-row .emoji-input { width: 52px; text-align: center; }
+  .status-row .emoji-input { width: 52px; text-align: center; flex: none; }
   .status-row .label-input { flex: 1; }
-  .new-status-form { display: flex; gap: 8px; }
+  .status-row input { background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; color: var(--text); font-size: 0.813rem; }
+
+  .cat-form {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 18px;
+  }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 0.75rem; color: var(--dim); margin-bottom: 5px; font-weight: 600; }
+  .field .req { color: var(--bad); }
+  .field input[type=text], .field input[type=search], .field textarea, .field select {
+    width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 11px;
+    padding: 10px 12px; color: var(--text); font-size: 0.875rem;
+  }
+  .field textarea { resize: vertical; min-height: 64px; }
+  .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); }
+  /* Раскрытый список <select> — браузер рисует его сам поверх системной
+     (обычно белой) подложки и не наследует наш тёмный фон; без явного
+     background/color на <option> текст оказывается светло-серым на белом
+     и почти не виден. */
+  .field select option { background: #1c1712; color: var(--text); }
+  .field .char-count { text-align: right; font-size: 0.688rem; color: var(--dim); margin-top: 3px; }
+
+  .icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .icon-pick {
+    aspect-ratio: 1; border-radius: 11px; background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; color: var(--muted);
+  }
+  .icon-pick svg { width: 18px; height: 18px; }
+  .icon-pick.active { background: var(--accent); border-color: var(--accent); color: #1a1108; }
+
+  /* ---------- dish editor ---------- */
+  .editor-head {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .editor-head .thumb-sm { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; background: var(--card2); flex: none; }
+  .editor-head .thumb-sm.placeholder { display: flex; align-items: center; justify-content: center; color: var(--dim); }
+  .editor-head .thumb-sm.placeholder svg { width: 18px; height: 18px; }
+  .editor-head h1 { font-size: 1.125rem; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .editor-head .sub { font-size: 0.75rem; color: var(--dim); }
+  .editor-head .spacer { flex: 1; }
+  .save-indicator { font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
+  .save-indicator.dirty { color: var(--accent); }
+  .save-indicator.saved { color: #8fbf7a; }
+
+  .tabs-scroll { overflow-x: auto; margin-bottom: 18px; padding-bottom: 6px; }
+  .tabs-scroll::-webkit-scrollbar { height: 6px; }
+  .tabs { display: flex; gap: 4px; background: var(--card2); border: 1px solid var(--border); border-radius: 100px; padding: 3px; width: max-content; min-width: 100%; }
+  .tab-btn {
+    flex: none; background: none; border: none; color: var(--dim); font-size: 0.813rem; font-weight: 700;
+    padding: 9px 16px; border-radius: 100px; white-space: nowrap;
+  }
+  .tab-btn.active { background: var(--accent); color: #1a1108; }
+
+  .editor-panel { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px; margin-bottom: 16px; }
+  #editorPanel.panel-locked { pointer-events: none; opacity: 0.62; user-select: none; }
+
+  .status-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+  .status-pick {
+    background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--muted); border-radius: 100px;
+    padding: 8px 14px; font-size: 0.813rem; font-weight: 700;
+  }
+  .status-pick.active { background: var(--accent); border-color: var(--accent); color: #1a1108; }
+
+  .photo-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .photo-item { position: relative; width: 84px; height: 84px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); cursor: grab; }
+  .photo-item.dragging { opacity: 0.4; }
+  .photo-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .photo-item .main-badge {
+    position: absolute; top: 4px; left: 4px; background: var(--accent); color: #1a1108; font-size: 0.594rem;
+    font-weight: 800; padding: 2px 6px; border-radius: 100px;
+  }
+  .photo-item .rm-btn {
+    position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; background: rgba(15,12,9,0.75);
+    color: var(--bad); border: none; font-size: 0.75rem; line-height: 1;
+  }
+  .photo-item .main-btn {
+    position: absolute; bottom: 4px; left: 4px; right: 4px; background: rgba(15,12,9,0.75); color: var(--text);
+    border: none; border-radius: 6px; font-size: 0.563rem; padding: 3px; font-weight: 700;
+  }
+  .photo-add {
+    width: 84px; height: 84px; border-radius: 12px; border: 1px dashed var(--border); background: rgba(255,255,255,0.03);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--dim); gap: 4px;
+    font-size: 0.625rem; text-align: center; flex: none;
+  }
+  .photo-add svg { width: 20px; height: 20px; }
+
+  .repeatable-group { border: 1px dashed var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+  .repeatable-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; cursor: grab; }
+  .repeatable-row.dragging { opacity: 0.4; }
+  .repeatable-row .grip { color: var(--dim); flex: none; }
+  .repeatable-row input { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; color: var(--text); font-size: 0.813rem; }
+  .repeatable-row input.amount { flex: 0 0 72px; }
+  .repeatable-row input.unit { flex: 0 0 58px; }
+  .repeatable-row button.rm { flex: none; width: 30px; height: 30px; border-radius: 8px; background: var(--card2); border: 1px solid var(--border); color: var(--bad); }
+
+  .faq-block { border: 1px dashed var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+  .faq-block .faq-top { display: flex; gap: 8px; margin-bottom: 8px; }
+  .faq-block input, .faq-block textarea { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; color: var(--text); font-size: 0.813rem; }
+  .faq-block button.rm { flex: none; width: 30px; height: 30px; border-radius: 8px; background: var(--card2); border: 1px solid var(--border); color: var(--bad); }
+
+  .btn-add-row {
+    background: rgba(255,255,255,0.05); border: 1px dashed var(--border); color: var(--gold-text); border-radius: 10px;
+    padding: 9px 14px; font-size: 0.813rem; font-weight: 700; width: 100%;
+  }
+
+  .checkbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .check-item {
+    display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px 10px; font-size: 0.813rem; color: var(--muted);
+  }
+  .check-item input { accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+  .check-item.checked { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
+
+  .editor-footer { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  @media (max-width: 1023px) {
+    .editor-footer {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: rgba(15,12,9,0.96);
+      backdrop-filter: blur(10px); border-top: 1px solid var(--border);
+      padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0); pointer-events: none; opacity: 0;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+    transition: opacity 200ms ease, background 200ms ease;
+  }
+  .modal-overlay.open { background: rgba(0,0,0,0.65); pointer-events: auto; opacity: 1; }
+  .preview-modal { background: var(--card2); border: 1px solid var(--border); border-radius: 20px; padding: 14px; max-width: 420px; width: 100%; }
+  .preview-modal .phone-frame { border-radius: 28px; overflow: hidden; border: 6px solid #000; background: #000; }
+  .preview-modal iframe { width: 100%; height: 70vh; border: none; display: block; background: var(--bg); }
+  .preview-modal .close-row { display: flex; justify-content: flex-end; margin-top: 10px; }
+
+  .confirm-modal { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 20px; max-width: 360px; width: 100%; max-height: 86vh; overflow-y: auto; }
+  .confirm-modal p { font-size: 0.875rem; color: var(--muted); line-height: 1.5; margin: 8px 0 16px; }
+  .confirm-modal .row { display: flex; gap: 10px; }
+  .confirm-modal button { flex: 1; }
 </style>
 </head>
 <body>
 
 <div id="gate">
-  <h2>OKO — пособие официанта</h2>
-  <input type="password" id="passwordInput" placeholder="Пароль" onkeydown="if(event.key==='Enter') tryLogin()">
-  <button class="action" onclick="tryLogin()" style="width:100%">Войти</button>
-  <div class="status error" id="gateStatus"></div>
+  <div class="gate-card">
+    <div class="wordmark">OKO</div>
+    <div class="tagline">Админка</div>
+    <input type="text" id="loginInput" placeholder="Логин (оставьте пустым, если вы владелец)" onkeydown="if(event.key==='Enter') document.getElementById('passwordInput').focus()" autocomplete="username">
+    <input type="password" id="passwordInput" placeholder="Пароль" onkeydown="if(event.key==='Enter') tryLogin()" autocomplete="current-password">
+    <button class="btn-primary" onclick="tryLogin()">Войти</button>
+    <div class="status-msg error" id="gateStatus"></div>
+  </div>
 </div>
 
 <div id="app">
-  <h1>Пособие официанта — редактор</h1>
-  <p class="hint">
-    Разделы и блюда. Официанты читают готовый результат на отдельной странице (без пароля):
-    <code id="guideLinkText">/waiter-guide/</code>.
-  </p>
-
-  <div class="card">
-    <h2 style="margin-bottom:10px">Новый раздел</h2>
-    <div class="new-section-form">
-      <input type="text" id="newSectionName" placeholder="Например: Пасты">
-      <select id="newSectionIcon"></select>
-      <button class="action" onclick="addSection()">+ Добавить</button>
-    </div>
-    <div class="status" id="sectionStatus"></div>
+  <div class="admin-shell">
+    <aside class="admin-sidebar">
+      <div class="sidebar-brand">
+        <div class="wordmark">OKO</div>
+        <div class="tagline" id="sidebarBrandTag">Админка</div>
+        <div class="sub">Пособие официанта</div>
+      </div>
+      <nav class="sidebar-nav" id="sidebarNav"></nav>
+      <div class="sidebar-footer">
+        <div class="sidebar-stats">
+          <div class="sidebar-stat"><div class="num" id="statDishes">0</div><div class="lbl">Блюд</div></div>
+          <div class="sidebar-stat"><div class="num" id="statCats">0</div><div class="lbl">Категорий</div></div>
+        </div>
+        <button class="btn-logout" onclick="logout()">Выйти</button>
+      </div>
+    </aside>
+    <main class="admin-main">
+      <div class="mobile-hero-photo"></div>
+      <div class="mobile-topbar">
+        <button class="icon-btn" id="mobileBackBtn" style="display:none"></button>
+        <div>
+          <div class="wordmark">OKO</div>
+          <div class="tagline">Админка</div>
+        </div>
+        <div class="spacer"></div>
+        <button class="icon-btn mobile-menu-btn" onclick="openMobileNav()" title="Меню">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+      </div>
+      <div id="mainContent"></div>
+    </main>
   </div>
-
-  <div class="card">
-    <h2 style="margin-bottom:6px">Статусы блюд</h2>
-    <p class="hint" style="margin-bottom:10px">
-      Бейджи вроде «🔥 Хит» — свои, можно добавлять и переименовывать. Удаление
-      статуса не удаляет блюда — у них просто снимается этот статус.
-    </p>
-    <div id="statusesList"></div>
-    <div class="new-status-form">
-      <input type="text" id="newStatusEmoji" class="emoji-input" placeholder="🔥">
-      <input type="text" id="newStatusLabel" class="label-input" placeholder="Название, например: Хит">
-      <button class="action" onclick="addStatus()">+ Добавить</button>
-    </div>
-    <div class="status" id="statusesStatus"></div>
-  </div>
-
-  <div class="card">
-    <h2 style="margin-bottom:6px">Импорт блюд из файла</h2>
-    <p class="hint" style="margin-bottom:10px">
-      .md-файл с блюдами по образцу формы (название, подзаголовок, описание, история,
-      как подать, калькуляция) — заводит их все разом, вместо ручного ввода по одному.
-      Фото и новые поля (статус, FAQ, аллергены) файлом не переносятся — добавляйте
-      потом вручную по блюду.
-    </p>
-    <div class="field"><label>Раздел (необязательно — иначе берётся из файла)</label>
-      <select id="importSectionSelect"><option value="">— взять из файла —</option></select>
-    </div>
-    <div class="field"><label>Файл (.md)</label>
-      <input type="file" id="importFileInput" accept=".md,.markdown,text/markdown,text/plain">
-    </div>
-    <button class="action" onclick="importMarkdown()">Загрузить и создать блюда</button>
-    <div class="status" id="importStatus"></div>
-  </div>
-
-  <div id="sectionsList"></div>
-  <div id="orphansWrap"></div>
 </div>
+
+<div class="mobile-nav-backdrop" id="mobileNavBackdrop" onclick="closeMobileNav()"></div>
+<div class="mobile-nav-drawer" id="mobileNavDrawer"></div>
+
+<div class="modal-overlay" id="previewOverlay"></div>
+<div class="modal-overlay" id="confirmOverlay"></div>
 
 <script>
   let password = sessionStorage.getItem("owg_admin_password") || "";
+  let login = sessionStorage.getItem("owg_admin_login") || "";
+  let allowedGroups = null; // null у владельца (видит всё без фильтра)
   let sections = [];
   let dishes = [];
   let orphans = [];
   let statuses = [];
-  const photoUrls = {}; // dishId -> [objectUrl, ...]
-  const openSections = new Set();
-  const openDishes = new Set();
+  const photoUrls = {};
 
-  // Общий набор иконок категорий — те же ключи, что понимает публичная
-  // страница (frontend/guide/index.html), чтобы выбор здесь сразу давал
-  // правильную картинку там. "cutlery" — общий фолбэк, если не подошло
-  // ничего конкретнее.
-  const SECTION_ICONS = [
-    ["cutlery", "🍴 Общее (по умолчанию)"],
-    ["salad", "🥗 Салаты / холодное"],
-    ["hot", "🔥 Горячее"],
-    ["soup", "🍲 Супы"],
-    ["meat", "🥩 Мясо"],
-    ["pasta", "🍝 Паста"],
-    ["pizza", "🍕 Пицца"],
-    ["skewer", "🍢 Шашлык/сувлаки"],
-    ["sushi", "🍣 Суши/роллы"],
-    ["bread", "🍞 Хлеб/выпечка"],
-    ["dessert", "🍰 Десерты"],
-    ["drink", "🥤 Напитки"],
-    ["beer", "🍺 Закуски к пиву"],
-    ["sauce", "🥣 Соусы"],
+  // state
+  let currentView = "dishes"; // "dishes" | "categories"
+  let categoryFilter = "all";
+  let searchQuery = "";
+  let editingDishId = null; // null = list view
+  let activeTab = "basic";
+  let isDirty = false;
+  let accessScope = "all"; // "all" (владелец/управляющий) | "bar" (ограниченный доступ)
+
+  const ICONS = {
+    all: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    cutlery: '<path d="M7 2v8M5 2v5a2 2 0 0 0 4 0V2M7 10v12"/><path d="M17 2c-1.7 0-3 2-3 5s1.3 5 3 5v10"/>',
+    salad: '<path d="M12 21a8 8 0 0 0 8-8H4a8 8 0 0 0 8 8Z"/><path d="M12 13V7"/><path d="M12 7c-2-1-2-4 0-5 2 1 2 4 0 5Z"/>',
+    hot: '<path d="M12 2s-6 5.5-6 11a6 6 0 0 0 12 0c0-2-1-3-1-3s0 2-1.5 2C14 10 15 6 12 2Z"/>',
+    soup: '<path d="M3 12h18a7 7 0 0 1-14 0Z"/><path d="M12 12V9M9 6c0-1 .7-1.5.7-2.5S9 2 9 2M14 6c0-1 .7-1.5.7-2.5S14 2 14 2"/>',
+    meat: '<path d="M15 13a5 5 0 1 0-6-6c-2 1-6 5-6 8a4 4 0 0 0 4 4c3 0 7-4 8-6Z"/><path d="M17.5 6.5 21 3"/>',
+    pasta: '<path d="M4 6c3 0 3 3 6 3s3-3 6-3 3 3 6 3" /><path d="M4 12c3 0 3 3 6 3s3-3 6-3 3 3 6 3"/><path d="M4 18c3 0 3 3 6 3s3-3 6-3 3 3 6 3"/>',
+    pizza: '<path d="M12 2 2 20h20L12 2Z"/><circle cx="12" cy="14" r="1"/><circle cx="9" cy="17" r="1"/><circle cx="15" cy="17" r="1"/>',
+    skewer: '<path d="M3 12h18"/><circle cx="7" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="17" cy="12" r="2"/>',
+    sushi: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.2"/>',
+    bread: '<rect x="3" y="9" width="18" height="10" rx="4"/><path d="M7 9V7a5 5 0 0 1 10 0v2M8 13v3M12 13v3M16 13v3"/>',
+    dessert: '<path d="M4 20 12 4l8 16Z"/><circle cx="12" cy="9" r="1.4"/>',
+    drink: '<path d="M8 3h8l-1 12a3 3 0 0 1-6 0L8 3Z"/><path d="M6.5 8h11M12 15v6M9 21h6"/>',
+    beer: '<path d="M6 9h9v9a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9Z"/><path d="M15 11h2a2 2 0 0 1 0 4h-2M8 6c0-1.5 1-2 1-3M11 6c0-1.5 1-2 1-3"/>',
+    sauce: '<path d="M12 3c2 3 5 6.5 5 10a5 5 0 0 1-10 0c0-3.5 3-7 5-10Z"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+    back: '<path d="M15 6 9 12l6 6"/>',
+    close: '<path d="M18 6 6 18M6 6l12 12"/>',
+    chev: '<path d="m9 6 6 6-6 6"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    trash: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/>',
+    edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+    eye: '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>',
+    photo: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="10" r="1.7"/><path d="m21 16-5-5-6 6"/>',
+    dishes: '<path d="M7 2v8M5 2v5a2 2 0 0 0 4 0V2M7 10v12"/><path d="M17 2c-1.7 0-3 2-3 5s1.3 5 3 5v10"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
+    grip: '<circle cx="8" cy="6" r="1.3"/><circle cx="8" cy="12" r="1.3"/><circle cx="8" cy="18" r="1.3"/><circle cx="16" cy="6" r="1.3"/><circle cx="16" cy="12" r="1.3"/><circle cx="16" cy="18" r="1.3"/>',
+    check: '<path d="M4 12l5 5 11-11"/>',
+    warning: '<path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v5M12 18v.01"/>',
+    menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+    coldcup: '<path d="M12 11V6"/><circle cx="12" cy="4.3" r="1.6"/><path d="M4 12h16a8 8 0 0 1-16 0Z"/>',
+    drumstick: '<path d="M8 19a5.2 5.2 0 0 1 0-10.4c1 0 1.8.3 2.5.8a4.2 4.2 0 0 1 5.8 5.8c-1.5 2.5-5 3.8-8.3 3.8Z"/><path d="M15 8.5 19.5 4"/><path d="M18 3l2.5 2.5"/>',
+  };
+  function icon(name) {
+    return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ICONS.cutlery}</svg>`;
+  }
+
+  const SECTION_ICONS = ["cutlery","salad","coldcup","hot","soup","meat","drumstick","pasta","pizza","skewer","sushi","bread","dessert","drink","beer","sauce"];
+  // Статусы ("Хит", "Популярное" и т.п.) — управляемый список из
+  // data/statuses.json (карточка "Статусы блюд" на вкладке "Категории"), не
+  // зашиты в код. statuses[] грузится в reload(); "" всегда доступен как
+  // "нет статуса".
+  function statusOptions() {
+    return [["", "○ Без статуса"]].concat(statuses.map((s) => [s.id, `${s.emoji} ${s.label}`.trim()]));
+  }
+  function statusLabel(id) {
+    const s = statuses.find((x) => x.id === id);
+    return s ? `${s.emoji} ${s.label}`.trim() : "";
+  }
+  const ALLERGEN_OPTIONS = [
+    "Глютен (пшеница, злаки)", "Яйца", "Молочные продукты", "Рыба", "Ракообразные / морепродукты",
+    "Арахис", "Орехи", "Соя", "Кунжут", "Сельдерей", "Горчица", "Сульфиты", "Сырое мясо / рыба",
   ];
-  function iconOptionsHtml(selected) {
-    return SECTION_ICONS.map(([v, label]) => `<option value="${v}" ${v === selected ? "selected" : ""}>${label}</option>`).join("");
-  }
-  // Статусы — управляемый список (карточка "Статусы блюд"), не зашиты в
-  // код. "" всегда доступен как "нет статуса".
-  function statusOptionsHtml(selected) {
-    const options = [["", "— нет статуса —"]].concat(statuses.map((s) => [s.id, `${s.emoji} ${s.label}`.trim()]));
-    return options.map(([v, label]) => `<option value="${v}" ${v === selected ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
-  }
-  function statusById(id) {
-    return statuses.find((s) => s.id === id) || null;
+
+  // Ряды категорий/вкладок скроллятся только по горизонтали, но мышиное
+  // колесо на компьютере по умолчанию крутит вертикально — без этого их
+  // нечем было проскроллить, кроме тачпада с горизонтальным жестом.
+  function enableWheelHorizontalScroll(el) {
+    if (!el || el._wheelBound) return;
+    el._wheelBound = true;
+    el.addEventListener("wheel", (e) => {
+      if (el.scrollWidth <= el.clientWidth) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    }, { passive: false });
   }
 
-  function authHeaders(extra) {
-    return Object.assign({ "X-Admin-Password": password }, extra || {});
-  }
   function escapeHtml(value) {
-    return String(value || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+    return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
-  // Списки вроде аллергенов/особенностей храним как массив строк, а
-  // редактируем одной textarea — по строке на пункт. Проще всего для формы,
-  // не нужен отдельный repeatable-виджет на каждый список.
   function linesToArray(text) {
     return String(text || "").split("\n").map((s) => s.trim()).filter(Boolean);
   }
-  function arrayToLines(arr) {
-    return (arr || []).join("\n");
+  function arrayToLines(arr) { return (arr || []).join("\n"); }
+  function authHeaders(extra) {
+    return Object.assign({ "X-Admin-Password": password, "X-Admin-Login": login }, extra || {});
   }
+  function isMobile() { return window.innerWidth < 1024; }
+  // Владелец ("all") и сотрудник с ролью "both" (allowedGroups содержит и
+  // кухню, и бар) видит обе зоны и может выбирать, куда положить новую
+  // категорию; сотрудник с одной ролью — группа навязывается сервером.
+  function canPickGroup() { return accessScope === "all" || (allowedGroups && allowedGroups.length > 1); }
 
+  // ---------- auth ----------
   async function tryLogin() {
     password = document.getElementById("passwordInput").value;
-    const res = await fetch("/api/oko-waiter-guide/admin/sections", { headers: authHeaders() });
+    login = document.getElementById("loginInput").value.trim();
+    const res = await fetch("/api/oko-waiter-guide/admin/whoami", { headers: authHeaders() });
     if (!res.ok) {
-      document.getElementById("gateStatus").innerText = "Неверный пароль";
+      document.getElementById("gateStatus").innerText = "Неверный логин или пароль";
       return;
     }
+    const who = await res.json();
+    accessScope = who.scope;
+    allowedGroups = who.allowedGroups;
     sessionStorage.setItem("owg_admin_password", password);
+    sessionStorage.setItem("owg_admin_login", login);
+    enterApp(who.name);
+  }
+  function logout() {
+    sessionStorage.removeItem("owg_admin_password");
+    sessionStorage.removeItem("owg_admin_login");
+    location.reload();
+  }
+  let brandTagline = "Админка";
+  async function enterApp(name) {
     document.getElementById("gate").style.display = "none";
     document.getElementById("app").style.display = "block";
-    document.getElementById("guideLinkText").innerText = location.origin + "/waiter-guide/";
-    document.getElementById("newSectionIcon").innerHTML = iconOptionsHtml("");
+    brandTagline = accessScope === "all" ? "Админка" : `Админка — ${name || "сотрудник"}`;
+    document.getElementById("sidebarBrandTag").textContent = brandTagline;
     await reload();
   }
+  if (password || login) {
+    fetch("/api/oko-waiter-guide/admin/whoami", { headers: authHeaders() }).then(async (res) => {
+      if (res.ok) {
+        const who = await res.json();
+        accessScope = who.scope;
+        allowedGroups = who.allowedGroups;
+        enterApp(who.name);
+      }
+    });
+  }
 
+  // ---------- data ----------
   async function reload() {
     const [sRes, dRes, oRes, stRes] = await Promise.all([
       fetch("/api/oko-waiter-guide/admin/sections", { headers: authHeaders() }),
       fetch("/api/oko-waiter-guide/admin/dishes", { headers: authHeaders() }),
       fetch("/api/oko-waiter-guide/admin/orphan-dishes", { headers: authHeaders() }),
-      fetch("/api/oko-waiter-guide/admin/statuses", { headers: authHeaders() }).catch(() => null),
+      fetch("/api/oko-waiter-guide/admin/statuses", { headers: authHeaders() }),
     ]);
     sections = (await sRes.json()).sort((a, b) => (a.order || 0) - (b.order || 0));
     dishes = await dRes.json();
     orphans = await oRes.json();
-    statuses = stRes && stRes.ok ? (await stRes.json()).sort((a, b) => (a.order || 0) - (b.order || 0)) : [];
-    render();
+    statuses = stRes.ok ? (await stRes.json()).sort((a, b) => (a.order || 0) - (b.order || 0)) : [];
+    renderShell();
   }
-
   function dishesFor(sectionId) {
     return dishes.filter((d) => d.sectionId === sectionId).sort((a, b) => (a.order || 0) - (b.order || 0));
   }
-  function topSections() {
-    return sections.filter((s) => !s.parentId).sort((a, b) => (a.order || 0) - (b.order || 0));
-  }
-  function subsectionsOf(sectionId) {
-    return sections.filter((s) => s.parentId === sectionId).sort((a, b) => (a.order || 0) - (b.order || 0));
-  }
-  // Раздел сразу за своими подразделами (а не вперемешку по общему order,
-  // где счётчики верхнего уровня и подразделов независимы) — для мест, где
-  // весь список разделов нужен одним плоским <select> (форма блюда, импорт).
+  function findDish(id) { return dishes.find((d) => d.id === id) || orphans.find((d) => d.id === id); }
+  function topLevelSections() { return sections.filter((s) => !s.parentId); }
+  function subsectionsOf(id) { return sections.filter((s) => s.parentId === id); }
+  // Раздел сразу за своими подразделами — для плоских мест вроде <select>
+  // категории в форме блюда, где вся иерархия — один список.
   function sectionsTreeOrdered() {
     const out = [];
-    topSections().forEach((s) => {
-      out.push(s);
-      subsectionsOf(s.id).forEach((sub) => out.push(sub));
-    });
+    topLevelSections().forEach((s) => { out.push(s); subsectionsOf(s.id).forEach((sub) => out.push(sub)); });
     return out;
   }
-
-  function render() {
-    const wrap = document.getElementById("sectionsList");
-    wrap.innerHTML = topSections().map((section, i) => renderSection(section, i)).join("");
-    document.getElementById("orphansWrap").innerHTML = orphans.length ? renderOrphans() : "";
-    orphans.forEach(loadPhotos);
-    dishes.forEach(loadPhotos);
-    renderStatusesList();
-
-    const importSelect = document.getElementById("importSectionSelect");
-    const prevValue = importSelect.value;
-    // Подразделы — с отступом (└) в выпадающем списке, чтобы было видно
-    // вложенность даже в плоском <select>.
-    importSelect.innerHTML =
-      `<option value="">— взять из файла —</option>` +
-      sectionsTreeOrdered().map((s) => `<option value="${s.id}">${s.parentId ? "└ " : ""}${escapeHtml(s.name)}</option>`).join("");
-    importSelect.value = prevValue;
+  // «Родитель · Подраздел» для блюда, заведённого в подраздел — иначе просто
+  // имя раздела.
+  function sectionName(id) {
+    const s = sections.find((x) => x.id === id);
+    if (!s) return "";
+    if (!s.parentId) return s.name;
+    const parent = sections.find((x) => x.id === s.parentId);
+    return parent ? `${parent.name} · ${s.name}` : s.name;
   }
 
-  function renderStatusesList() {
-    const wrap = document.getElementById("statusesList");
-    if (!wrap) return;
-    if (!statuses.length) {
-      wrap.innerHTML = `<p class="hint">Статусов пока нет.</p>`;
-      return;
-    }
-    wrap.innerHTML = statuses
-      .map(
-        (s) => `
-      <div class="status-row">
-        <input type="text" class="emoji-input" value="${escapeHtml(s.emoji)}" onchange="saveStatusField('${s.id}', 'emoji', this.value)">
-        <input type="text" class="label-input" value="${escapeHtml(s.label)}" onchange="saveStatusField('${s.id}', 'label', this.value)">
-        <button class="danger" onclick="removeStatus('${s.id}')">Удалить</button>
-      </div>`,
-      )
-      .join("");
+  function matchesSearch(dish, q) {
+    if (!q) return true;
+    const ingredientNames = (dish.calcTables || []).flatMap((t) => t.rows.map((r) => r.name)).join(" ");
+    const hay = [dish.name, dish.subtitle, dish.description, sectionName(dish.sectionId), ingredientNames].join(" ").toLowerCase();
+    return hay.includes(q.toLowerCase());
   }
 
-  async function saveStatusField(id, field, value) {
-    await fetch(`/api/oko-waiter-guide/admin/statuses/${id}`, {
-      method: "PATCH",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ [field]: value }),
-    });
-    await reload();
-  }
-
-  async function addStatus() {
-    const emojiInput = document.getElementById("newStatusEmoji");
-    const labelInput = document.getElementById("newStatusLabel");
-    const statusEl = document.getElementById("statusesStatus");
-    if (!labelInput.value.trim()) {
-      statusEl.className = "status error";
-      statusEl.innerText = "Укажите название статуса";
-      return;
-    }
-    const res = await fetch("/api/oko-waiter-guide/admin/statuses", {
-      method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ emoji: emojiInput.value, label: labelInput.value }),
-    });
-    if (!res.ok) {
-      statusEl.className = "status error";
-      statusEl.innerText = "Не удалось добавить";
-      return;
-    }
-    emojiInput.value = "";
-    labelInput.value = "";
-    statusEl.className = "status ok";
-    statusEl.innerText = "Добавлено";
-    await reload();
-  }
-
-  async function removeStatus(id) {
-    if (!confirm("Удалить статус? У блюд с этим статусом он просто снимется.")) return;
-    await fetch(`/api/oko-waiter-guide/admin/statuses/${id}`, { method: "DELETE", headers: authHeaders() });
-    await reload();
-  }
-
-  function renderOrphans() {
+  // ---------- shell / nav ----------
+  function navItemsHtml(closeDrawer) {
+    const after = closeDrawer ? "; closeMobileNav()" : "";
     return `
-      <div class="card orphans">
-        <h2>⚠ Без раздела (${orphans.length})</h2>
-        <p class="hint">Раздел этих блюд удалили — назначьте им раздел заново или удалите блюдо.</p>
-        ${orphans.map((d) => renderDishRow(d)).join("")}
-      </div>`;
+      <button class="nav-item ${currentView === "dishes" ? "active" : ""}" onclick="switchView('dishes')${after}">
+        ${icon("dishes")}<span>Блюда</span><span class="nav-count">${dishes.length}</span>
+      </button>
+      <button class="nav-item ${currentView === "categories" ? "active" : ""}" onclick="switchView('categories')${after}">
+        ${icon("folder")}<span>Категории</span><span class="nav-count">${sections.length}</span>
+      </button>
+      <button class="nav-item ${currentView === "settings" ? "active" : ""}" onclick="switchView('settings')${after}">
+        ${icon("settings")}<span>Настройки</span>
+      </button>
+      ${accessScope === "all" ? `
+        <button class="nav-item ${currentView === "users" ? "active" : ""}" onclick="switchView('users')${after}">
+          ${icon("edit")}<span>Пользователи</span>
+        </button>
+        <button class="nav-item ${currentView === "activity" ? "active" : ""}" onclick="switchView('activity')${after}">
+          ${icon("check")}<span>Активность</span>
+        </button>
+      ` : ""}
+    `;
   }
 
-  // isSub — подраздел рендерится тем же способом, но чуть компактнее
-  // (subsection-card вместо card) и без своей кнопки "+ Добавить подраздел"
-  // (второй уровень вложенности не предусмотрен).
-  function renderSection(section, index, isSub) {
-    const list = dishesFor(section.id);
-    const isOpen = openSections.has(section.id);
-    const subs = isSub ? [] : subsectionsOf(section.id);
+  function renderShell() {
+    document.getElementById("statDishes").textContent = dishes.length;
+    document.getElementById("statCats").textContent = sections.length;
+    document.getElementById("sidebarNav").innerHTML = navItemsHtml(false);
+    renderMain();
+  }
+
+  async function switchView(view) {
+    if (editingDishId && isDirty) {
+      const leave = await unsavedGuard();
+      if (!leave) return;
+    }
+    currentView = view;
+    editingDishId = null;
+    isDirty = false;
+    renderShell();
+  }
+
+  function openMobileNav() {
+    const drawer = document.getElementById("mobileNavDrawer");
+    drawer.innerHTML = `
+      <div class="drawer-head">
+        <div><div class="wordmark">OKO</div><div class="tagline">${brandTagline}</div></div>
+        <button class="icon-btn" onclick="closeMobileNav()">${icon("close")}</button>
+      </div>
+      <nav class="sidebar-nav">${navItemsHtml(true)}</nav>
+      <div class="sidebar-footer">
+        <div class="sidebar-stats">
+          <div class="sidebar-stat"><div class="num">${dishes.length}</div><div class="lbl">Блюд</div></div>
+          <div class="sidebar-stat"><div class="num">${sections.length}</div><div class="lbl">Категорий</div></div>
+        </div>
+        <button class="btn-logout" onclick="logout()">Выйти</button>
+      </div>
+    `;
+    document.getElementById("mobileNavBackdrop").classList.add("open");
+    drawer.classList.add("open");
+  }
+  function closeMobileNav() {
+    document.getElementById("mobileNavBackdrop").classList.remove("open");
+    document.getElementById("mobileNavDrawer").classList.remove("open");
+  }
+
+  function setMobileBack(handler) {
+    const btn = document.getElementById("mobileBackBtn");
+    if (handler) {
+      btn.style.display = "flex";
+      btn.innerHTML = icon("back");
+      btn.onclick = handler;
+    } else {
+      btn.style.display = "none";
+      btn.onclick = null;
+    }
+  }
+
+  function renderMain() {
+    if (editingDishId) {
+      renderDishEditor();
+    } else if (currentView === "categories") {
+      setMobileBack(() => switchView("dishes"));
+      renderCategoriesView();
+    } else if (currentView === "settings") {
+      setMobileBack(() => switchView("dishes"));
+      renderSettingsView();
+    } else if (currentView === "users") {
+      setMobileBack(() => switchView("dishes"));
+      renderUsersView();
+    } else if (currentView === "activity") {
+      setMobileBack(() => switchView("dishes"));
+      renderActivityView();
+    } else {
+      setMobileBack(null);
+      renderDishesView();
+    }
+  }
+
+  // ---------- dishes list ----------
+  function renderDishesView() {
+    const main = document.getElementById("mainContent");
+    const pool = categoryFilter === "all" ? dishes : dishesFor(categoryFilter);
+    const filtered = pool.filter((d) => matchesSearch(d, searchQuery));
+
+    main.innerHTML = `
+      <div class="view-head">
+        <div>
+          <h1>Блюда</h1>
+          <div class="hint">Управление меню и контентом для пособия официанта</div>
+        </div>
+        <button class="btn-accent" onclick="createDish()">${icon("plus")}Добавить блюдо</button>
+      </div>
+      <div class="search-box">
+        <span class="ic">${icon("search")}</span>
+        <input type="search" id="dishSearchInput" placeholder="Поиск по блюдам..." value="${escapeHtml(searchQuery)}">
+      </div>
+      <div class="chip-row" id="catChipRow"></div>
+      <div class="dish-grid" id="dishGrid"></div>
+      ${orphans.length ? `<div class="view-head" style="margin-top:24px"><h1 style="font-size:1rem">⚠ Без категории (${orphans.length})</h1></div><div class="dish-grid" id="orphanGrid"></div>` : ""}
+    `;
+
+    const chips = [{ id: "all", name: "Все блюда" }].concat(sectionsTreeOrdered().map((s) => ({ id: s.id, name: (s.parentId ? "└ " : "") + s.name })));
+    document.getElementById("catChipRow").innerHTML = chips.map((c) => `
+      <button class="filter-chip ${categoryFilter === c.id ? "active" : ""}" onclick="setCategoryFilter('${c.id}')">${escapeHtml(c.name)}</button>
+    `).join("");
+    enableWheelHorizontalScroll(document.getElementById("catChipRow"));
+
+    const grid = document.getElementById("dishGrid");
+    grid.innerHTML = filtered.length ? filtered.map(renderDishRowCard).join("") : `<div class="empty-note">Ничего не нашли</div>`;
+    grid.querySelectorAll("[data-dish-id]").forEach((el) => {
+      el.addEventListener("click", () => openEditor(el.dataset.dishId));
+    });
+    filtered.forEach(loadThumb);
+
+    if (orphans.length) {
+      const og = document.getElementById("orphanGrid");
+      og.innerHTML = orphans.map(renderDishRowCard).join("");
+      og.querySelectorAll("[data-dish-id]").forEach((el) => el.addEventListener("click", () => openEditor(el.dataset.dishId)));
+      orphans.forEach(loadThumb);
+    }
+
+    const searchInput = document.getElementById("dishSearchInput");
+    searchInput.addEventListener("input", () => {
+      searchQuery = searchInput.value;
+      const pool2 = categoryFilter === "all" ? dishes : dishesFor(categoryFilter);
+      const filtered2 = pool2.filter((d) => matchesSearch(d, searchQuery));
+      const grid2 = document.getElementById("dishGrid");
+      grid2.innerHTML = filtered2.length ? filtered2.map(renderDishRowCard).join("") : `<div class="empty-note">Ничего не нашли</div>`;
+      grid2.querySelectorAll("[data-dish-id]").forEach((el) => el.addEventListener("click", () => openEditor(el.dataset.dishId)));
+      filtered2.forEach(loadThumb);
+    });
+  }
+
+  function setCategoryFilter(id) { categoryFilter = id; renderDishesView(); }
+
+  function renderDishRowCard(dish) {
+    const hasPhoto = dish.photos && dish.photos.length;
     return `
-      <div class="${isSub ? "subsection-card" : "card"}">
-        <div class="section-header" onclick="toggleSection('${section.id}')">
-          <div class="section-title">
-            <h2>${escapeHtml(section.name)}</h2>
-            <span class="section-count">${list.length} блюд · /category/${escapeHtml(section.slug)}</span>
+      <button class="dish-row-card" data-dish-id="${dish.id}">
+        ${hasPhoto ? `<img class="thumb" id="thumb-${dish.id}">` : `<div class="thumb placeholder">${icon("photo")}</div>`}
+        <div class="body">
+          <div class="top">
+            <span class="name ${dish.hidden ? "hidden-flag" : ""}">${escapeHtml(dish.name) || "(без названия)"}</span>
           </div>
-          <div class="section-actions" onclick="event.stopPropagation()">
-            <button class="icon" onclick="moveSection('${section.id}', -1)" title="Выше">↑</button>
-            <button class="icon" onclick="moveSection('${section.id}', 1)" title="Ниже">↓</button>
-            <button class="secondary" onclick="collapseAllInSection('${section.id}')">Свернуть все</button>
-            <button class="secondary" onclick="renameSection('${section.id}')">Переименовать</button>
-            <button class="secondary" onclick="changeSectionIcon('${section.id}')">Иконка</button>
-            <button class="danger" onclick="removeSection('${section.id}')">Удалить</button>
+          <div class="cat">${escapeHtml(sectionName(dish.sectionId) || "без категории")}</div>
+        </div>
+        ${dish.status ? `<span class="status-tag">${statusLabel(dish.status)}</span>` : ""}
+        <span class="chev">${icon("chev")}</span>
+      </button>`;
+  }
+
+  async function loadThumb(dish) {
+    if (!dish.photos || !dish.photos.length) return;
+    const key = `${dish.id}-0`;
+    if (!photoUrls[key]) {
+      const res = await fetch(`/api/oko-waiter-guide/photos/${dish.photos[0]}`);
+      if (!res.ok) return;
+      photoUrls[key] = URL.createObjectURL(await res.blob());
+    }
+    const img = document.getElementById(`thumb-${dish.id}`);
+    if (img) img.src = photoUrls[key];
+  }
+
+  // ---------- categories view ----------
+  function renderCategoriesView() {
+    const main = document.getElementById("mainContent");
+    // Переключатель "Кухня/Бар" виден только владельцу (scope "all") — у
+    // бар-доступа и так всё, что он видит и создаёт, уже принудительно
+    // помечено сервером как "bar", выбирать нечего.
+    const groupPickerHtml = canPickGroup() ? `
+      <div class="field"><label>Зона</label>
+        <div class="status-picker" id="newCatGroupPicker">
+          <button type="button" class="status-pick active" data-group="kitchen">Кухня</button>
+          <button type="button" class="status-pick" data-group="bar">Бар</button>
+        </div>
+      </div>` : "";
+    main.innerHTML = `
+      <div class="view-head"><div><h1>Категории</h1><div class="hint">Разделы меню — каждый показывает количество блюд</div></div></div>
+      <div class="cat-form">
+        <div class="field"><label>Название категории <span class="req">*</span></label><input type="text" id="newCatName" placeholder="Например: Пасты"></div>
+        <div class="field"><label>Иконка</label><div class="icon-grid" id="newCatIconGrid"></div></div>
+        ${groupPickerHtml}
+        <button class="btn-accent" onclick="addCategory()">${icon("plus")}Добавить категорию</button>
+        <div class="status-msg" id="catStatus"></div>
+      </div>
+      <div id="catList"></div>
+      <div class="cat-form" id="statusesCard"></div>
+    `;
+    let pickedIcon = "cutlery";
+    let pickedGroup = "kitchen";
+    const grid = document.getElementById("newCatIconGrid");
+    grid.innerHTML = SECTION_ICONS.map((k) => `<button type="button" class="icon-pick ${k === pickedIcon ? "active" : ""}" data-icon="${k}">${icon(k)}</button>`).join("");
+    grid.querySelectorAll(".icon-pick").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        pickedIcon = btn.dataset.icon;
+        grid.querySelectorAll(".icon-pick").forEach((b) => b.classList.toggle("active", b === btn));
+      });
+    });
+    window._newCatIcon = () => pickedIcon;
+    const groupPicker = document.getElementById("newCatGroupPicker");
+    if (groupPicker) {
+      groupPicker.querySelectorAll(".status-pick").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          pickedGroup = btn.dataset.group;
+          groupPicker.querySelectorAll(".status-pick").forEach((b) => b.classList.toggle("active", b === btn));
+        });
+      });
+    }
+    window._newCatGroup = () => pickedGroup;
+
+    const list = document.getElementById("catList");
+    // Раздел верхнего уровня и его подразделы двигаются как ОДИН юнит
+    // (.cat-group) при drag&drop — если сделать draggable сам .cat-row,
+    // insertBefore при перетаскивании легко воткнёт соседний раздел МЕЖДУ
+    // строкой и её собственным блоком подразделов (они идут раздельными
+    // соседними узлами), оторвав подразделы от родителя.
+    list.innerHTML = topLevelSections().map((s) => `
+      <div class="cat-group" draggable="true" data-cat-id="${s.id}">
+        <div class="cat-row">
+          <span class="grip">${icon("grip")}</span>
+          <div class="icon-chip">${s.photo ? `<img src="/api/oko-waiter-guide/photos/${s.photo}" alt="">` : icon(s.icon || "cutlery")}</div>
+          <div class="info"><div class="name">${escapeHtml(s.name)}</div><div class="count">${dishesFor(s.id).length} блюд</div></div>
+          <div class="cat-row-extra">
+            ${canPickGroup() ? `<span class="status-tag">${s.group === "bar" ? "Бар" : "Кухня"}</span>` : ""}
+            <div class="cat-actions">
+              ${canPickGroup() ? `<button onclick="toggleCategoryGroup('${s.id}')" title="Переключить Кухня/Бар">${icon("settings")}</button>` : ""}
+              <button onclick="renameCategory('${s.id}')" title="Переименовать">${icon("edit")}</button>
+              <button onclick="pickCategoryMediaDialog('${s.id}')" title="Иконка / фото">${icon("folder")}</button>
+              <button class="icon-btn danger" style="width:32px;height:32px;border-radius:9px" onclick="removeCategory('${s.id}')" title="Удалить">${icon("trash")}</button>
+            </div>
           </div>
         </div>
-        <div class="section-body ${isOpen ? "open" : ""}" id="section-body-${section.id}">
-          ${list.map((d) => renderDishRow(d)).join("")}
-          <button class="secondary" onclick="showNewDishForm('${section.id}')">+ Добавить блюдо</button>
-          <div id="new-dish-${section.id}"></div>
-          ${!isSub ? `
-            <div class="subsections">
-              ${subs.map((s, i) => renderSection(s, i, true)).join("")}
-              <button class="secondary" onclick="showNewSubsectionForm('${section.id}')">+ Добавить подраздел</button>
-              <div id="new-subsection-${section.id}"></div>
-            </div>` : ""}
+        <div class="subsections">
+          ${subsectionsOf(s.id).map((sub) => `
+            <div class="cat-row" data-cat-id="${sub.id}">
+              <div class="icon-chip">${sub.photo ? `<img src="/api/oko-waiter-guide/photos/${sub.photo}" alt="">` : icon(sub.icon || "cutlery")}</div>
+              <div class="info"><div class="name">${escapeHtml(sub.name)}</div><div class="count">${dishesFor(sub.id).length} блюд</div></div>
+              <div class="cat-row-extra">
+                <div class="cat-actions">
+                  <button onclick="moveSubsection('${sub.id}', -1)" title="Выше">↑</button>
+                  <button onclick="moveSubsection('${sub.id}', 1)" title="Ниже">↓</button>
+                  <button onclick="renameCategory('${sub.id}')" title="Переименовать">${icon("edit")}</button>
+                  <button class="icon-btn danger" style="width:32px;height:32px;border-radius:9px" onclick="removeCategory('${sub.id}')" title="Удалить">${icon("trash")}</button>
+                </div>
+              </div>
+            </div>`).join("")}
+          <button type="button" class="btn-add-subsection" onclick="toggleAddSubsectionRow('${s.id}')">${icon("plus")} Добавить подраздел</button>
+          <div id="addSub-${s.id}"></div>
         </div>
-      </div>`;
+      </div>`).join("");
+    wireCategoryDrag(list);
+
+    renderStatusesCard();
   }
 
-  function showNewSubsectionForm(parentId) {
-    const el = document.getElementById(`new-subsection-${parentId}`);
+  // Подраздел — раздел с parentId, один уровень вложенности (см. серверную
+  // addSection). Переставляется отдельными ↑/↓ (не общий drag&drop списка
+  // верхнего уровня), но тем же /sections/reorder — он умеет переставлять
+  // произвольное подмножество разделов, не трогая остальные.
+  function toggleAddSubsectionRow(parentId) {
+    const el = document.getElementById(`addSub-${parentId}`);
+    if (el.innerHTML) { el.innerHTML = ""; return; }
     el.innerHTML = `
-      <div class="subsection-card">
-        <div class="new-section-form">
-          <input type="text" id="quick-new-sub-name-${parentId}" placeholder="Название подраздела">
-          <button class="action" onclick="createSubsection('${parentId}')">Создать</button>
-        </div>
-        <div class="status" id="quick-new-sub-status-${parentId}"></div>
-      </div>`;
+      <div class="quick-add-row">
+        <input type="text" id="newSubName-${parentId}" placeholder="Название подраздела">
+        <button class="btn-accent" onclick="createSubsection('${parentId}')">Создать</button>
+      </div>
+      <div class="status-msg" id="newSubStatus-${parentId}"></div>
+    `;
+    document.getElementById(`newSubName-${parentId}`).focus();
   }
-
   async function createSubsection(parentId) {
-    const input = document.getElementById(`quick-new-sub-name-${parentId}`);
-    const statusEl = document.getElementById(`quick-new-sub-status-${parentId}`);
-    if (!input.value.trim()) {
-      statusEl.className = "status error";
-      statusEl.innerText = "Укажите название";
-      return;
-    }
+    const input = document.getElementById(`newSubName-${parentId}`);
+    const statusEl = document.getElementById(`newSubStatus-${parentId}`);
+    if (!input.value.trim()) { statusEl.className = "status-msg error"; statusEl.innerText = "Укажите название"; return; }
     const res = await fetch("/api/oko-waiter-guide/admin/sections", {
-      method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
+      method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ name: input.value, parentId }),
     });
-    if (!res.ok) {
-      statusEl.className = "status error";
-      statusEl.innerText = "Не удалось создать";
-      return;
-    }
-    openSections.add(parentId);
+    if (!res.ok) { statusEl.className = "status-msg error"; statusEl.innerText = "Не удалось создать"; return; }
     await reload();
   }
-
-  function toggleSection(id) {
-    if (openSections.has(id)) openSections.delete(id);
-    else openSections.add(id);
-    document.getElementById(`section-body-${id}`).classList.toggle("open");
-  }
-
-  function collapseAllInSection(sectionId) {
-    dishesFor(sectionId).forEach((d) => openDishes.delete(d.id));
-    render();
-  }
-
-  async function renameSection(id) {
-    const section = sections.find((s) => s.id === id);
-    const name = prompt("Новое название раздела", section.name);
-    if (!name || !name.trim()) return;
-    await fetch(`/api/oko-waiter-guide/admin/sections/${id}`, {
-      method: "PATCH",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ name }),
-    });
-    await reload();
-  }
-
-  async function changeSectionIcon(id) {
-    const section = sections.find((s) => s.id === id);
-    const labels = SECTION_ICONS.map(([v, label], i) => `${i + 1}. ${label}`).join("\n");
-    const raw = prompt(`Номер иконки для «${section.name}»:\n${labels}`, "1");
-    const i = parseInt(raw, 10) - 1;
-    if (isNaN(i) || !SECTION_ICONS[i]) return;
-    await fetch(`/api/oko-waiter-guide/admin/sections/${id}`, {
-      method: "PATCH",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ icon: SECTION_ICONS[i][0] }),
-    });
-    await reload();
-  }
-
-  async function removeSection(id) {
-    if (!confirm("Удалить раздел? Блюда в нём не удалятся, попадут в «Без раздела».")) return;
-    await fetch(`/api/oko-waiter-guide/admin/sections/${id}`, { method: "DELETE", headers: authHeaders() });
-    await reload();
-  }
-
-  async function moveSection(id, delta) {
-    const section = sections.find((s) => s.id === id);
-    if (!section) return;
-    // Переставляем только среди "родных" — своего уровня (тот же раздел-
-    // родитель, либо оба верхнего уровня) — иначе раздел мог бы случайно
-    // перескочить мимо подразделов другого раздела.
-    const siblings = sections
-      .filter((s) => (s.parentId || null) === (section.parentId || null))
-      .sort((a, b) => (a.order || 0) - (b.order || 0))
-      .map((s) => s.id);
+  async function moveSubsection(id, delta) {
+    const sub = sections.find((s) => s.id === id);
+    if (!sub) return;
+    const siblings = subsectionsOf(sub.parentId).map((s) => s.id);
     const i = siblings.indexOf(id);
     const j = i + delta;
     if (j < 0 || j >= siblings.length) return;
     [siblings[i], siblings[j]] = [siblings[j], siblings[i]];
     await fetch("/api/oko-waiter-guide/admin/sections/reorder", {
-      method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ orderedIds: siblings }),
+      method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ orderedIds: siblings }),
     });
     await reload();
   }
 
-  async function addSection() {
-    const input = document.getElementById("newSectionName");
-    const icon = document.getElementById("newSectionIcon").value;
-    const statusEl = document.getElementById("sectionStatus");
-    if (!input.value.trim()) {
-      statusEl.className = "status error";
-      statusEl.innerText = "Укажите название";
-      return;
-    }
+  // ---------- статусы блюд (🔥 Хит и т.п.) ----------
+  function renderStatusesCard() {
+    const wrap = document.getElementById("statusesCard");
+    if (!wrap) return;
+    wrap.innerHTML = `
+      <div class="view-head" style="margin-bottom:12px"><div><h1 style="font-size:1.05rem">Статусы блюд</h1><div class="hint">Бейджи вроде «🔥 Хит» — свои, можно добавлять и переименовывать. Удаление статуса не удаляет блюда — у них просто снимается этот статус.</div></div></div>
+      <div id="statusesList"></div>
+      <div class="status-row">
+        <input type="text" class="emoji-input" id="newStatusEmoji" placeholder="🔥">
+        <input type="text" class="label-input" id="newStatusLabel" placeholder="Название, например: Хит">
+        <button class="btn-accent" onclick="addStatus()">${icon("plus")}</button>
+      </div>
+      <div class="status-msg" id="statusesStatus"></div>
+    `;
+    document.getElementById("statusesList").innerHTML = statuses.length ? statuses.map((s) => `
+      <div class="status-row">
+        <input type="text" class="emoji-input" value="${escapeHtml(s.emoji)}" onchange="saveStatusField('${s.id}', 'emoji', this.value)">
+        <input type="text" class="label-input" value="${escapeHtml(s.label)}" onchange="saveStatusField('${s.id}', 'label', this.value)">
+        <button class="icon-btn danger" style="width:32px;height:32px;border-radius:9px" onclick="removeStatus('${s.id}')" title="Удалить">${icon("trash")}</button>
+      </div>`).join("") : `<p class="hint">Статусов пока нет.</p>`;
+  }
+  async function saveStatusField(id, field, value) {
+    await fetch(`/api/oko-waiter-guide/admin/statuses/${id}`, {
+      method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ [field]: value }),
+    });
+    await reload();
+  }
+  async function addStatus() {
+    const emojiInput = document.getElementById("newStatusEmoji");
+    const labelInput = document.getElementById("newStatusLabel");
+    const statusEl = document.getElementById("statusesStatus");
+    if (!labelInput.value.trim()) { statusEl.className = "status-msg error"; statusEl.innerText = "Укажите название статуса"; return; }
+    const res = await fetch("/api/oko-waiter-guide/admin/statuses", {
+      method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ emoji: emojiInput.value, label: labelInput.value }),
+    });
+    if (!res.ok) { statusEl.className = "status-msg error"; statusEl.innerText = "Не удалось добавить"; return; }
+    await reload();
+  }
+  async function removeStatus(id) {
+    const ok = await confirmDialog("Удалить статус?", "У блюд с этим статусом он просто снимется.");
+    if (!ok) return;
+    await fetch(`/api/oko-waiter-guide/admin/statuses/${id}`, { method: "DELETE", headers: authHeaders() });
+    await reload();
+  }
+
+  async function toggleCategoryGroup(id) {
+    const section = sections.find((s) => s.id === id);
+    const nextGroup = section.group === "bar" ? "kitchen" : "bar";
+    await fetch(`/api/oko-waiter-guide/admin/sections/${id}`, {
+      method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ group: nextGroup }),
+    });
+    await reload();
+  }
+
+  // Драг-юнит — .cat-group (раздел верхнего уровня ВМЕСТЕ со своим блоком
+  // подразделов), не сам .cat-row — иначе строку соседнего раздела можно
+  // вставить между чужой строкой и её же подразделами, оторвав их от
+  // родителя. Подразделы внутри .subsections в этом drag&drop не участвуют
+  // вовсе — у них свои кнопки ↑/↓ (moveSubsection).
+  function wireCategoryDrag(list) {
+    let dragEl = null;
+    list.querySelectorAll(".cat-group").forEach((group) => {
+      group.addEventListener("dragstart", (e) => {
+        if (e.target.closest(".subsections")) { e.preventDefault(); return; }
+        dragEl = group; group.classList.add("dragging");
+      });
+      group.addEventListener("dragend", () => { group.classList.remove("dragging"); dragEl = null; });
+      group.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (!dragEl || dragEl === group) return;
+        const rect = group.getBoundingClientRect();
+        const before = (e.clientY - rect.top) < rect.height / 2;
+        group.parentNode.insertBefore(dragEl, before ? group : group.nextSibling);
+      });
+      group.addEventListener("drop", async () => {
+        const ordered = Array.from(list.querySelectorAll(".cat-group")).map((g) => g.dataset.catId);
+        await fetch("/api/oko-waiter-guide/admin/sections/reorder", {
+          method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ orderedIds: ordered }),
+        });
+        await reload();
+      });
+    });
+  }
+
+  async function addCategory() {
+    const input = document.getElementById("newCatName");
+    const statusEl = document.getElementById("catStatus");
+    if (!input.value.trim()) { statusEl.className = "status-msg error"; statusEl.innerText = "Укажите название"; return; }
     const res = await fetch("/api/oko-waiter-guide/admin/sections", {
-      method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ name: input.value, icon }),
+      method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        name: input.value,
+        icon: window._newCatIcon ? window._newCatIcon() : "cutlery",
+        group: window._newCatGroup ? window._newCatGroup() : "kitchen",
+      }),
     });
-    if (!res.ok) {
-      statusEl.className = "status error";
-      statusEl.innerText = "Не удалось добавить";
-      return;
-    }
-    input.value = "";
-    statusEl.className = "status ok";
-    statusEl.innerText = "Добавлено";
+    if (!res.ok) { statusEl.className = "status-msg error"; statusEl.innerText = "Не удалось добавить"; return; }
     await reload();
   }
 
-  function readFileAsText(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsText(file, "utf-8");
+  async function renameCategory(id) {
+    const section = sections.find((s) => s.id === id);
+    const name = prompt("Новое название категории", section.name);
+    if (!name || !name.trim()) return;
+    await fetch(`/api/oko-waiter-guide/admin/sections/${id}`, {
+      method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ name }),
     });
+    await reload();
+  }
+  function pickCategoryMediaDialog(id) {
+    const section = sections.find((s) => s.id === id);
+    if (!section) return;
+    const overlay = document.getElementById("confirmOverlay");
+    function closeDialog() {
+      overlay.classList.remove("open");
+      setTimeout(() => { overlay.innerHTML = ""; }, 200);
+    }
+    function render() {
+      overlay.innerHTML = `
+        <div class="confirm-modal">
+          <h3>Иконка / фото — «${escapeHtml(section.name)}»</h3>
+          ${section.photo ? `
+            <div class="settings-media-row" style="border:none;padding:6px 0 12px">
+              <img class="settings-media-preview" src="/api/oko-waiter-guide/photos/${section.photo}" alt="">
+              <div class="settings-media-info">
+                <div class="settings-media-hint">Сейчас на плитке показывается это фото вместо иконки.</div>
+                <button class="btn-ghost" id="mediaRemovePhoto">Удалить фото, вернуть иконку</button>
+              </div>
+            </div>
+          ` : `
+            <p>Можно выбрать иконку или загрузить своё фото — оно заменит иконку на плитке.</p>
+            <div class="icon-grid" id="mediaIconGrid">
+              ${SECTION_ICONS.map((k) => `<button type="button" class="icon-pick ${k === section.icon ? "active" : ""}" data-icon="${k}">${icon(k)}</button>`).join("")}
+            </div>
+          `}
+          <button class="btn-accent" id="mediaUploadBtn" style="width:100%;justify-content:center;margin-top:10px">${icon("photo")}Загрузить своё фото</button>
+          <input type="file" id="mediaFileInput" accept="image/*" style="display:none">
+          <div class="status-msg" id="mediaStatus"></div>
+          <div class="row" style="margin-top:14px">
+            <button class="btn-ghost" id="mediaClose" style="flex:1">Закрыть</button>
+          </div>
+        </div>`;
+      overlay.classList.add("open");
+
+      document.getElementById("mediaClose").addEventListener("click", closeDialog);
+      document.getElementById("mediaUploadBtn").addEventListener("click", () => document.getElementById("mediaFileInput").click());
+      document.getElementById("mediaFileInput").addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const statusEl = document.getElementById("mediaStatus");
+        statusEl.className = "status-msg"; statusEl.innerText = "Загрузка…";
+        const dataUri = await fileToDataUri(file);
+        const res = await fetch(`/api/oko-waiter-guide/admin/sections/${id}`, {
+          method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ photo: dataUri }),
+        });
+        const data = await res.json();
+        if (!res.ok) { statusEl.className = "status-msg error"; statusEl.innerText = data.error || "Не удалось загрузить"; return; }
+        Object.assign(section, data);
+        await reload();
+        render();
+      });
+      if (section.photo) {
+        document.getElementById("mediaRemovePhoto").addEventListener("click", async () => {
+          await fetch(`/api/oko-waiter-guide/admin/sections/${id}`, {
+            method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ removePhoto: true }),
+          });
+          section.photo = "";
+          await reload();
+          render();
+        });
+      } else {
+        document.querySelectorAll("#mediaIconGrid .icon-pick").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const iconKey = btn.dataset.icon;
+            await fetch(`/api/oko-waiter-guide/admin/sections/${id}`, {
+              method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ icon: iconKey }),
+            });
+            section.icon = iconKey;
+            await reload();
+            closeDialog();
+          });
+        });
+      }
+    }
+    render();
+  }
+  async function removeCategory(id) {
+    const section = sections.find((s) => s.id === id);
+    const ok = await confirmDialog(`Удалить «${section.name}»?`, "Блюда в этой категории не удалятся — попадут в «Без категории».");
+    if (!ok) return;
+    await fetch(`/api/oko-waiter-guide/admin/sections/${id}`, { method: "DELETE", headers: authHeaders() });
+    await reload();
   }
 
-  async function importMarkdown() {
-    const fileInput = document.getElementById("importFileInput");
-    const statusEl = document.getElementById("importStatus");
-    const sectionId = document.getElementById("importSectionSelect").value || undefined;
-    const file = fileInput.files[0];
-    if (!file) {
-      statusEl.className = "status error";
-      statusEl.innerText = "Выберите файл";
-      return;
-    }
+  const ROLE_OPTIONS = [["kitchen", "Кухня"], ["bar", "Бар"], ["both", "Оба"]];
+  const ROLE_LABELS = { kitchen: "Кухня", bar: "Бар", both: "Оба" };
+  const ACTIVITY_LABELS = {
+    dish_created: "добавил(а) блюдо", dish_updated: "изменил(а) блюдо", dish_deleted: "удалил(а) блюдо",
+    section_created: "добавил(а) категорию", section_updated: "изменил(а) категорию", section_deleted: "удалил(а) категорию",
+    user_created: "создал(а) пользователя", user_updated: "изменил(а) пользователя", user_deleted: "удалил(а) пользователя",
+  };
+  function formatActivityAt(ts) {
+    return new Date(ts).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  }
 
-    statusEl.className = "status";
-    statusEl.innerText = "Загружаю…";
-    const markdown = await readFileAsText(file);
+  async function renderUsersView() {
+    const main = document.getElementById("mainContent");
+    main.innerHTML = `
+      <div class="view-head"><div><h1>Пользователи</h1><div class="hint">Учётки для персонала — у каждого своё имя, логин и пароль</div></div></div>
+      <div class="cat-form">
+        <div class="field"><label>Имя <span class="req">*</span></label><input type="text" id="newUserName" placeholder="Например: Николай"></div>
+        <div class="field"><label>Логин <span class="req">*</span></label><input type="text" id="newUserLogin" placeholder="nikolay" autocomplete="off"></div>
+        <div class="field"><label>Пароль <span class="req">*</span></label><input type="text" id="newUserPassword" placeholder="Минимум 4 символа" autocomplete="off"></div>
+        <div class="field"><label>Роль</label>
+          <div class="status-picker" id="newUserRolePicker">
+            ${ROLE_OPTIONS.map(([v, label], i) => `<button type="button" class="status-pick ${i === 0 ? "active" : ""}" data-role="${v}">${label}</button>`).join("")}
+          </div>
+        </div>
+        <button class="btn-accent" onclick="addUser()">${icon("plus")}Добавить пользователя</button>
+        <div class="status-msg" id="userStatus"></div>
+      </div>
+      <div id="userList"></div>
+    `;
+    let pickedRole = "kitchen";
+    document.querySelectorAll("#newUserRolePicker .status-pick").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        pickedRole = btn.dataset.role;
+        document.querySelectorAll("#newUserRolePicker .status-pick").forEach((b) => b.classList.toggle("active", b === btn));
+      });
+    });
+    window._newUserRole = () => pickedRole;
 
-    const res = await fetch("/api/oko-waiter-guide/admin/import-markdown", {
-      method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ markdown, sectionId }),
+    const res = await fetch("/api/oko-waiter-guide/admin/users", { headers: authHeaders() });
+    const users = res.ok ? await res.json() : [];
+    lastUsers = users;
+    document.getElementById("userList").innerHTML = users.length ? users.map((u) => `
+      <div class="cat-row">
+        <div class="icon-chip">${icon("edit")}</div>
+        <div class="info"><div class="name">${escapeHtml(u.name)}</div><div class="count">Логин: ${escapeHtml(u.login)}</div></div>
+        <div class="cat-row-extra">
+          <span class="status-tag">${ROLE_LABELS[u.role] || u.role}</span>
+          <div class="cat-actions">
+            <button onclick="editUser('${u.id}')" title="Редактировать">${icon("edit")}</button>
+            <button class="icon-btn danger" style="width:32px;height:32px;border-radius:9px" onclick="removeUser('${u.id}', '${escapeHtml(u.name)}')" title="Удалить">${icon("trash")}</button>
+          </div>
+        </div>
+      </div>`).join("") : `<div class="empty-note">Пока нет ни одного пользователя</div>`;
+  }
+  let lastUsers = [];
+
+  async function addUser() {
+    const name = document.getElementById("newUserName").value;
+    const login2 = document.getElementById("newUserLogin").value;
+    const pw = document.getElementById("newUserPassword").value;
+    const role = window._newUserRole ? window._newUserRole() : "kitchen";
+    const statusEl = document.getElementById("userStatus");
+    const res = await fetch("/api/oko-waiter-guide/admin/users", {
+      method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ name, login: login2, password: pw, role }),
     });
     const data = await res.json();
-    if (!res.ok) {
-      statusEl.className = "status error";
-      statusEl.innerText = data.error || "Не удалось импортировать";
-      return;
-    }
+    if (!res.ok) { statusEl.className = "status-msg error"; statusEl.innerText = data.error || "Не удалось добавить"; return; }
+    renderUsersView();
+  }
+  async function editUser(id) {
+    const user = lastUsers.find((u) => u.id === id);
+    if (!user) return;
+    const patch = await editUserDialog(user);
+    if (!patch) return;
+    const res = await fetch(`/api/oko-waiter-guide/admin/users/${id}`, {
+      method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(patch),
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || "Не удалось сохранить"); return; }
+    renderUsersView();
+  }
+  // resolve(patch object) при сохранении, resolve(null) при отмене
+  function editUserDialog(user) {
+    return new Promise((resolve) => {
+      const overlay = document.getElementById("confirmOverlay");
+      overlay.innerHTML = `
+        <div class="confirm-modal">
+          <h3>Редактировать пользователя</h3>
+          <div class="field"><label>Имя</label><input type="text" id="editUserName" value="${escapeHtml(user.name)}"></div>
+          <div class="field"><label>Логин</label><input type="text" id="editUserLogin" value="${escapeHtml(user.login)}" autocomplete="off"></div>
+          <div class="field"><label>Роль</label>
+            <div class="status-picker" id="editUserRolePicker">
+              ${ROLE_OPTIONS.map(([v, label]) => `<button type="button" class="status-pick ${v === user.role ? "active" : ""}" data-role="${v}">${label}</button>`).join("")}
+            </div>
+          </div>
+          <div class="field"><label>Новый пароль <span style="color:var(--dim);font-weight:normal;font-size:0.813rem">(оставьте пустым, чтобы не менять)</span></label><input type="text" id="editUserPassword" placeholder="Минимум 4 символа" autocomplete="off"></div>
+          <div class="status-msg" id="editUserStatus"></div>
+          <div class="row">
+            <button class="btn-ghost" id="editUserCancel">Отмена</button>
+            <button class="btn-accent" id="editUserSave">Сохранить</button>
+          </div>
+        </div>`;
+      overlay.classList.add("open");
+      let pickedRole = user.role;
+      document.querySelectorAll("#editUserRolePicker .status-pick").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          pickedRole = btn.dataset.role;
+          document.querySelectorAll("#editUserRolePicker .status-pick").forEach((b) => b.classList.toggle("active", b === btn));
+        });
+      });
+      const finish = (val) => { overlay.classList.remove("open"); setTimeout(() => { overlay.innerHTML = ""; }, 200); resolve(val); };
+      document.getElementById("editUserCancel").addEventListener("click", () => finish(null));
+      document.getElementById("editUserSave").addEventListener("click", () => {
+        const name = document.getElementById("editUserName").value.trim();
+        const login2 = document.getElementById("editUserLogin").value.trim();
+        const pw = document.getElementById("editUserPassword").value;
+        if (!name) { document.getElementById("editUserStatus").className = "status-msg error"; document.getElementById("editUserStatus").innerText = "Укажите имя"; return; }
+        if (!login2) { document.getElementById("editUserStatus").className = "status-msg error"; document.getElementById("editUserStatus").innerText = "Укажите логин"; return; }
+        if (pw && pw.length < 4) { document.getElementById("editUserStatus").className = "status-msg error"; document.getElementById("editUserStatus").innerText = "Пароль слишком короткий"; return; }
+        const patch = { name, login: login2, role: pickedRole };
+        if (pw) patch.password = pw;
+        finish(patch);
+      });
+    });
+  }
+  async function removeUser(id, name) {
+    const ok = await confirmDialog(`Удалить пользователя «${name}»?`, "Он больше не сможет войти в админку.");
+    if (!ok) return;
+    await fetch(`/api/oko-waiter-guide/admin/users/${id}`, { method: "DELETE", headers: authHeaders() });
+    renderUsersView();
+  }
 
-    statusEl.className = "status ok";
-    statusEl.innerText =
-      `Готово: раздел «${data.sectionName}» — добавлено блюд: ${data.created}` +
-      (data.skipped.length ? `. Пропущено (не блюда): ${data.skipped.length}` : "");
-    fileInput.value = "";
+  async function renderActivityView() {
+    const main = document.getElementById("mainContent");
+    main.innerHTML = `
+      <div class="view-head"><div><h1>Активность</h1><div class="hint">Кто и что менял в пособии официанта</div></div></div>
+      <div id="activityList"></div>
+    `;
+    const res = await fetch("/api/oko-waiter-guide/admin/activity", { headers: authHeaders() });
+    const list = res.ok ? await res.json() : [];
+    document.getElementById("activityList").innerHTML = list.length ? list.map((e) => `
+      <div class="cat-row" style="cursor:default">
+        <div class="icon-chip">${icon("check")}</div>
+        <div class="info">
+          <div class="name">${escapeHtml(e.userName)} ${ACTIVITY_LABELS[e.action] || e.action} «${escapeHtml(e.targetName)}»</div>
+          <div class="count">${e.sectionName ? escapeHtml(e.sectionName) + " · " : ""}${formatActivityAt(e.at)}</div>
+        </div>
+      </div>`).join("") : `<div class="empty-note">Пока пусто</div>`;
+  }
+
+  function renderSettingsView() {
+    const t = Date.now();
+    document.getElementById("mainContent").innerHTML = `
+      <div class="view-head"><div><h1>Настройки</h1><div class="hint">Ссылка на пособие официанта, логотип и фото на главном экране</div></div></div>
+      <div class="cat-form">
+        <div class="field"><label>Публичная ссылка (без пароля)</label><input type="text" readonly value="${location.origin}/waiter-guide/"></div>
+      </div>
+
+      <div class="cat-form">
+        <div class="settings-media-row">
+          <img class="settings-media-preview" id="logoPreview" src="/waiter-guide/logo.jpg?t=${t}" alt="Логотип">
+          <div class="settings-media-info">
+            <div class="settings-media-title">Логотип</div>
+            <div class="settings-media-hint">Белый/светлый логотип на любом фоне (можно с прозрачностью) — фон будет автоматически сделан подходящим.</div>
+            <button class="btn-ghost" onclick="document.getElementById('logoFileInput').click()">Загрузить новый логотип</button>
+            <input type="file" id="logoFileInput" accept="image/*" style="display:none">
+          </div>
+        </div>
+        <div class="status-msg" id="logoStatus"></div>
+      </div>
+
+      <div class="cat-form">
+        <div class="view-head" style="margin-bottom:12px"><div><h1 style="font-size:1.05rem">Фото на главном экране</h1><div class="hint">Три фото слайд-шоу в верхнем блоке пособия</div></div></div>
+        ${[1, 2, 3].map((slot) => `
+          <div class="settings-media-row">
+            <img class="settings-media-preview" id="heroPreview${slot}" src="/waiter-guide/hero/hero-${slot}.jpg?t=${t}" alt="Фото ${slot}">
+            <div class="settings-media-info">
+              <div class="settings-media-title">Фото ${slot}</div>
+              ${slot === 1 ? `<div class="settings-media-hint">Также используется как фон в списке блюд и в админке.</div>` : ""}
+              <button class="btn-ghost" onclick="document.getElementById('heroFileInput${slot}').click()">Заменить</button>
+              <input type="file" id="heroFileInput${slot}" accept="image/*" style="display:none">
+            </div>
+          </div>
+        `).join("")}
+        <div class="status-msg" id="heroStatus"></div>
+      </div>
+    `;
+
+    document.getElementById("logoFileInput").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const statusEl = document.getElementById("logoStatus");
+      statusEl.className = "status-msg"; statusEl.innerText = "Загрузка…";
+      const dataUri = await fileToDataUri(file);
+      const res = await fetch("/api/oko-waiter-guide/admin/settings/logo", {
+        method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ image: dataUri }),
+      });
+      const data = await res.json();
+      if (!res.ok) { statusEl.className = "status-msg error"; statusEl.innerText = data.error || "Не удалось загрузить"; return; }
+      document.getElementById("logoPreview").src = `/waiter-guide/logo.jpg?t=${Date.now()}`;
+      statusEl.className = "status-msg ok"; statusEl.innerText = "Логотип обновлён";
+    });
+
+    [1, 2, 3].forEach((slot) => {
+      document.getElementById(`heroFileInput${slot}`).addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const statusEl = document.getElementById("heroStatus");
+        statusEl.className = "status-msg"; statusEl.innerText = "Загрузка…";
+        const dataUri = await fileToDataUri(file);
+        const res = await fetch(`/api/oko-waiter-guide/admin/settings/hero/${slot}`, {
+          method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ image: dataUri }),
+        });
+        const data = await res.json();
+        if (!res.ok) { statusEl.className = "status-msg error"; statusEl.innerText = data.error || "Не удалось загрузить"; return; }
+        document.getElementById(`heroPreview${slot}`).src = `/waiter-guide/hero/hero-${slot}.jpg?t=${Date.now()}`;
+        statusEl.className = "status-msg ok"; statusEl.innerText = "Фото обновлено";
+      });
+    });
+  }
+
+  // ---------- dish editor ----------
+  // Единый черновик блюда: раньше каждое поле читалось прямо из DOM в
+  // момент нажатия "Сохранить", а вкладки при переключении перерисовывались
+  // из серверной копии — значит несохранённые правки на вкладке, с которой
+  // ты просто ушёл на другую, тихо терялись (это и был баг "сохранял,
+  // сохранял, а блюда нет" — скорее всего терялось переименование). Теперь
+  // весь блюдо-объект живёт в dishDraft[id], поля вкладок читают/пишут
+  // ТОЛЬКО туда, и "Сохранить" одной кнопкой отправляет черновик целиком —
+  // неважно, на какой вкладке нажали.
+  const dishDraft = {};
+  let editorLocked = false;
+
+  function ensureDraft(id) {
+    if (!dishDraft[id]) {
+      const d = findDish(id) || {};
+      const existingAllergens = d.allergens || [];
+      dishDraft[id] = {
+        name: d.name || "", subtitle: d.subtitle || "", description: d.description || "",
+        sectionId: d.sectionId || "", status: d.status || "", hidden: Boolean(d.hidden),
+        history: d.history || "", historyQuote: d.historyQuote || "",
+        servingSteps: JSON.parse(JSON.stringify(d.servingSteps || [])),
+        waiterPhrase: d.waiterPhrase || "",
+        recommendations: JSON.parse(JSON.stringify(d.recommendations || [])),
+        features: JSON.parse(JSON.stringify(d.features || [])),
+        warning: d.warning || "",
+        allergensChecked: new Set(existingAllergens.filter((a) => ALLERGEN_OPTIONS.includes(a))),
+        allergensOther: existingAllergens.filter((a) => !ALLERGEN_OPTIONS.includes(a)).join("\n"),
+        calcTables: JSON.parse(JSON.stringify(d.calcTables || [])),
+        faq: JSON.parse(JSON.stringify(d.faq || [])),
+      };
+    }
+    return dishDraft[id];
+  }
+  function bindField(id, key, opts) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const draft = ensureDraft(editingDishId);
+    const handler = () => {
+      if (opts && opts.checkbox) draft[key] = el.checked;
+      else if (opts && opts.lines) draft[key] = linesToArray(el.value);
+      else draft[key] = el.value;
+      markDirty();
+    };
+    el.addEventListener("input", handler);
+    el.addEventListener("change", handler);
+  }
+
+  async function createDish() {
+    const sectionId = categoryFilter !== "all" ? categoryFilter : (sections[0] && sections[0].id) || null;
+    const res = await fetch("/api/oko-waiter-guide/admin/dishes", {
+      method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ name: "Новое блюдо", sectionId }),
+    });
+    if (!res.ok) return;
+    const created = await res.json();
     await reload();
+    openEditor(created.id);
   }
 
-  function renderDishRow(dish) {
-    const isOpen = openDishes.has(dish.id);
-    const hasPhoto = dish.photos && dish.photos.length;
-    return `
-      <div class="dish-row">
-        <div class="dish-row-head" onclick="toggleDish('${dish.id}')">
-          <div style="display:flex;align-items:center;gap:8px;min-width:0">
-            <span class="chevron">${isOpen ? "▾" : "▸"}</span>
-            ${hasPhoto ? `<img class="dish-thumb" id="photo-${dish.id}-0">` : `<div class="dish-thumb"></div>`}
-            <span class="name ${dish.hidden ? "hidden-dish" : ""}">${escapeHtml(dish.name) || "(без названия)"}</span>
-            ${(() => { const st = statusById(dish.status); return st ? `<span class="badge-hit">${escapeHtml(st.emoji)} ${escapeHtml(st.label)}</span>` : ""; })()}
-            ${dish.hidden ? `<span class="badge-hit" style="background:#30363d;color:#8b949e">скрыто</span>` : ""}
-          </div>
-          <div class="dish-actions" onclick="event.stopPropagation()">
-            <button class="icon" onclick="moveDish('${dish.id}', -1)" title="Выше">↑</button>
-            <button class="icon" onclick="moveDish('${dish.id}', 1)" title="Ниже">↓</button>
-            <button class="danger" onclick="removeDish('${dish.id}')">Удалить</button>
-          </div>
-        </div>
-        <div class="dish-edit ${isOpen ? "open" : ""}" id="dish-edit-${dish.id}">
-          ${renderDishForm(dish)}
-        </div>
-      </div>`;
+  function localDraftKey(id) { return "owg_admin_draft_" + id; }
+  function saveDraftToLocalStorage(id) {
+    if (!id || !dishDraft[id]) return;
+    try {
+      const draft = dishDraft[id];
+      const serializable = Object.assign({}, draft, { allergensChecked: Array.from(draft.allergensChecked) });
+      localStorage.setItem(localDraftKey(id), JSON.stringify(serializable));
+    } catch (e) {}
+  }
+  function clearLocalDraft(id) {
+    try { localStorage.removeItem(localDraftKey(id)); } catch (e) {}
   }
 
-  function toggleDish(id) {
-    const nowOpen = !openDishes.has(id);
-    if (nowOpen) openDishes.add(id);
-    else openDishes.delete(id);
-    document.getElementById(`dish-edit-${id}`).classList.toggle("open", nowOpen);
-    // Черновики таблиц/FAQ живут как локальные JS-массивы, привязанные к
-    // DOM — заполняем их из сохранённых данных блюда только при первом
-    // открытии панели (повторное открытие/закрытие не должно стирать
-    // несохранённые правки).
-    if (nowOpen) {
-      renderCalc(id);
-      renderFaq(id);
+  async function openEditor(id) {
+    editingDishId = id;
+    activeTab = "basic";
+    isDirty = false;
+    editorLocked = false;
+    delete dishDraft[id];
+    renderMain();
+
+    let stored = null;
+    try { stored = JSON.parse(localStorage.getItem(localDraftKey(id)) || "null"); } catch (e) {}
+    if (stored && editingDishId === id) {
+      const keep = await draftRecoveryDialog();
+      if (editingDishId !== id) return; // ушли на другой экран, пока ждали ответа
+      if (keep) {
+        stored.allergensChecked = new Set(stored.allergensChecked || []);
+        dishDraft[id] = stored;
+        markDirty();
+        renderMain();
+      } else {
+        clearLocalDraft(id);
+      }
     }
   }
 
-  function renderDishForm(dish) {
-    const d = dish.id;
+  async function closeEditor() {
+    if (isDirty) {
+      const leave = await unsavedGuard();
+      if (!leave) return;
+    }
+    editingDishId = null;
+    renderShell();
+  }
+  function markDirty() {
+    isDirty = true;
+    const el = document.getElementById("saveIndicator");
+    if (el) { el.textContent = "● Есть несохранённые изменения"; el.className = "save-indicator dirty"; }
+    syncPreview();
+    saveDraftToLocalStorage(editingDishId);
+  }
+  window.addEventListener("beforeunload", (e) => {
+    if (isDirty) { e.preventDefault(); e.returnValue = ""; }
+  });
+  function unlockEditor() {
+    editorLocked = false;
+    isDirty = false;
+    renderMain();
+  }
+
+  const EDITOR_TABS = [
+    ["basic", "Основное"], ["composition", "Состав"], ["history", "История"],
+    ["serving", "Подача"], ["important", "Важно"], ["faq", "FAQ"],
+  ];
+
+  function renderDishEditor() {
+    const dish = findDish(editingDishId);
+    if (!dish) { editingDishId = null; renderShell(); return; }
+    setMobileBack(closeEditor);
+
+    const main = document.getElementById("mainContent");
+    const hasPhoto = dish.photos && dish.photos.length;
+    main.innerHTML = `
+      <div class="editor-head">
+        <button class="icon-btn" onclick="closeEditor()" style="display:none" id="editorBackDesktopHidden"></button>
+        ${hasPhoto ? `<img class="thumb-sm" id="editorThumb">` : `<div class="thumb-sm placeholder">${icon("photo")}</div>`}
+        <div>
+          <h1>${escapeHtml(dish.name) || "(без названия)"}</h1>
+          <div class="sub">${escapeHtml(sectionName(dish.sectionId) || "без категории")}</div>
+        </div>
+        <div class="spacer"></div>
+        <span class="save-indicator" id="saveIndicator"></span>
+        <button class="icon-btn" onclick="openPreview('${dish.id}')" title="Предпросмотр">${icon("eye")}</button>
+        <button class="icon-btn danger" onclick="deleteDish('${dish.id}')" title="Удалить">${icon("trash")}</button>
+      </div>
+      <div class="tabs-scroll"><div class="tabs" id="editorTabs"></div></div>
+      <div id="editorPanel"></div>
+      <div class="editor-footer" id="editorFooter"></div>
+    `;
+    renderEditorFooter(dish);
+    if (hasPhoto) loadThumb(dish).then(() => { const t = document.getElementById("editorThumb"); if (t) t.src = document.getElementById(`thumb-${dish.id}`)?.src || ""; });
+    if (hasPhoto) {
+      const key = `${dish.id}-0`;
+      const trySet = () => { const t = document.getElementById("editorThumb"); if (t && photoUrls[key]) t.src = photoUrls[key]; };
+      loadThumb(dish).then(trySet);
+    }
+
+    document.getElementById("editorTabs").innerHTML = EDITOR_TABS.map(([key, label]) => `
+      <button class="tab-btn ${activeTab === key ? "active" : ""}" data-tab="${key}">${label}</button>
+    `).join("");
+    enableWheelHorizontalScroll(document.querySelector(".tabs-scroll"));
+    document.querySelectorAll("#editorTabs .tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => { activeTab = btn.dataset.tab; renderEditorPanel(dish); });
+    });
+    renderEditorPanel(dish);
+  }
+
+  function renderEditorFooter(dish) {
+    const footer = document.getElementById("editorFooter");
+    if (!footer) return;
+    footer.innerHTML = editorLocked
+      ? `<button class="btn-ghost" onclick="openPreview('${dish.id}')">${icon("eye")}Предпросмотр</button>
+         <button class="btn-accent" onclick="unlockEditor()">${icon("edit")}Редактировать</button>`
+      : `<button class="btn-ghost" onclick="openPreview('${dish.id}')">${icon("eye")}Предпросмотр</button>
+         <button class="btn-accent" onclick="saveDish('${dish.id}')" title="Сохраняет все вкладки блюда целиком">${icon("check")}Сохранить блюдо</button>`;
+  }
+
+  function renderEditorPanel(dish) {
+    document.querySelectorAll("#editorTabs .tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === activeTab));
+    const panel = document.getElementById("editorPanel");
+    if (activeTab === "basic") panel.innerHTML = renderBasicTab(dish);
+    else if (activeTab === "composition") panel.innerHTML = renderCompositionTab(dish);
+    else if (activeTab === "history") panel.innerHTML = renderHistoryTab(dish);
+    else if (activeTab === "serving") panel.innerHTML = renderServingTab(dish);
+    else if (activeTab === "important") panel.innerHTML = renderImportantTab(dish);
+    else panel.innerHTML = renderFaqTab(dish);
+    panel.classList.toggle("panel-locked", editorLocked);
+    wirePanelEvents(dish);
+    if (editorLocked) {
+      panel.querySelectorAll("input, textarea, select").forEach((el) => { el.disabled = true; });
+    }
+    renderEditorFooter(dish);
+  }
+
+  function renderBasicTab(dish) {
     const photos = dish.photos || [];
+    const draft = ensureDraft(dish.id);
     return `
-      <div class="field"><label>Название</label><input type="text" id="name-${d}" value="${escapeHtml(dish.name)}"></div>
-      <div class="field"><label>Подзаголовок (курсив, необязательно)</label><input type="text" id="subtitle-${d}" value="${escapeHtml(dish.subtitle)}"></div>
-      <div class="field"><label>Краткое описание (1-2 строки — то, что видно в списке блюд)</label><textarea id="description-${d}">${escapeHtml(dish.description)}</textarea></div>
-      <div class="field"><label>Раздел</label>
-        <select id="section-${d}">
-          <option value="">— без раздела —</option>
-          ${sectionsTreeOrdered().map((s) => `<option value="${s.id}" ${s.id === dish.sectionId ? "selected" : ""}>${s.parentId ? "└ " : ""}${escapeHtml(s.name)}</option>`).join("")}
-        </select>
-      </div>
-      <div class="field"><label>Статус</label>
-        <select id="status-${d}">${statusOptionsHtml(dish.status || "")}</select>
-      </div>
-      <div class="checkbox-field">
-        <input type="checkbox" id="hidden-${d}" ${dish.hidden ? "checked" : ""}>
-        <label for="hidden-${d}">Скрыть блюдо (не показывать официантам, но сохранить в редакторе)</label>
-      </div>
-
-      <div class="field"><label>Фото (можно несколько — свайпаются на странице блюда)</label>
-        <div class="photo-gallery" id="photo-gallery-${d}">
-          ${photos.map((_, i) => `
-            <div class="photo-thumb-wrap">
-              <img id="photo-${d}-${i}">
-              <button onclick="removeDishPhotoAt('${d}', ${i})" title="Удалить фото">✕</button>
-            </div>`).join("")}
-        </div>
-        <input type="file" id="photo-input-${d}" accept="image/*">
-        <div class="sub-hint">Выбранный файл добавится к фото при нажатии «Сохранить» ниже.</div>
-      </div>
-
-      <div class="subform-group">
-        <h3>История блюда</h3>
-        <div class="field"><label>Текст истории (необязательно)</label><textarea id="history-${d}">${escapeHtml(dish.history)}</textarea></div>
-        <div class="field"><label>Цитата-факт (необязательно — выделяется отдельной карточкой)</label><input type="text" id="historyQuote-${d}" value="${escapeHtml(dish.historyQuote)}"></div>
-      </div>
-
-      <div class="subform-group">
-        <h3>Подача</h3>
-        <div class="field"><label>Как подаём — по шагу на строку (необязательно)</label>
-          <textarea id="servingSteps-${d}" placeholder="Подаётся охлаждённым&#10;Украшается микрозеленью">${arrayToLines(dish.servingSteps)}</textarea>
-        </div>
-        <div class="field"><label>Что сказать гостю (необязательно — готовая фраза официанта)</label><textarea id="waiterPhrase-${d}">${escapeHtml(dish.waiterPhrase)}</textarea></div>
-      </div>
-
-      <div class="subform-group">
-        <h3>Важная информация</h3>
-        <div class="field"><label>Аллергены — по одному на строку (необязательно)</label>
-          <textarea id="allergens-${d}" placeholder="Содержит сырое яйцо">${arrayToLines(dish.allergens)}</textarea>
-        </div>
-        <div class="field"><label>Особенности — по одной на строку (необязательно)</label>
-          <textarea id="features-${d}" placeholder="Блюдо готовится из сырого мяса">${arrayToLines(dish.features)}</textarea>
-        </div>
-        <div class="field"><label>Рекомендации — по одной на строку (необязательно)</label>
-          <textarea id="recommendations-${d}" placeholder="Не рекомендуется гостям с ослабленным иммунитетом">${arrayToLines(dish.recommendations)}</textarea>
+      <div class="editor-panel">
+        <div class="field"><label>Фотографии</label>
+          <div class="photo-grid" id="photoGrid"></div>
+          <input type="file" id="photoFileInput" accept="image/*" multiple style="display:none">
+          <div class="hint" style="font-size:0.719rem;color:var(--dim)">Первое фото — главное, оно используется в списке и карточке блюда. Перетаскивайте, чтобы поменять порядок.</div>
         </div>
       </div>
-
-      <div class="subform-group">
-        <h3>Частые вопросы (FAQ)</h3>
-        <div id="faq-${d}"></div>
-        <button class="secondary" onclick="addFaqRow('${d}')">+ Добавить вопрос</button>
+      <div class="editor-panel">
+        <div class="field"><label>Название <span class="req">*</span></label><input type="text" id="f-name" value="${escapeHtml(draft.name)}"></div>
+        <div class="field"><label>Подзаголовок</label><input type="text" id="f-subtitle" value="${escapeHtml(draft.subtitle)}"></div>
+        <div class="field"><label>Краткое описание <span class="req">*</span></label><textarea id="f-description">${escapeHtml(draft.description)}</textarea></div>
+        <div class="field"><label>Категория <span class="req">*</span></label>
+          <select id="f-section">${sectionsTreeOrdered().map((s) => `<option value="${s.id}" ${s.id === draft.sectionId ? "selected" : ""}>${s.parentId ? "└ " : ""}${escapeHtml(s.name)}</option>`).join("")}</select>
+        </div>
+        <div class="field"><label>Статус</label>
+          <div class="status-picker" id="statusPicker">
+            ${statusOptions().map(([v, label]) => `<button type="button" class="status-pick ${v === draft.status ? "active" : ""}" data-status="${escapeHtml(v)}">${escapeHtml(label)}</button>`).join("")}
+          </div>
+        </div>
+        <div class="field" style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="f-hidden" ${draft.hidden ? "checked" : ""} style="width:16px;height:16px;accent-color:var(--accent)">
+          <label for="f-hidden" style="margin:0">Скрыть блюдо (не показывать официантам)</label>
+        </div>
       </div>
-
-      <div class="field"><label>Состав (таблицы ингредиентов — вкладка «Состав»)</label>
-        <div id="calc-${d}"></div>
-        <button class="secondary" onclick="addCalcTable('${d}')">+ Добавить таблицу</button>
-      </div>
-
-      <div style="display:flex; gap:8px; align-items:center">
-        <button class="action" onclick="saveDish('${d}')">Сохранить</button>
-        <button class="secondary" onclick="toggleDish('${d}')">▾ Свернуть</button>
-      </div>
-      <div class="status" id="save-status-${d}"></div>
     `;
   }
 
-  // ---------- calc tables (состав) ----------
-  const calcDraft = {};
-  function findDishById(id) {
-    return dishes.find((x) => x.id === id) || orphans.find((x) => x.id === id);
+  function renderCompositionTab(dish) {
+    return `
+      <div class="editor-panel">
+        <div id="calcTablesWrap"></div>
+        <button type="button" class="btn-add-row" onclick="addCalcTable('${dish.id}')">${icon("plus")} Добавить группу ингредиентов</button>
+      </div>
+    `;
   }
-  function ensureCalcDraft(dishId) {
-    if (!calcDraft[dishId]) {
-      const dish = findDishById(dishId);
-      calcDraft[dishId] = JSON.parse(JSON.stringify((dish && dish.calcTables) || []));
+
+  function renderHistoryTab(dish) {
+    const draft = ensureDraft(dish.id);
+    return `
+      <div class="editor-panel">
+        <div class="field"><label>История блюда</label><textarea id="f-history" rows="4">${escapeHtml(draft.history)}</textarea></div>
+        <div class="field"><label>Интересный факт (необязательно)</label><input type="text" id="f-historyQuote" value="${escapeHtml(draft.historyQuote)}"></div>
+      </div>
+    `;
+  }
+
+  function renderServingTab(dish) {
+    const draft = ensureDraft(dish.id);
+    return `
+      <div class="editor-panel">
+        <div class="field"><label>Как подаём</label>
+          <textarea id="f-servingSteps" rows="4" placeholder="Подаётся охлаждённым&#10;Украшается микрозеленью">${arrayToLines(draft.servingSteps)}</textarea>
+        </div>
+        <div class="field"><label>Что сказать гостю</label><textarea id="f-waiterPhrase" rows="3">${escapeHtml(draft.waiterPhrase)}</textarea></div>
+        <div class="field"><label>Рекомендации</label>
+          <textarea id="f-recommendations" rows="3" placeholder="По одной на строку">${arrayToLines(draft.recommendations)}</textarea>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderImportantTab(dish) {
+    const draft = ensureDraft(dish.id);
+    return `
+      <div class="editor-panel">
+        <div class="field"><label>Аллергены</label>
+          <div class="checkbox-grid" id="allergenGrid">
+            ${ALLERGEN_OPTIONS.map((a) => `
+              <label class="check-item ${draft.allergensChecked.has(a) ? "checked" : ""}" data-allergen="${escapeHtml(a)}">
+                <input type="checkbox" ${draft.allergensChecked.has(a) ? "checked" : ""}><span>${escapeHtml(a)}</span>
+              </label>`).join("")}
+          </div>
+          <label style="font-size:0.75rem;color:var(--dim);font-weight:600;display:block;margin-bottom:5px">Другое (по одному на строку)</label>
+          <textarea id="f-allergenOther" rows="2">${escapeHtml(draft.allergensOther)}</textarea>
+        </div>
+        <div class="field"><label>Особенности</label>
+          <textarea id="f-features" rows="3" placeholder="По одной на строку">${arrayToLines(draft.features)}</textarea>
+        </div>
+        <div class="field"><label>Предупреждение</label><input type="text" id="f-warning" value="${escapeHtml(draft.warning)}" placeholder="Например: не рекомендуется гостям с ослабленным иммунитетом"></div>
+      </div>
+    `;
+  }
+
+  function renderFaqTab(dish) {
+    return `
+      <div class="editor-panel">
+        <div id="faqWrap"></div>
+        <button type="button" class="btn-add-row" onclick="addFaqRow('${dish.id}')">${icon("plus")} Добавить вопрос</button>
+      </div>
+    `;
+  }
+
+  function wirePanelEvents(dish) {
+    const id = dish.id;
+
+    if (activeTab === "basic") {
+      bindField("f-name", "name");
+      bindField("f-subtitle", "subtitle");
+      bindField("f-description", "description");
+      bindField("f-section", "sectionId");
+      bindField("f-hidden", "hidden", { checkbox: true });
+      renderPhotoGrid(id);
+      const fileInput = document.getElementById("photoFileInput");
+      document.querySelectorAll("#statusPicker .status-pick").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (editorLocked) return;
+          document.querySelectorAll("#statusPicker .status-pick").forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          ensureDraft(id).status = btn.dataset.status;
+          markDirty();
+        });
+      });
+      fileInput.addEventListener("change", async () => {
+        for (const file of fileInput.files) {
+          const dataUri = await fileToDataUri(file);
+          await fetch(`/api/oko-waiter-guide/admin/dishes/${id}`, {
+            method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({ addPhoto: dataUri }),
+          });
+        }
+        await reload();
+        editingDishId = id;
+        renderMain();
+      });
     }
-    return calcDraft[dishId];
+    if (activeTab === "composition") renderCalc(id);
+    if (activeTab === "history") {
+      bindField("f-history", "history");
+      bindField("f-historyQuote", "historyQuote");
+    }
+    if (activeTab === "serving") {
+      bindField("f-servingSteps", "servingSteps", { lines: true });
+      bindField("f-waiterPhrase", "waiterPhrase");
+      bindField("f-recommendations", "recommendations", { lines: true });
+    }
+    if (activeTab === "important") {
+      bindField("f-allergenOther", "allergensOther");
+      bindField("f-features", "features", { lines: true });
+      bindField("f-warning", "warning");
+      document.querySelectorAll("#allergenGrid .check-item").forEach((label) => {
+        label.addEventListener("click", () => {
+          if (editorLocked) return;
+          const a = label.dataset.allergen;
+          const draft = ensureDraft(id);
+          if (draft.allergensChecked.has(a)) draft.allergensChecked.delete(a); else draft.allergensChecked.add(a);
+          label.classList.toggle("checked", draft.allergensChecked.has(a));
+          label.querySelector("input").checked = draft.allergensChecked.has(a);
+          markDirty();
+        });
+      });
+    }
+    if (activeTab === "faq") renderFaq(id);
   }
 
+  function renderPhotoGrid(dishId) {
+    const dish = findDish(dishId);
+    const photos = dish.photos || [];
+    const wrap = document.getElementById("photoGrid");
+    wrap.innerHTML = photos.map((_, i) => `
+      <div class="photo-item" draggable="true" data-idx="${i}">
+        <img id="editPhoto-${dishId}-${i}">
+        ${i === 0 ? `<span class="main-badge">Главное</span>` : `<button type="button" class="main-btn" data-make-main="${i}">Сделать главным</button>`}
+        <button type="button" class="rm-btn" data-remove="${i}">✕</button>
+      </div>`).join("") + `
+      <button type="button" class="photo-add" id="photoAddBtn">${icon("photo")}<span>Добавить</span></button>
+    `;
+    photos.forEach((p, i) => {
+      fetch(`/api/oko-waiter-guide/photos/${p}`).then((r) => r.blob()).then((b) => {
+        const img = document.getElementById(`editPhoto-${dishId}-${i}`);
+        if (img) img.src = URL.createObjectURL(b);
+      });
+    });
+    document.getElementById("photoAddBtn").addEventListener("click", () => document.getElementById("photoFileInput").click());
+    wrap.querySelectorAll("[data-remove]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await fetch(`/api/oko-waiter-guide/admin/dishes/${dishId}`, {
+          method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ removePhotoIndex: Number(btn.dataset.remove) }),
+        });
+        await reload();
+        editingDishId = dishId; renderMain();
+      });
+    });
+    wrap.querySelectorAll("[data-make-main]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const idx = Number(btn.dataset.makeMain);
+        const order = photos.slice();
+        const [item] = order.splice(idx, 1);
+        order.unshift(item);
+        await fetch(`/api/oko-waiter-guide/admin/dishes/${dishId}`, {
+          method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ photosOrder: order }),
+        });
+        await reload();
+        editingDishId = dishId; renderMain();
+      });
+    });
+    let dragEl = null;
+    wrap.querySelectorAll(".photo-item").forEach((item) => {
+      item.addEventListener("dragstart", () => { dragEl = item; item.classList.add("dragging"); });
+      item.addEventListener("dragend", () => { item.classList.remove("dragging"); dragEl = null; });
+      item.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (!dragEl || dragEl === item) return;
+        const rect = item.getBoundingClientRect();
+        const before = (e.clientX - rect.left) < rect.width / 2;
+        item.parentNode.insertBefore(dragEl, before ? item : item.nextSibling);
+      });
+      item.addEventListener("drop", async () => {
+        const order = Array.from(wrap.querySelectorAll(".photo-item")).map((el) => photos[Number(el.dataset.idx)]);
+        await fetch(`/api/oko-waiter-guide/admin/dishes/${dishId}`, {
+          method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ photosOrder: order }),
+        });
+        await reload();
+        editingDishId = dishId; renderMain();
+      });
+    });
+  }
+
+  // ---------- composition (calc tables) ----------
   function renderCalc(dishId) {
-    const tables = ensureCalcDraft(dishId);
-    document.getElementById(`calc-${dishId}`).innerHTML = tables
-      .map(
-        (t, ti) => `
-      <div class="calc-table">
-        <div class="field"><input type="text" placeholder="Название таблицы (необязательно)" value="${escapeHtml(t.label || "")}"
-          onchange="calcDraft['${dishId}'][${ti}].label = this.value"></div>
-        ${t.rows
-          .map(
-            (r, ri) => `
-          <div class="calc-row">
-            <input type="text" placeholder="Ингредиент" value="${escapeHtml(r.name || "")}"
-              onchange="calcDraft['${dishId}'][${ti}].rows[${ri}].name = this.value">
-            <input type="text" class="unit" placeholder="ед." value="${escapeHtml(r.unit || "")}"
-              onchange="calcDraft['${dishId}'][${ti}].rows[${ri}].unit = this.value">
-            <input type="text" class="amount" placeholder="кол-во" value="${escapeHtml(r.amount || "")}"
-              onchange="calcDraft['${dishId}'][${ti}].rows[${ri}].amount = this.value">
-            <button class="icon" onclick="removeCalcRow('${dishId}', ${ti}, ${ri})">✕</button>
-          </div>`,
-          )
-          .join("")}
-        <button class="secondary" onclick="addCalcRow('${dishId}', ${ti})">+ Ингредиент</button>
-        <button class="danger" onclick="removeCalcTable('${dishId}', ${ti})">Удалить таблицу</button>
-      </div>`,
-      )
-      .join("");
-  }
+    const tables = ensureDraft(dishId).calcTables;
+    const wrap = document.getElementById("calcTablesWrap");
+    wrap.innerHTML = tables.map((t, ti) => `
+      <div class="repeatable-group">
+        <div class="field"><input type="text" placeholder="Название группы (необязательно)" value="${escapeHtml(t.label || "")}" data-table-label="${ti}"></div>
+        <div id="calcRows-${ti}"></div>
+        <button type="button" class="btn-add-row" data-add-row="${ti}">${icon("plus")} Ингредиент</button>
+        <button type="button" class="btn-ghost" style="margin-top:8px;color:var(--bad)" data-rm-table="${ti}">Удалить группу</button>
+      </div>`).join("");
 
+    tables.forEach((t, ti) => {
+      const rowsWrap = document.getElementById(`calcRows-${ti}`);
+      rowsWrap.innerHTML = t.rows.map((r, ri) => `
+        <div class="repeatable-row" draggable="true" data-ti="${ti}" data-ri="${ri}">
+          <span class="grip">${icon("grip")}</span>
+          <input type="text" placeholder="Ингредиент" value="${escapeHtml(r.name || "")}" data-row-field="name">
+          <input type="text" class="unit" placeholder="ед." value="${escapeHtml(r.unit || "")}" data-row-field="unit">
+          <input type="text" class="amount" placeholder="кол-во" value="${escapeHtml(r.amount || "")}" data-row-field="amount">
+          <button type="button" class="rm" data-rm-row>${icon("close")}</button>
+        </div>`).join("");
+
+      rowsWrap.querySelectorAll(".repeatable-row").forEach((rowEl) => {
+        const ri = Number(rowEl.dataset.ri);
+        rowEl.querySelectorAll("[data-row-field]").forEach((input) => {
+          input.addEventListener("input", () => { tables[ti].rows[ri][input.dataset.rowField] = input.value; markDirty(); });
+        });
+        rowEl.querySelector("[data-rm-row]").addEventListener("click", () => {
+          tables[ti].rows.splice(ri, 1); markDirty(); renderCalc(dishId);
+        });
+      });
+      wireRowDrag(rowsWrap, tables[ti].rows, dishId);
+    });
+
+    wrap.querySelectorAll("[data-table-label]").forEach((input) => {
+      input.addEventListener("input", () => { tables[Number(input.dataset.tableLabel)].label = input.value; markDirty(); });
+    });
+    wrap.querySelectorAll("[data-add-row]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        tables[Number(btn.dataset.addRow)].rows.push({ name: "", unit: "кг", amount: "" });
+        markDirty(); renderCalc(dishId);
+      });
+    });
+    wrap.querySelectorAll("[data-rm-table]").forEach((btn) => {
+      btn.addEventListener("click", () => { tables.splice(Number(btn.dataset.rmTable), 1); markDirty(); renderCalc(dishId); });
+    });
+  }
   function addCalcTable(dishId) {
-    ensureCalcDraft(dishId).push({ label: "", rows: [{ name: "", unit: "кг", amount: "" }] });
-    renderCalc(dishId);
+    ensureDraft(dishId).calcTables.push({ label: "", rows: [{ name: "", unit: "кг", amount: "" }] });
+    markDirty(); renderCalc(dishId);
   }
-  function removeCalcTable(dishId, ti) {
-    ensureCalcDraft(dishId).splice(ti, 1);
-    renderCalc(dishId);
-  }
-  function addCalcRow(dishId, ti) {
-    ensureCalcDraft(dishId)[ti].rows.push({ name: "", unit: "кг", amount: "" });
-    renderCalc(dishId);
-  }
-  function removeCalcRow(dishId, ti, ri) {
-    ensureCalcDraft(dishId)[ti].rows.splice(ri, 1);
-    renderCalc(dishId);
+  function wireRowDrag(rowsWrap, rowsArr, dishId) {
+    let dragEl = null, dragIdx = null;
+    rowsWrap.querySelectorAll(".repeatable-row").forEach((row) => {
+      row.addEventListener("dragstart", () => { dragEl = row; dragIdx = Number(row.dataset.ri); row.classList.add("dragging"); });
+      row.addEventListener("dragend", () => { row.classList.remove("dragging"); dragEl = null; });
+      row.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (!dragEl || dragEl === row) return;
+        const rect = row.getBoundingClientRect();
+        const before = (e.clientY - rect.top) < rect.height / 2;
+        row.parentNode.insertBefore(dragEl, before ? row : row.nextSibling);
+      });
+      row.addEventListener("drop", () => {
+        const newOrderIdx = Array.from(rowsWrap.querySelectorAll(".repeatable-row")).map((el) => Number(el.dataset.ri));
+        const reordered = newOrderIdx.map((i) => rowsArr[i]);
+        rowsArr.length = 0;
+        reordered.forEach((r) => rowsArr.push(r));
+        markDirty(); renderCalc(dishId);
+      });
+    });
   }
 
   // ---------- FAQ ----------
-  const faqDraft = {};
-  function ensureFaqDraft(dishId) {
-    if (!faqDraft[dishId]) {
-      const dish = findDishById(dishId);
-      faqDraft[dishId] = JSON.parse(JSON.stringify((dish && dish.faq) || []));
-    }
-    return faqDraft[dishId];
-  }
   function renderFaq(dishId) {
-    const faq = ensureFaqDraft(dishId);
-    document.getElementById(`faq-${dishId}`).innerHTML = faq
-      .map(
-        (f, fi) => `
-      <div class="faq-row">
+    const faq = ensureDraft(dishId).faq;
+    const wrap = document.getElementById("faqWrap");
+    wrap.innerHTML = faq.map((f, fi) => `
+      <div class="faq-block" draggable="true" data-fi="${fi}">
         <div class="faq-top">
-          <input type="text" placeholder="Вопрос" value="${escapeHtml(f.question || "")}"
-            onchange="faqDraft['${dishId}'][${fi}].question = this.value">
-          <button class="icon" onclick="removeFaqRow('${dishId}', ${fi})">✕</button>
+          <span class="grip">${icon("grip")}</span>
+          <input type="text" placeholder="Вопрос" value="${escapeHtml(f.question || "")}" data-faq-field="question">
+          <button type="button" class="rm" data-rm-faq>${icon("close")}</button>
         </div>
-        <textarea placeholder="Ответ" onchange="faqDraft['${dishId}'][${fi}].answer = this.value">${escapeHtml(f.answer || "")}</textarea>
-      </div>`,
-      )
-      .join("");
+        <textarea placeholder="Ответ" rows="2" data-faq-field="answer">${escapeHtml(f.answer || "")}</textarea>
+      </div>`).join("");
+    wrap.querySelectorAll(".faq-block").forEach((block) => {
+      const fi = Number(block.dataset.fi);
+      block.querySelectorAll("[data-faq-field]").forEach((input) => {
+        input.addEventListener("input", () => { faq[fi][input.dataset.faqField] = input.value; markDirty(); });
+      });
+      block.querySelector("[data-rm-faq]").addEventListener("click", () => { faq.splice(fi, 1); markDirty(); renderFaq(dishId); });
+    });
+    let dragEl = null;
+    wrap.querySelectorAll(".faq-block").forEach((block) => {
+      block.addEventListener("dragstart", () => { dragEl = block; block.classList.add("dragging"); });
+      block.addEventListener("dragend", () => { block.classList.remove("dragging"); dragEl = null; });
+      block.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (!dragEl || dragEl === block) return;
+        const rect = block.getBoundingClientRect();
+        const before = (e.clientY - rect.top) < rect.height / 2;
+        block.parentNode.insertBefore(dragEl, before ? block : block.nextSibling);
+      });
+      block.addEventListener("drop", () => {
+        const newOrder = Array.from(wrap.querySelectorAll(".faq-block")).map((el) => faq[Number(el.dataset.fi)]);
+        faq.length = 0; newOrder.forEach((f) => faq.push(f));
+        markDirty(); renderFaq(dishId);
+      });
+    });
   }
-  function addFaqRow(dishId) {
-    ensureFaqDraft(dishId).push({ question: "", answer: "" });
-    renderFaq(dishId);
-  }
-  function removeFaqRow(dishId, fi) {
-    ensureFaqDraft(dishId).splice(fi, 1);
-    renderFaq(dishId);
-  }
+  function addFaqRow(dishId) { ensureDraft(dishId).faq.push({ question: "", answer: "" }); markDirty(); renderFaq(dishId); }
 
   function fileToDataUri(file) {
     return new Promise((resolve, reject) => {
@@ -773,141 +1887,173 @@
     });
   }
 
-  async function removeDishPhotoAt(dishId, index) {
-    await fetch(`/api/oko-waiter-guide/admin/dishes/${dishId}`, {
-      method: "PATCH",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ removePhotoIndex: index }),
-    });
-    await reload();
-  }
-
+  // ---------- save / delete ----------
+  // Одна кнопка "Сохранить" отправляет ВЕСЬ черновик разом (все поля со
+  // всех вкладок, не только то, что видно на текущей) — раньше собирали
+  // тело запроса из DOM, а DOM для невидимых вкладок не существовал, и их
+  // изменения молча пропадали при сохранении с другой вкладки.
   async function saveDish(dishId) {
-    const statusEl = document.getElementById(`save-status-${dishId}`);
-    const photoFile = document.getElementById(`photo-input-${dishId}`).files[0];
-    const addPhoto = photoFile ? await fileToDataUri(photoFile) : undefined;
+    const statusEl = document.getElementById("saveIndicator");
+    const draft = ensureDraft(dishId);
 
     const body = {
-      name: document.getElementById(`name-${dishId}`).value,
-      subtitle: document.getElementById(`subtitle-${dishId}`).value,
-      description: document.getElementById(`description-${dishId}`).value,
-      sectionId: document.getElementById(`section-${dishId}`).value || null,
-      status: document.getElementById(`status-${dishId}`).value,
-      hidden: document.getElementById(`hidden-${dishId}`).checked,
-      history: document.getElementById(`history-${dishId}`).value,
-      historyQuote: document.getElementById(`historyQuote-${dishId}`).value,
-      servingSteps: linesToArray(document.getElementById(`servingSteps-${dishId}`).value),
-      waiterPhrase: document.getElementById(`waiterPhrase-${dishId}`).value,
-      allergens: linesToArray(document.getElementById(`allergens-${dishId}`).value),
-      features: linesToArray(document.getElementById(`features-${dishId}`).value),
-      recommendations: linesToArray(document.getElementById(`recommendations-${dishId}`).value),
-      faq: ensureFaqDraft(dishId).filter((f) => f.question && f.question.trim()),
-      calcTables: ensureCalcDraft(dishId),
+      name: draft.name, subtitle: draft.subtitle, description: draft.description,
+      sectionId: draft.sectionId || null, status: draft.status, hidden: draft.hidden,
+      history: draft.history, historyQuote: draft.historyQuote,
+      servingSteps: draft.servingSteps, waiterPhrase: draft.waiterPhrase,
+      recommendations: draft.recommendations, features: draft.features, warning: draft.warning,
+      allergens: [...draft.allergensChecked, ...linesToArray(draft.allergensOther)],
+      calcTables: draft.calcTables,
+      faq: draft.faq.filter((f) => f.question && f.question.trim()),
     };
-    if (addPhoto) body.addPhoto = addPhoto;
 
     const res = await fetch(`/api/oko-waiter-guide/admin/dishes/${dishId}`, {
-      method: "PATCH",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(body),
+      method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(body),
     });
     if (!res.ok) {
-      statusEl.className = "status error";
-      statusEl.innerText = "Не удалось сохранить";
+      if (statusEl) { statusEl.textContent = "Не удалось сохранить"; statusEl.className = "save-indicator dirty"; }
       return;
     }
-    statusEl.className = "status ok";
-    statusEl.innerText = "Сохранено";
-    openDishes.add(dishId);
+    isDirty = false;
+    // Сразу после сохранения экран "запирается" (поля недоступны для
+    // правки) — по просьбе пользователя, чтобы после успешного сохранения
+    // случайное нажатие/правка не могли ничего испортить. "Редактировать"
+    // в футере снимает блокировку.
+    editorLocked = true;
+    if (statusEl) { statusEl.textContent = "✓ Изменения сохранены"; statusEl.className = "save-indicator saved"; }
+    delete dishDraft[dishId];
+    clearLocalDraft(dishId);
     await reload();
-    document.getElementById(`dish-edit-${dishId}`)?.classList.add("open");
-    renderCalc(dishId);
-    renderFaq(dishId);
+    editingDishId = dishId;
+    renderMain();
   }
 
-  async function removeDish(id) {
-    if (!confirm("Удалить блюдо целиком?")) return;
-    await fetch(`/api/oko-waiter-guide/admin/dishes/${id}`, { method: "DELETE", headers: authHeaders() });
-    delete calcDraft[id];
-    delete faqDraft[id];
-    await reload();
-  }
-
-  async function moveDish(id, delta) {
-    const dish = dishes.find((x) => x.id === id);
-    if (!dish) return;
-    const siblings = dishesFor(dish.sectionId).map((x) => x.id);
-    const i = siblings.indexOf(id);
-    const j = i + delta;
-    if (j < 0 || j >= siblings.length) return;
-    [siblings[i], siblings[j]] = [siblings[j], siblings[i]];
-    await fetch("/api/oko-waiter-guide/admin/dishes/reorder", {
-      method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ orderedIds: siblings }),
-    });
+  async function deleteDish(dishId) {
+    const dish = findDish(dishId);
+    const ok = await confirmDialog(`Удалить «${dish.name}»?`, "Блюдо будет удалено из пособия официанта.");
+    if (!ok) return;
+    await fetch(`/api/oko-waiter-guide/admin/dishes/${dishId}`, { method: "DELETE", headers: authHeaders() });
+    delete dishDraft[dishId];
+    clearLocalDraft(dishId);
+    editingDishId = null;
+    isDirty = false;
     await reload();
   }
 
-  function showNewDishForm(sectionId) {
-    const el = document.getElementById(`new-dish-${sectionId}`);
-    el.innerHTML = `
-      <div class="dish-row">
-        <div class="field"><label>Название нового блюда</label><input type="text" id="quick-new-name-${sectionId}"></div>
-        <button class="action" onclick="createDish('${sectionId}')">Создать</button>
-        <div class="status" id="quick-new-status-${sectionId}"></div>
+  // ---------- live preview (postMessage into the real guide app) ----------
+  // Открываем настоящую страницу пособия официанта на зарезервированном
+  // слаге "__preview__" и шлём ей текущий ЧЕРНОВИК (не то, что сохранено на
+  // сервере) через postMessage — это гарантирует, что превью выглядит
+  // 1-в-1 как у официанта (переиспользуем тот же рендер), и обновляется
+  // сразу при вводе, без сохранения (см. markDirty()).
+  let previewIframeEl = null;
+  let previewDishId = null;
+
+  function buildPreviewPayload(dishId) {
+    const draft = ensureDraft(dishId);
+    const liveDish = findDish(dishId) || {};
+    const section = sections.find((s) => s.id === draft.sectionId);
+    return {
+      id: dishId,
+      sectionName: section ? section.name : "",
+      sectionSlug: section ? section.slug : "",
+      name: draft.name, subtitle: draft.subtitle, description: draft.description,
+      status: draft.status, hidden: draft.hidden,
+      history: draft.history, historyQuote: draft.historyQuote,
+      servingSteps: draft.servingSteps, waiterPhrase: draft.waiterPhrase,
+      recommendations: draft.recommendations, features: draft.features, warning: draft.warning,
+      allergens: [...draft.allergensChecked, ...linesToArray(draft.allergensOther)],
+      calcTables: draft.calcTables,
+      faq: draft.faq.filter((f) => f.question && f.question.trim()),
+      photos: liveDish.photos || [],
+    };
+  }
+  function syncPreview() {
+    if (!previewIframeEl || !previewDishId) return;
+    try {
+      previewIframeEl.contentWindow.postMessage({ type: "oko-preview-update", dish: buildPreviewPayload(previewDishId) }, location.origin);
+    } catch (e) {}
+  }
+
+  function openPreview(dishId) {
+    previewDishId = dishId;
+    const overlay = document.getElementById("previewOverlay");
+    overlay.innerHTML = `
+      <div class="preview-modal">
+        <div class="phone-frame"><iframe id="previewIframe" src="/waiter-guide/dish/__preview__"></iframe></div>
+        <div class="close-row"><button class="btn-ghost" id="previewCloseBtn">Закрыть</button></div>
       </div>`;
+    overlay.classList.add("open");
+    previewIframeEl = document.getElementById("previewIframe");
+    previewIframeEl.addEventListener("load", syncPreview);
+    document.getElementById("previewCloseBtn").addEventListener("click", closePreview);
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) closePreview(); }, { once: true });
+  }
+  function closePreview() {
+    previewIframeEl = null;
+    previewDishId = null;
+    const overlay = document.getElementById("previewOverlay");
+    overlay.classList.remove("open");
+    setTimeout(() => { overlay.innerHTML = ""; }, 200);
   }
 
-  async function createDish(sectionId) {
-    const input = document.getElementById(`quick-new-name-${sectionId}`);
-    const statusEl = document.getElementById(`quick-new-status-${sectionId}`);
-    if (!input.value.trim()) {
-      statusEl.className = "status error";
-      statusEl.innerText = "Укажите название";
-      return;
-    }
-    const res = await fetch("/api/oko-waiter-guide/admin/dishes", {
-      method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ name: input.value, sectionId }),
+  // ---------- confirm modal ----------
+  function confirmDialog(title, text) {
+    return new Promise((resolve) => {
+      const overlay = document.getElementById("confirmOverlay");
+      overlay.innerHTML = `
+        <div class="confirm-modal">
+          <h3>${escapeHtml(title)}</h3>
+          <p>${escapeHtml(text)}</p>
+          <div class="row">
+            <button class="btn-ghost" id="confirmCancel">Отмена</button>
+            <button class="btn-accent" id="confirmOk" style="background:var(--bad);color:#fff">Удалить</button>
+          </div>
+        </div>`;
+      overlay.classList.add("open");
+      const finish = (val) => { overlay.classList.remove("open"); setTimeout(() => { overlay.innerHTML = ""; }, 200); resolve(val); };
+      document.getElementById("confirmCancel").addEventListener("click", () => finish(false));
+      document.getElementById("confirmOk").addEventListener("click", () => finish(true));
     });
-    if (!res.ok) {
-      statusEl.className = "status error";
-      statusEl.innerText = "Не удалось создать";
-      return;
-    }
-    const created = await res.json();
-    openSections.add(sectionId);
-    openDishes.add(created.id);
-    await reload();
-    renderCalc(created.id);
-    renderFaq(created.id);
   }
 
-  async function loadPhotos(dish) {
-    const photos = dish.photos || [];
-    for (let i = 0; i < photos.length; i++) {
-      const key = `${dish.id}-${i}`;
-      if (photoUrls[key]) continue;
-      const res = await fetch(`/api/oko-waiter-guide/photos/${photos[i]}`);
-      if (!res.ok) continue;
-      const blob = await res.blob();
-      photoUrls[key] = URL.createObjectURL(blob);
-      const img = document.getElementById(`photo-${dish.id}-${i}`);
-      if (img) img.src = photoUrls[key];
-    }
+  // resolve(true) = уйти без сохранения, resolve(false) = остаться
+  function unsavedGuard() {
+    return new Promise((resolve) => {
+      const overlay = document.getElementById("confirmOverlay");
+      overlay.innerHTML = `
+        <div class="confirm-modal">
+          <h3>Несохранённые изменения</h3>
+          <p>У вас есть несохранённые изменения.</p>
+          <div class="row">
+            <button class="btn-ghost" id="stayBtn">Остаться</button>
+            <button class="btn-accent" id="leaveBtn">Выйти без сохранения</button>
+          </div>
+        </div>`;
+      overlay.classList.add("open");
+      const finish = (val) => { overlay.classList.remove("open"); setTimeout(() => { overlay.innerHTML = ""; }, 200); resolve(val); };
+      document.getElementById("stayBtn").addEventListener("click", () => finish(false));
+      document.getElementById("leaveBtn").addEventListener("click", () => finish(true));
+    });
   }
 
-  if (password) {
-    fetch("/api/oko-waiter-guide/admin/sections", { headers: authHeaders() }).then((res) => {
-      if (res.ok) {
-        document.getElementById("gate").style.display = "none";
-        document.getElementById("app").style.display = "block";
-        document.getElementById("guideLinkText").innerText = location.origin + "/waiter-guide/";
-        document.getElementById("newSectionIcon").innerHTML = iconOptionsHtml("");
-        reload();
-      }
+  // resolve(true) = продолжить черновик, resolve(false) = удалить черновик
+  function draftRecoveryDialog() {
+    return new Promise((resolve) => {
+      const overlay = document.getElementById("confirmOverlay");
+      overlay.innerHTML = `
+        <div class="confirm-modal">
+          <h3>Черновик найден</h3>
+          <p>Найден несохранённый черновик для этого блюда.</p>
+          <div class="row">
+            <button class="btn-ghost" id="discardDraftBtn">Удалить черновик</button>
+            <button class="btn-accent" id="continueDraftBtn">Продолжить</button>
+          </div>
+        </div>`;
+      overlay.classList.add("open");
+      const finish = (val) => { overlay.classList.remove("open"); setTimeout(() => { overlay.innerHTML = ""; }, 200); resolve(val); };
+      document.getElementById("discardDraftBtn").addEventListener("click", () => finish(false));
+      document.getElementById("continueDraftBtn").addEventListener("click", () => finish(true));
     });
   }
 </script>
