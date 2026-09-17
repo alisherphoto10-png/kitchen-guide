@@ -71,6 +71,7 @@
   }
   @media (prefers-reduced-motion: reduce) { .hero-photo { transition: none; } }
   .home-hero { padding: 40px 20px 26px; text-align: center; }
+  .home-feedback-btn { position: absolute; top: 14px; right: 14px; z-index: 3; }
   .home-logo { height: 68px; width: auto; margin: 0 auto; display: block; mix-blend-mode: screen; }
 
   /* ---------- preloader ---------- */
@@ -608,6 +609,7 @@
         ${HERO_PHOTOS.map((src, i) => `<div class="hero-photo ${i === 0 ? "active" : ""}" style="background-image:url('${BASE}/${src}')"></div>`).join("")}
       </div>
       <div class="page-photo-overlay"></div>
+      <button class="icon-btn home-feedback-btn" id="feedbackBtn" aria-label="Обратная связь">${icon("feedback")}</button>
       <div class="home-hero">
         <img class="home-logo" src="${BASE}/logo.jpg" alt="OKO">
         <div class="home-wordmark-sub">пособие официанта</div>
@@ -636,6 +638,7 @@
     document.querySelectorAll(".category-tile").forEach((btn) => {
       btn.addEventListener("click", () => navigate(`/category/${btn.dataset.slug}`));
     });
+    document.getElementById("feedbackBtn").addEventListener("click", () => openFeedbackModal());
 
     const searchInput = document.getElementById("homeSearch");
     const resultsEl = document.getElementById("homeSearchResults");
