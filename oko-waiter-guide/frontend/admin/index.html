@@ -722,7 +722,10 @@
           <h1>Блюда</h1>
           <div class="hint">Управление меню и контентом для пособия официанта</div>
         </div>
-        <button class="btn-accent" onclick="createDish()">${icon("plus")}Добавить блюдо</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn-ghost" onclick="openXlsxDialog()">${icon("folder")}Excel</button>
+          <button class="btn-accent" onclick="createDish()">${icon("plus")}Добавить блюдо</button>
+        </div>
       </div>
       <div class="search-box">
         <span class="ic">${icon("search")}</span>
@@ -766,6 +769,77 @@
   }
 
   function setCategoryFilter(id) { categoryFilter = id; renderDishesView(); }
+
+  // ---------- экспорт/импорт блюд через Excel ----------
+  async function downloadExportXlsx(btn) {
+    btn.disabled = true;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "Готовлю…";
+    try {
+      const res = await fetch("/api/oko-waiter-guide/admin/export-xlsx", { headers: authHeaders() });
+      if (!res.ok) throw new Error("Не удалось скачать");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `oko-blyuda-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (e) {
+      alert("Не удалось скачать файл");
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  }
+
+  function openXlsxDialog() {
+    const overlay = document.getElementById("confirmOverlay");
+    overlay.innerHTML = `
+      <div class="confirm-modal">
+        <h3>Блюда — таблица Excel</h3>
+        <p class="hint">Скачайте текущие блюда таблицей, отредактируйте (или добавьте новые строки по тому же образцу) и загрузите обратно — существующие блюда обновятся, новые заведутся. Ничего не удаляется само.</p>
+        <button class="btn-accent" id="xlsxDownloadBtn" style="width:100%;justify-content:center">${icon("photo")}Скачать таблицу (.xlsx)</button>
+        <div style="height:14px"></div>
+        <p class="hint">Загрузить заполненный файл обратно:</p>
+        <input type="file" id="xlsxFileInput" accept=".xlsx">
+        <button class="btn-accent" id="xlsxUploadBtn" style="width:100%;justify-content:center;margin-top:8px">Загрузить таблицу</button>
+        <div id="xlsxResult"></div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn-ghost" id="xlsxClose" style="flex:1">Закрыть</button>
+        </div>
+      </div>`;
+    overlay.classList.add("open");
+    function closeDialog() {
+      overlay.classList.remove("open");
+      setTimeout(() => { overlay.innerHTML = ""; }, 200);
+    }
+    document.getElementById("xlsxClose").addEventListener("click", closeDialog);
+    document.getElementById("xlsxDownloadBtn").addEventListener("click", (e) => downloadExportXlsx(e.currentTarget));
+    document.getElementById("xlsxUploadBtn").addEventListener("click", async () => {
+      const fileInput = document.getElementById("xlsxFileInput");
+      const resultEl = document.getElementById("xlsxResult");
+      const file = fileInput.files[0];
+      if (!file) { resultEl.className = "status-msg error"; resultEl.innerText = "Выберите файл"; return; }
+      resultEl.className = "status-msg";
+      resultEl.innerText = "Загружаю…";
+      const fileBase64 = await fileToDataUri(file);
+      const res = await fetch("/api/oko-waiter-guide/admin/import-xlsx", {
+        method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ fileBase64 }),
+      });
+      const data = await res.json();
+      if (!res.ok) { resultEl.className = "status-msg error"; resultEl.innerText = data.error || "Не удалось загрузить"; return; }
+      resultEl.className = "status-msg ok";
+      let text = `Готово: создано ${data.created}, обновлено ${data.updated}.`;
+      if (data.skippedSheets && data.skippedSheets.length) text += ` Пропущены листы (не трогали): ${data.skippedSheets.join(", ")}.`;
+      if (data.warnings && data.warnings.length) text += ` ⚠ ${data.warnings.join("; ")}`;
+      resultEl.innerText = text;
+      await reload();
+      renderDishesView();
+    });
+  }
 
   function renderDishRowCard(dish) {
     const hasPhoto = dish.photos && dish.photos.length;

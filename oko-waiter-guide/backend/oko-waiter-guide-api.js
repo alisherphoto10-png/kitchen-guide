@@ -3,6 +3,16 @@ const fs = require("fs");
 const path = require("path");
 const store = require("./oko-waiter-guide-store");
 const { parseWaiterGuideMarkdown } = require("./oko-waiter-guide-md-import");
+const { buildDishesWorkbook, parseDishesWorkbook } = require("./oko-waiter-guide-xlsx");
+
+// "🔥 Хит" -> { emoji: "🔥", label: "Хит" } — для восстановления статуса,
+// заведённого руками в ячейке Excel без явного эмодзи-поля.
+function splitEmojiLabel(text) {
+  const trimmed = String(text || "").trim();
+  const m = /^(\p{Extended_Pictographic}️?)\s*(.*)$/u.exec(trimmed);
+  if (m && m[2]) return { emoji: m[1], label: m[2] };
+  return { emoji: "", label: trimmed };
+}
 
 // Владелец — единый пароль из .env, логин НЕ вводит (пустое поле логина на
 // экране входа = "это я"). Именованные сотрудники (data/users.json) входят
@@ -387,6 +397,115 @@ function createOkoWaiterGuideRouter(bot) {
       dishNames: created.map((d) => d.name),
       skipped: parsed.skipped,
     });
+  });
+
+  // ---------- экспорт/импорт блюд через Excel ----------
+  // Формат — см. oko-waiter-guide-xlsx.js (лист "ттк", одна строка на
+  // ингредиент, поля блюда — объединённая ячейка на блок). Только владелец:
+  // импорт может создавать разделы/подразделы/статусы по всей системе разом,
+  // это не тот инструмент, который стоит доверять ограниченному бар-доступу.
+  admin.get("/export-xlsx", requireOwner, async (req, res) => {
+    const guideAll = store.getGuideAll();
+    const statuses = store.readStatuses();
+    const orphans = store.getOrphanDishes();
+    const wb = buildDishesWorkbook(guideAll, statuses, orphans);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="oko-blyuda-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  });
+
+  admin.post("/import-xlsx", requireOwner, async (req, res) => {
+    const { fileBase64 } = req.body || {};
+    if (!fileBase64) return res.status(400).json({ error: "Файл не передан" });
+    const match = /^data:.*;base64,(.+)$/.exec(fileBase64);
+    const buffer = Buffer.from(match ? match[1] : fileBase64, "base64");
+
+    let parsed;
+    try {
+      parsed = await parseDishesWorkbook(buffer);
+    } catch (e) {
+      return res.status(400).json({ error: "Не удалось прочитать файл — это точно .xlsx?" });
+    }
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    if (!parsed.dishes.length) return res.status(400).json({ error: "Не нашли ни одного блюда в файле" });
+
+    // Разделы/подразделы/статусы — находим по названию или заводим на лету
+    // (та же удобная логика, что и у импорта .md), с кэшем на время одного
+    // импорта, чтобы не заводить дубль при повторении названия в разных строках.
+    const sectionCache = new Map();
+    function resolveSection(name, parentId) {
+      const key = `${parentId || ""}::${name.trim().toLowerCase()}`;
+      if (sectionCache.has(key)) return sectionCache.get(key);
+      const found = store.readSections().find(
+        (s) => (s.parentId || null) === (parentId || null) && s.name.trim().toLowerCase() === name.trim().toLowerCase(),
+      ) || store.addSection({ name, parentId });
+      sectionCache.set(key, found);
+      return found;
+    }
+    const statusCache = new Map();
+    function resolveStatus(label) {
+      const key = label.trim().toLowerCase();
+      if (statusCache.has(key)) return statusCache.get(key);
+      const existing = store.readStatuses().find((s) => {
+        const combined = [s.emoji, s.label].filter(Boolean).join(" ").trim().toLowerCase();
+        return combined === key || s.label.trim().toLowerCase() === key;
+      });
+      const status = existing || store.addStatus(splitEmojiLabel(label));
+      statusCache.set(key, status);
+      return status;
+    }
+
+    const existingDishes = store.readDishes();
+    const result = { created: 0, updated: 0, createdNames: [], updatedNames: [], warnings: [], skippedSheets: parsed.skippedSheets };
+
+    for (const d of parsed.dishes) {
+      const patch = {
+        name: d.name,
+        subtitle: d.subtitle,
+        description: d.description,
+        history: d.history,
+        waiterPhrase: d.waiterPhrase,
+        historyQuote: d.historyQuote,
+        servingSteps: d.servingSteps,
+        allergens: d.allergens,
+        features: d.features,
+        recommendations: d.recommendations,
+        warning: d.warning,
+        faq: d.faq,
+        hidden: d.hidden,
+        status: d.statusLabel ? resolveStatus(d.statusLabel).id : "",
+      };
+      // Пустой "раздел" НЕ переносит блюдо в "Без раздела" — слишком легко
+      // случайно стереть эту ячейку, редактируя что-то рядом. То же с
+      // составом: пусто в файле — состав не трогаем (см. hasCalcRows).
+      if (d.sectionName) {
+        const top = resolveSection(d.sectionName, null);
+        const target = d.subsectionName ? resolveSection(d.subsectionName, top.id) : top;
+        patch.sectionId = target.id;
+      }
+      if (d.hasCalcRows) patch.calcTables = d.calcTables;
+
+      const existing = d.id ? existingDishes.find((x) => x.id === d.id) : null;
+      if (existing) {
+        store.updateDish(d.id, patch);
+        result.updated++;
+        result.updatedNames.push(d.name);
+      } else {
+        if (d.id) result.warnings.push(`«${d.name}»: id «${d.id}» не найден — создано как новое блюдо`);
+        store.addDish(patch);
+        result.created++;
+        result.createdNames.push(d.name);
+      }
+    }
+
+    store.logActivity({
+      userId: req.userId,
+      userName: req.userName,
+      action: "dishes_imported",
+      targetName: `создано ${result.created}, обновлено ${result.updated}`,
+    });
+    res.json({ ok: true, ...result });
   });
 
   router.use("/admin", admin);
