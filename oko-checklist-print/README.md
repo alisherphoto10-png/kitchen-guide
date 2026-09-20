@@ -52,6 +52,41 @@
 заведения ещё не настроен (см. `oko-shelf-life/README.md`, раздел "Настройка
 агента"), так что тестовые задания в очереди никуда не ушли, это ожидаемо.
 
+## Фикс (2026-09-20): скан QR открывал мини-ап вместо страницы подтверждения
+
+**Не баг в порядке роутов Express** (в `index.js` вообще нет
+catch-all/static-раздачи фронтенда — фронтенд целиком отдаёт nginx, не
+Node-процесс). Реальная причина — на уровне nginx: в
+`/etc/nginx/sites-available/kitchendesk` не было `location`-блока для
+`/shift/finish-by-qr/`, поэтому запрос падал в общий SPA-фолбэк
+(`location /` → `try_files ... /index.html`) и открывал главную страницу
+KitchenDesk вместо HTML-ответа из `index.js`.
+
+Исправлено добавлением блока (по образцу уже существующего `/count/`):
+```nginx
+location /shift/finish-by-qr/ {
+    proxy_pass http://localhost:3004;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
+Конфиг забэкаплен перед правкой (`/root/kitchendesk-nginx-backup-*.conf`),
+`nginx -t` + `systemctl reload nginx`. Перепроверено сквозь настоящий домен
+(`https://kitchendesk.chefplan.ru/shift/finish-by-qr/<token>`, не только
+`localhost:3004` напрямую, как в первый раз) — все 4 состояния (успех,
+повтор, просрочен, неверный токен) и все остальные разделы
+(`/waiter-guide/`, `/shelf-life/admin/`, `/shelf-life/print/`, `/`,
+`/cabinet/`) целы.
+
+## Фича (2026-09-20): заметка плана печатается на чек-листе
+
+`buildChecklistPrintLines()` в `api/plan.js` теперь принимает `note` и
+вставляет `Заметка: <текст>` сразу после строки цех/дата, только если
+заметка не пустая (после `trim()`). `schedulePlanPrint()` и вызов из
+`POST /api/plan` прокидывают `plan.note` — то же поле, что уже сохраняется
+в `plan_${section}_${date}` (не новое хранилище).
+
 ## Исходный план (как задумывалось до реализации)
 
 Это ТЗ, не код. Записано по итогам обсуждения с пользователем — реализация
