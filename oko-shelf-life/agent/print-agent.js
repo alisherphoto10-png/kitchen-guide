@@ -190,6 +190,29 @@ async function pollOnce() {
   }
 }
 
+// Печатается один раз при каждом запуске агента (в том числе — при
+// автозагрузке молча в фоне) — просто физическое подтверждение "агент
+// жив", чтобы не гадать, поднялся ли он после включения моноблока.
+// Ошибку принтера в этот момент не считаем сбоем всего агента — просто
+// сообщаем в консоль и идём дальше к обычному опросу заданий.
+function startupTimeText() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function printStartupConfirmation() {
+  const job = {
+    printLines: ["KitchenDesk", "------------------------------", "Агент печати запущен", startupTimeText(), "------------------------------"],
+  };
+  try {
+    await sendToPrinter(buildLabel(job));
+    console.log("[старт] подтверждение запуска отправлено на принтер.");
+  } catch (err) {
+    console.error("[старт] не удалось напечатать подтверждение запуска (принтер недоступен?):", err.message);
+  }
+}
+
 // ---------------- ТЕСТ КОДОВОЙ СТРАНИЦЫ ----------------
 // node print-agent.js --codepage-test
 // Печатает одну и ту же русскую фразу под разными номерами кодовой
@@ -246,6 +269,7 @@ if (process.argv.includes("--codepage-test")) {
   installAutostart();
 } else {
   console.log(`Агент печати KitchenDesk запущен. Опрашиваю ${CONFIG.BACKEND_URL} каждые ${CONFIG.POLL_INTERVAL_MS / 1000} сек.`);
+  printStartupConfirmation();
   setInterval(pollOnce, CONFIG.POLL_INTERVAL_MS);
   pollOnce();
 }
