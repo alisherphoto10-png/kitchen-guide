@@ -162,6 +162,31 @@ function getRestaurant(id) {
   return readRestaurants().find((r) => r.id === id) || null;
 }
 
+// Готовый agent-config.json для заведения — чтобы не заставлять владельца
+// вручную набирать токен на моноблоке (страница настроек localhost:3500
+// это умеет только для IP/порта принтера и оформления чека, но не для
+// токена — токен раньше приходилось передавать текстом и вписывать в файл
+// руками). Файл кладётся РЯДОМ с print-agent.js на моноблоке — тот сам
+// подхватит его при первом запуске (CONFIG_PATH = agent-config.json рядом
+// со скриптом, см. print-agent.js) вместо создания файла с "CHANGE_ME".
+//
+// BACKEND_URL один на все заведения (один и тот же облачный KitchenDesk) —
+// не берётся из заведения, только AGENT_TOKEN и, если уже известен, IP
+// принтера. Если принтеров у заведения ещё нет — намеренно подставляем
+// явно нерабочий "0.0.0.0", а НЕ IP чужого принтера (например, ОКО) по
+// умолчанию: пусть на месте зайдут на localhost:3500 и впишут настоящий,
+// чем молча унаследуют IP из другой сети.
+const AGENT_BACKEND_URL = "https://kitchendesk.chefplan.ru";
+function buildAgentConfigFile(restaurant) {
+  const printer = restaurant.printers && restaurant.printers[0];
+  return {
+    BACKEND_URL: AGENT_BACKEND_URL,
+    AGENT_TOKEN: restaurant.agentToken,
+    PRINTER_IP: printer ? printer.ip : "0.0.0.0",
+    PRINTER_PORT: printer ? printer.port : 9100,
+  };
+}
+
 // ВАЖНО (найден и исправлен реальный баг 2026-09-20): если вызывающий код
 // передаёт restaurantId, которого ещё нет в списке заведений (например,
 // order.venue = "oblako" до того, как это заведение завели в панели) —
@@ -505,6 +530,7 @@ module.exports = {
   listKitchenDeskTenants,
   listRestaurantsWithStatus,
   getRestaurant,
+  buildAgentConfigFile,
   enableRestaurant,
   disableRestaurant,
   regenerateRestaurantToken,

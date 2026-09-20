@@ -169,6 +169,23 @@
     await reload();
   }
 
+  // Скачивание идёт не обычной ссылкой (нужен заголовок X-Admin-Password,
+  // которого у <a href> не бывает) — грузим файл через fetch и отдаём
+  // браузеру как blob. Имя файла всегда agent-config.json — его нужно
+  // положить рядом с print-agent.js на моноблоке, без переименования.
+  async function downloadAgentConfig(id, name) {
+    const res = await fetch(`/api/oko-print-admin/restaurants/${id}/agent-config-file`, { headers: authHeaders() });
+    if (!res.ok) { setStatus("Не удалось получить файл настроек", false); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "agent-config.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatus(`Файл настроек для "${name}" скачан`, true);
+  }
+
   function escapeHtml(v) {
     return String(v == null ? "" : v).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   }
@@ -217,6 +234,10 @@
           <button class="secondary" onclick="toggleToken('${r.id}')">${shown ? "Скрыть" : "Показать"}</button>
           <button class="secondary" onclick="copyToken('${escapeHtml(r.agentToken)}', this)">Копировать</button>
           <button class="secondary" onclick="regenerateToken('${r.id}','${escapeHtml(r.name)}')">Перевыпустить</button>
+        </div>
+        <div class="token-row">
+          <button class="action" onclick="downloadAgentConfig('${r.id}','${escapeHtml(r.name)}')">⭳ Скачать файл настроек агента</button>
+          <span class="hint" style="margin:0;">Скачанный <code>agent-config.json</code> положить рядом с <code>print-agent.js</code> на моноблоке этого заведения — токен уже внутри, вписывать вручную не нужно${r.printers.length ? "" : "; IP принтера впишите позже через страницу настроек агента (localhost:3500), в файле пока заглушка"}.</span>
         </div>
         <div class="printer-list">${printersHtml}</div>
         <div class="add-printer-row" id="add-printer-${r.id}">

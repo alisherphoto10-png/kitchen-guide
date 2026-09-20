@@ -194,6 +194,16 @@ function createOkoPrintAdminRouter() {
     res.json({ ok: true });
   });
 
+  // Готовый файл настроек для агента этого заведения (см. buildAgentConfigFile
+  // в сторе) — скачивается из панели и просто кладётся рядом с print-agent.js
+  // на моноблоке, токен вписывать вручную больше не нужно.
+  router.get("/restaurants/:id/agent-config-file", (req, res) => {
+    const restaurant = store.getRestaurant(req.params.id);
+    if (!restaurant) return res.status(404).json({ error: "Печать для этого заведения ещё не включена" });
+    res.setHeader("Content-Disposition", 'attachment; filename="agent-config.json"');
+    res.type("application/json").send(JSON.stringify(store.buildAgentConfigFile(restaurant), null, 2));
+  });
+
   router.post("/restaurants/:id/regenerate-token", (req, res) => {
     const restaurant = store.regenerateRestaurantToken(req.params.id);
     if (!restaurant) return res.status(404).json({ error: "Заведение не найдено" });
