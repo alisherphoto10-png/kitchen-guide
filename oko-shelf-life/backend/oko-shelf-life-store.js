@@ -1,10 +1,20 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const DATA_DIR = path.join(__dirname, "data");
 const ITEMS_PATH = path.join(DATA_DIR, "oko-shelf-life-items.json");
 const PRINT_JOBS_PATH = path.join(DATA_DIR, "oko-shelf-life-print-jobs.json");
 const AGENT_REPORTS_PATH = path.join(DATA_DIR, "oko-shelf-life-agent-reports.json");
+const RESTAURANTS_PATH = path.join(DATA_DIR, "oko-shelf-life-restaurants.json");
+// Легаси-заведение — единственное, что было до многозаведенческой поддержки.
+// Реальный агент на моноблоке ОКО уже работает с секретом из переменной
+// окружения OKO_SHELF_LIFE_AGENT_TOKEN (не из этого файла) — чтобы его не
+// пришлось перенастраивать, findRestaurantByToken (см. ниже) продолжает
+// понимать этот старый токен и подставляет вместо настоящей записи вот это.
+// Список принтеров у него пуст — IP/порт для него по-прежнему держит сам
+// агент локально (agent-config.json), сервер этим заведением не управляет.
+const LEGACY_RESTAURANT_ID = "default";
 
 function ensureDirs() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -25,6 +35,154 @@ function writeJson(filePath, value) {
 
 function makeId() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function makeToken() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+// ---------- заведения и их принтеры ----------
+// Одна запись = одно заведение: свой секретный токен (агент на его
+// моноблоке использует именно его — так задания разных заведений не
+// пересекаются в общей очереди) и список принтеров (по имени — "Раздача",
+// "Горячий цех" и т.п. — задание на печать помечается printerTarget,
+// сервер сам подставляет нужный IP/порт при выдаче агенту, см. ниже).
+// Список принтеров живёт ЗДЕСЬ, не в agent-config.json на моноблоке —
+// специально, чтобы владелец мог всё настраивать из панели, не трогая
+// каждый моноблок лично.
+function readRestaurants() {
+  return readJson(RESTAURANTS_PATH, []);
+}
+function writeRestaurants(list) {
+  writeJson(RESTAURANTS_PATH, list);
+}
+
+function slugify(name) {
+  const base = (name || "")
+    .toLowerCase()
+    .replace(/[^a-zа-я0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "");
+  return base || "zavedenie";
+}
+
+// customId — необязательно, но важно для заведений, которых уже знают
+// ДРУГИЕ модули под своим именем (например, oko-order-relay зовёт заведения
+// "oblako"/"myaso" в своём конфиге, латиницей — не так, как они называются
+// по-русски в этой панели). Если печать тикетов заказа должна прийти на
+// принтер именно этого заведения — id здесь ДОЛЖЕН совпадать с тем, как
+// заведение называется в том, другом, модуле, иначе задания будут просто
+// молча копиться в очереди, никем не забираемые (см. printOrderTicket в
+// oko-order-relay/backend/oko-order-api.js).
+function addRestaurant({ name, id: customId }) {
+  if (!name || !name.trim()) throw new Error("Укажите название заведения");
+  const list = readRestaurants();
+  let id = (customId && customId.trim()) || slugify(name);
+  if (customId && customId.trim()) {
+    if (list.some((r) => r.id === id) || id === LEGACY_RESTAURANT_ID) {
+      throw new Error(`ID "${id}" уже занят`);
+    }
+  } else {
+    let suffix = 1;
+    while (list.some((r) => r.id === id) || id === LEGACY_RESTAURANT_ID) {
+      suffix += 1;
+      id = `${slugify(name)}-${suffix}`;
+    }
+  }
+  const restaurant = {
+    id,
+    name: name.trim(),
+    agentToken: makeToken(),
+    printers: [],
+    createdAt: Date.now(),
+  };
+  list.push(restaurant);
+  writeRestaurants(list);
+  return restaurant;
+}
+
+function updateRestaurant(id, patch) {
+  const list = readRestaurants();
+  const restaurant = list.find((r) => r.id === id);
+  if (!restaurant) return null;
+  if (patch.name !== undefined && patch.name.trim()) restaurant.name = patch.name.trim();
+  writeRestaurants(list);
+  return restaurant;
+}
+
+function deleteRestaurant(id) {
+  const list = readRestaurants();
+  const next = list.filter((r) => r.id !== id);
+  if (next.length === list.length) return false;
+  writeRestaurants(next);
+  return true;
+}
+
+function regenerateRestaurantToken(id) {
+  const list = readRestaurants();
+  const restaurant = list.find((r) => r.id === id);
+  if (!restaurant) return null;
+  restaurant.agentToken = makeToken();
+  writeRestaurants(list);
+  return restaurant;
+}
+
+function listRestaurants() {
+  return readRestaurants();
+}
+
+function getRestaurant(id) {
+  return readRestaurants().find((r) => r.id === id) || null;
+}
+
+function addPrinter(restaurantId, { name, ip, port }) {
+  if (!name || !name.trim()) throw new Error("Укажите название принтера");
+  if (!ip || !ip.trim()) throw new Error("Укажите IP принтера");
+  const list = readRestaurants();
+  const restaurant = list.find((r) => r.id === restaurantId);
+  if (!restaurant) throw new Error("Заведение не найдено");
+  const printer = { id: makeId(), name: name.trim(), ip: ip.trim(), port: Number(port) || 9100 };
+  restaurant.printers.push(printer);
+  writeRestaurants(list);
+  return printer;
+}
+
+function updatePrinter(restaurantId, printerId, patch) {
+  const list = readRestaurants();
+  const restaurant = list.find((r) => r.id === restaurantId);
+  if (!restaurant) return null;
+  const printer = restaurant.printers.find((p) => p.id === printerId);
+  if (!printer) return null;
+  if (patch.name !== undefined && patch.name.trim()) printer.name = patch.name.trim();
+  if (patch.ip !== undefined && patch.ip.trim()) printer.ip = patch.ip.trim();
+  if (patch.port !== undefined) printer.port = Number(patch.port) || printer.port;
+  writeRestaurants(list);
+  return printer;
+}
+
+function deletePrinter(restaurantId, printerId) {
+  const list = readRestaurants();
+  const restaurant = list.find((r) => r.id === restaurantId);
+  if (!restaurant) return false;
+  const next = restaurant.printers.filter((p) => p.id !== printerId);
+  if (next.length === restaurant.printers.length) return false;
+  restaurant.printers = next;
+  writeRestaurants(list);
+  return true;
+}
+
+// Токен агента -> заведение. Поддерживает и новые заведения (из панели), и
+// старый единственный токен из переменной окружения (легаси, см. коммент у
+// LEGACY_RESTAURANT_ID выше) — чтобы уже работающий на реальном моноблоке
+// агент не сломался при переходе на многозаведенческую схему.
+function findRestaurantByToken(token) {
+  if (!token) return null;
+  const match = readRestaurants().find((r) => r.agentToken === token);
+  if (match) return match;
+  const legacyToken = process.env.OKO_SHELF_LIFE_AGENT_TOKEN;
+  if (legacyToken && token === legacyToken) {
+    return { id: LEGACY_RESTAURANT_ID, name: "ОКО (легаси)", agentToken: legacyToken, printers: [] };
+  }
+  return null;
 }
 
 function readItems() {
@@ -139,7 +297,7 @@ function buildPrintLines(job, item) {
   return lines;
 }
 
-function createPrintJob({ itemId, action, by }) {
+function createPrintJob({ itemId, action, by, restaurantId, printerTarget }) {
   if (action !== "разморозка" && action !== "заморозка") {
     throw new Error("action должен быть 'разморозка' или 'заморозка'");
   }
@@ -152,6 +310,8 @@ function createPrintJob({ itemId, action, by }) {
   const jobs = readPrintJobs();
   const job = {
     id: makeId(),
+    restaurantId: restaurantId || LEGACY_RESTAURANT_ID,
+    printerTarget: printerTarget || null,
     itemId: item.id,
     itemName: item.name,
     shelfLifeText: item.shelfLifeText,
@@ -169,18 +329,27 @@ function createPrintJob({ itemId, action, by }) {
 }
 
 // Произвольное задание печати — не привязано к позиции справочника.
-// Для чек-листа смены (kitchen2026-план -> QR-завершение): изначально
-// задумывался отдельный HTTP-роут с секретом между "двумя серверами"
-// (см. oko-checklist-print/README.md), но оказалось, что оба модуля
-// живут в одном процессе (/root/kitchendesk/backend) — вызывается
-// напрямую как функция, без HTTP и без отдельного токена.
-function createRawPrintJob({ printLines, qrData, itemName, by }) {
+// Для чек-листа смены (kitchen2026-план -> QR-завершение) и тикетов
+// заказа (oko-order-relay): изначально задумывался отдельный HTTP-роут с
+// секретом между "двумя серверами" (см. oko-checklist-print/README.md),
+// но оказалось, что оба модуля живут в одном процессе
+// (/root/kitchendesk/backend) — вызывается напрямую как функция, без HTTP
+// и без отдельного токена.
+//
+// restaurantId — какое заведение печатает (по умолчанию легаси-заведение,
+// см. LEGACY_RESTAURANT_ID — так старые вызовы без этого параметра не
+// ломаются). printerTarget — название принтера ИЗ СПИСКА этого заведения
+// ("Раздача", "Горячий цех" и т.п.), не обязателен — если не указан или не
+// найден, берётся первый принтер заведения (см. resolvePrinterForJob).
+function createRawPrintJob({ printLines, qrData, itemName, by, restaurantId, printerTarget }) {
   if (!Array.isArray(printLines) || printLines.length === 0) {
     throw new Error("printLines обязателен и должен быть непустым массивом строк");
   }
   const jobs = readPrintJobs();
   const job = {
     id: makeId(),
+    restaurantId: restaurantId || LEGACY_RESTAURANT_ID,
+    printerTarget: printerTarget || null,
     itemId: null,
     itemName: itemName || "Печать",
     shelfLifeText: null,
@@ -198,16 +367,33 @@ function createRawPrintJob({ printLines, qrData, itemName, by }) {
   return job;
 }
 
-function listPendingPrintJobs() {
-  return readPrintJobs()
-    .filter((j) => j.status === "pending")
-    .sort((a, b) => a.createdAt - b.createdAt);
+// Подставляет в задание реальный IP/порт принтера этого заведения — по
+// printerTarget (имя принтера), если он есть и найден, иначе первый
+// принтер в списке заведения. Легаси-заведение (см. LEGACY_RESTAURANT_ID)
+// и заведения без единого настроенного принтера — вернёт задание как
+// есть, без printerIp/printerPort: агент в этом случае использует свой
+// локальный PRINTER_IP/PORT (agent-config.json) — обратная совместимость.
+function resolvePrinterForJob(job, restaurant) {
+  if (!restaurant || !restaurant.printers || !restaurant.printers.length) return job;
+  const printer = (job.printerTarget && restaurant.printers.find((p) => p.name === job.printerTarget)) || restaurant.printers[0];
+  return { ...job, printerIp: printer.ip, printerPort: printer.port };
 }
 
-function markPrintJobDone(id) {
+function listPendingPrintJobs(restaurantId) {
+  const scopeId = restaurantId || LEGACY_RESTAURANT_ID;
+  const restaurant = scopeId === LEGACY_RESTAURANT_ID ? null : getRestaurant(scopeId);
+  return readPrintJobs()
+    .filter((j) => j.status === "pending" && (j.restaurantId || LEGACY_RESTAURANT_ID) === scopeId)
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((j) => resolvePrinterForJob(j, restaurant));
+}
+
+function markPrintJobDone(id, restaurantId) {
   const jobs = readPrintJobs();
   const job = jobs.find((j) => j.id === id);
   if (!job) return null;
+  const scopeId = restaurantId || LEGACY_RESTAURANT_ID;
+  if ((job.restaurantId || LEGACY_RESTAURANT_ID) !== scopeId) return null; // чужое задание — не трогаем
   job.status = "printed";
   job.printedAt = Date.now();
   writePrintJobs(jobs);
@@ -227,9 +413,9 @@ function listRecentPrintJobs(limit) {
 // print-agent.js). Агент шлёт сюда, владелец (или Claude через этот
 // эндпоинт с паролем) читает — без необходимости пересылать вывод команд
 // вручную через человека.
-function saveAgentReport(report) {
+function saveAgentReport(report, restaurantId) {
   const reports = readJson(AGENT_REPORTS_PATH, []);
-  const saved = { id: makeId(), receivedAt: Date.now(), ...report };
+  const saved = { id: makeId(), receivedAt: Date.now(), restaurantId: restaurantId || LEGACY_RESTAURANT_ID, ...report };
   reports.push(saved);
   // держим только последние 20 — это диагностика, не история, которую
   // нужно хранить вечно
@@ -256,7 +442,19 @@ module.exports = {
   listRecentPrintJobs,
   saveAgentReport,
   listAgentReports,
+  listRestaurants,
+  getRestaurant,
+  addRestaurant,
+  updateRestaurant,
+  deleteRestaurant,
+  regenerateRestaurantToken,
+  addPrinter,
+  updatePrinter,
+  deletePrinter,
+  findRestaurantByToken,
+  LEGACY_RESTAURANT_ID,
   ITEMS_PATH,
   PRINT_JOBS_PATH,
   AGENT_REPORTS_PATH,
+  RESTAURANTS_PATH,
 };

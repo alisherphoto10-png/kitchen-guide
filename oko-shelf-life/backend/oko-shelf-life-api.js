@@ -68,12 +68,18 @@ function createOkoShelfLifeRouter() {
   return router;
 }
 
+// Токен теперь определяет, ЧЬЁ это заведение (см. findRestaurantByToken в
+// store — понимает и новые заведения из панели, и старый единственный
+// токен из OKO_SHELF_LIFE_AGENT_TOKEN, легаси). req.restaurant кладём
+// сюда же — дальше роуты фильтруют очередь именно по нему, задания разных
+// заведений не пересекаются.
 function requireAgent(req, res, next) {
   const token = req.header("X-Agent-Token");
-  const expected = process.env.OKO_SHELF_LIFE_AGENT_TOKEN;
-  if (!expected || token !== expected) {
+  const restaurant = store.findRestaurantByToken(token);
+  if (!restaurant) {
     return res.status(401).json({ error: "Неверный токен агента" });
   }
+  req.restaurant = restaurant;
   next();
 }
 
@@ -111,11 +117,11 @@ function createOkoShelfLifePrintRouter() {
   });
 
   router.get("/jobs/pending", requireAgent, (req, res) => {
-    res.json(store.listPendingPrintJobs());
+    res.json(store.listPendingPrintJobs(req.restaurant.id));
   });
 
   router.post("/jobs/:id/done", requireAgent, (req, res) => {
-    const job = store.markPrintJobDone(req.params.id);
+    const job = store.markPrintJobDone(req.params.id, req.restaurant.id);
     if (!job) return res.status(404).json({ error: "Задание не найдено" });
     res.json(job);
   });
@@ -144,11 +150,75 @@ function createOkoShelfLifePrintRouter() {
   // системных команд с моноблока — владелец/Claude читает через
   // GET /agent-reports (пароль админки) выше, не через пересказ человеком.
   router.post("/agent-report", requireAgent, (req, res) => {
-    const report = store.saveAgentReport(req.body || {});
+    const report = store.saveAgentReport(req.body || {}, req.restaurant.id);
     res.json(report);
   });
 
   return router;
 }
 
-module.exports = { createOkoShelfLifeRouter, createOkoShelfLifePrintRouter };
+// Панель владельца: заведения + их принтеры + токены агентов. Отдельный
+// роутер от createOkoShelfLifeRouter (справочник сроков хранения) — разные
+// заботы, общий только пароль (OKO_ADMIN_PASSWORD). Токен показываем
+// целиком (не маскируем) — владельцу и нужно его скопировать и передать
+// агенту, это не чужой секрет, а его собственный, который он сам выдаёт.
+function createOkoPrintAdminRouter() {
+  const router = express.Router();
+  router.use(requireAdmin);
+
+  router.get("/restaurants", (req, res) => {
+    res.json(store.listRestaurants());
+  });
+
+  router.post("/restaurants", (req, res) => {
+    try {
+      const restaurant = store.addRestaurant({ name: (req.body || {}).name, id: (req.body || {}).id });
+      res.json(restaurant);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.patch("/restaurants/:id", (req, res) => {
+    const restaurant = store.updateRestaurant(req.params.id, req.body || {});
+    if (!restaurant) return res.status(404).json({ error: "Заведение не найдено" });
+    res.json(restaurant);
+  });
+
+  router.delete("/restaurants/:id", (req, res) => {
+    const ok = store.deleteRestaurant(req.params.id);
+    if (!ok) return res.status(404).json({ error: "Заведение не найдено" });
+    res.json({ ok: true });
+  });
+
+  router.post("/restaurants/:id/regenerate-token", (req, res) => {
+    const restaurant = store.regenerateRestaurantToken(req.params.id);
+    if (!restaurant) return res.status(404).json({ error: "Заведение не найдено" });
+    res.json(restaurant);
+  });
+
+  router.post("/restaurants/:id/printers", (req, res) => {
+    try {
+      const printer = store.addPrinter(req.params.id, req.body || {});
+      res.json(printer);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.patch("/restaurants/:id/printers/:printerId", (req, res) => {
+    const printer = store.updatePrinter(req.params.id, req.params.printerId, req.body || {});
+    if (!printer) return res.status(404).json({ error: "Принтер не найден" });
+    res.json(printer);
+  });
+
+  router.delete("/restaurants/:id/printers/:printerId", (req, res) => {
+    const ok = store.deletePrinter(req.params.id, req.params.printerId);
+    if (!ok) return res.status(404).json({ error: "Принтер не найден" });
+    res.json({ ok: true });
+  });
+
+  return router;
+}
+
+module.exports = { createOkoShelfLifeRouter, createOkoShelfLifePrintRouter, createOkoPrintAdminRouter };

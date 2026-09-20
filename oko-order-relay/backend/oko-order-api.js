@@ -45,10 +45,17 @@ function printOrderTicket(order, venueConfig) {
     // но oko-order-api.js копируется в другое место (README: "туда же, где
     // bot.js"), реальный относительный путь может отличаться.
     const { createRawPrintJob } = require("./oko-shelf-life-store");
+    // restaurantId = order.venue ("oblako"/"myaso" — ключ ИЗ ЭТОГО КОНФИГА,
+    // см. data/oko-order-config.example.json) — ВАЖНО: заведение в панели
+    // управления заведениями/принтерами (oko-print-admin) должно быть
+    // создано с ТАКИМ ЖЕ ID (панель позволяет задать ID вручную при
+    // создании, не только по названию) — иначе тикет уйдёт в очередь, но
+    // его некому будет забрать (не потеряется, просто зависнет).
     createRawPrintJob({
       printLines: buildOrderPrintLines(order, venueConfig),
       itemName: `Заказ — ${venueConfig.label}`,
       by: order.name || "",
+      restaurantId: order.venue,
     });
   } catch (err) {
     // Не критично — сам заказ уже ушёл в Telegram, печать тикета

@@ -23,7 +23,7 @@ const { spawn, exec } = require("child_process");
 // с тем, что отдаёт сервер (см. checkForUpdate ниже), чтобы понять, есть ли
 // более новая версия. Никак не связана с версией KitchenDesk в целом, просто
 // метка для самообновления агента.
-const AGENT_VERSION = "2026-09-20.6";
+const AGENT_VERSION = "2026-09-20.7";
 
 // ---------------- НАСТРОЙКИ ----------------
 // Значения по умолчанию — реальные, "местные" настройки (токен, IP принтера
@@ -134,9 +134,16 @@ async function httpText(urlStr, options) {
   return httpRaw(urlStr, options);
 }
 
-function sendToPrinter(buffer) {
+// host/port необязательны — по умолчанию берётся "тестовый принтер" из
+// местных настроек (CONFIG.PRINTER_IP/PORT). Для заданий из очереди сервер
+// обычно сам подставляет job.printerIp/printerPort (см. printJob ниже) —
+// у заведений с несколькими принтерами это решает панель на сервере, не
+// агент. Локальный CONFIG.PRINTER_IP/PORT остаётся как раз для случая,
+// когда сервер ничего не прислал (легаси-заведение без списка принтеров,
+// см. print-agent/README.md), и для кнопок на странице настроек.
+function sendToPrinter(buffer, host, port) {
   return new Promise((resolve, reject) => {
-    const socket = net.createConnection({ host: CONFIG.PRINTER_IP, port: CONFIG.PRINTER_PORT }, () => {
+    const socket = net.createConnection({ host: host || CONFIG.PRINTER_IP, port: port || CONFIG.PRINTER_PORT }, () => {
       socket.write(buffer, () => socket.end());
     });
     socket.setTimeout(5000, () => {
@@ -241,9 +248,9 @@ function buildLabel(job) {
 }
 
 async function printJob(job) {
-  console.log(`[печать] ${job.itemName} — ${job.action} (${job.by})`);
+  console.log(`[печать] ${job.itemName} — ${job.action} (${job.by})${job.printerTarget ? ` [${job.printerTarget}]` : ""}`);
   const buffer = buildLabel(job);
-  await sendToPrinter(buffer);
+  await sendToPrinter(buffer, job.printerIp, job.printerPort);
   await httpJson(`${CONFIG.BACKEND_URL}/api/oko-shelf-life-print/jobs/${job.id}/done`, {
     method: "POST",
     headers: { "X-Agent-Token": CONFIG.AGENT_TOKEN },
@@ -455,7 +462,8 @@ function renderSettingsPage(message) {
 
   <form method="POST" action="/save">
     <div class="card">
-      <h2>Принтер</h2>
+      <h2>Тестовый принтер</h2>
+      <p style="font-size: 12px; color: #8a8272; margin: -4px 0 12px;">Куда реально печатать обычные задания (заказы, чек-листы) — решает панель заведений на сервере, не эта страница. Это IP используется только для кнопок "Тестовая печать"/"Тест кодовых страниц" ниже, и как запасной вариант, если сервер не прислал свой принтер для задания.</p>
       <div class="row"><span class="label">IP-адрес</span><input type="text" name="PRINTER_IP" value="${escapeHtmlAgent(CONFIG.PRINTER_IP)}"></div>
       <div class="row"><span class="label">Порт</span><input type="number" name="PRINTER_PORT" value="${escapeHtmlAgent(CONFIG.PRINTER_PORT)}"></div>
       <div class="row"><span class="label">Кодовая страница (кириллица)</span><input type="number" name="CYRILLIC_CODEPAGE" value="${escapeHtmlAgent(CONFIG.CYRILLIC_CODEPAGE)}"></div>

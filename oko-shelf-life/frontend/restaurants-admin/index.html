@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KitchenDesk — заведения и принтеры</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #0d1117; color: #e6edf3; }
+  .hint { font-size: 12px; color: #8b949e; margin: 0 0 16px; }
+  input, select { font-family: inherit; }
+  button.action { background: #238636; color: white; border: none; border-radius: 6px; padding: 9px 14px; cursor: pointer; font-size: 14px; }
+  button.secondary { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
+  button.danger { background: #21262d; color: #f85149; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 12px; }
+  .status { font-size: 13px; margin-top: 8px; min-height: 16px; }
+  .status.error { color: #f85149; }
+  .status.ok { color: #3fb950; }
+
+  #gate { max-width: 320px; margin: 80px auto; padding: 0 16px; }
+  #gate input { width: 100%; padding: 10px 12px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; color: #e6edf3; font-size: 14px; margin-bottom: 10px; }
+  #app { display: none; max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; }
+  #app.visible { display: block; }
+
+  .view-head h1 { margin: 0 0 4px; font-size: 20px; }
+
+  .restaurant-card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+  .restaurant-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .restaurant-head h2 { margin: 0; font-size: 16px; }
+  .restaurant-head input.name-input { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 16px; font-weight: 600; padding: 4px 8px; width: 220px; }
+
+  .token-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 12.5px; }
+  .token-row .token-value { font-family: ui-monospace, monospace; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; color: #8b949e; flex: 1; overflow-x: auto; white-space: nowrap; }
+  .token-row .token-value.shown { color: #e6edf3; }
+
+  .printer-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+  .printer-row { display: grid; grid-template-columns: 1fr 1fr 90px auto; gap: 8px; align-items: center; background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+  .printer-row input { background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; padding: 6px 8px; font-size: 13px; width: 100%; }
+  .printer-row .save-hint { color: #6e7681; font-size: 11px; }
+
+  .add-printer-row { display: grid; grid-template-columns: 1fr 1fr 90px auto; gap: 8px; margin-top: 6px; }
+  .add-printer-row input { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; padding: 7px 9px; font-size: 13px; }
+
+  .new-restaurant { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .new-restaurant input { flex: 1; min-width: 160px; padding: 10px 12px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; color: #e6edf3; font-size: 14px; }
+  .new-restaurant input.id-input { flex: 0 0 200px; font-family: ui-monospace, monospace; }
+
+  .empty { color: #6e7681; font-size: 12.5px; padding: 6px 0; }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <h2>KitchenDesk — заведения</h2>
+  <input type="password" id="passwordInput" placeholder="Пароль" onkeydown="if(event.key==='Enter') tryLogin()">
+  <button class="action" onclick="tryLogin()" style="width:100%">Войти</button>
+  <div class="status error" id="gateStatus"></div>
+</div>
+
+<div id="app">
+  <div class="view-head">
+    <h1>Заведения и принтеры</h1>
+    <p class="hint">Каждое заведение — свой токен агента и свой список принтеров. Задание на печать уходит только тому заведению, которому принадлежит, и печатается на том принтере, который для него указан.</p>
+  </div>
+
+  <div class="new-restaurant">
+    <input type="text" id="newRestaurantName" placeholder="Название нового заведения" onkeydown="if(event.key==='Enter') addRestaurant()">
+    <input type="text" id="newRestaurantId" class="id-input" placeholder="ID (необязательно, напр. oblako)" onkeydown="if(event.key==='Enter') addRestaurant()">
+    <button class="action" onclick="addRestaurant()">+ Добавить заведение</button>
+  </div>
+  <p class="hint" style="margin-top: 0;">ID — только если это заведение уже известно ДРУГОМУ модулю под своим именем (например, приём заказов зовёт заведения "oblako"/"myaso" в своём конфиге) — впишите точно так же, иначе задания того модуля не найдут принтер. Для обычных заведений просто оставьте пустым.</p>
+  <div class="status" id="topStatus"></div>
+
+  <div id="restaurantsList"></div>
+</div>
+
+<script>
+  let password = sessionStorage.getItem("oko_print_admin_password") || "";
+  let restaurants = [];
+  const shownTokens = {};
+
+  function authHeaders(extra) {
+    return Object.assign({ "X-Admin-Password": password, "Content-Type": "application/json" }, extra || {});
+  }
+
+  async function tryLogin() {
+    password = document.getElementById("passwordInput").value;
+    const res = await fetch("/api/oko-print-admin/restaurants", { headers: authHeaders() });
+    if (!res.ok) {
+      document.getElementById("gateStatus").innerText = "Неверный пароль";
+      return;
+    }
+    sessionStorage.setItem("oko_print_admin_password", password);
+    restaurants = await res.json();
+    document.getElementById("gate").style.display = "none";
+    document.getElementById("app").classList.add("visible");
+    render();
+  }
+
+  async function reload() {
+    const res = await fetch("/api/oko-print-admin/restaurants", { headers: authHeaders() });
+    restaurants = await res.json();
+    render();
+  }
+
+  function setStatus(text, ok) {
+    const el = document.getElementById("topStatus");
+    el.innerText = text || "";
+    el.className = "status " + (ok ? "ok" : "error");
+    if (text) setTimeout(() => { el.innerText = ""; }, 3000);
+  }
+
+  async function addRestaurant() {
+    const nameInput = document.getElementById("newRestaurantName");
+    const idInput = document.getElementById("newRestaurantId");
+    const name = nameInput.value.trim();
+    const id = idInput.value.trim();
+    if (!name) return;
+    const res = await fetch("/api/oko-print-admin/restaurants", { method: "POST", headers: authHeaders(), body: JSON.stringify({ name, id: id || undefined }) });
+    if (!res.ok) { setStatus((await res.json()).error || "Не удалось добавить", false); return; }
+    nameInput.value = "";
+    idInput.value = "";
+    setStatus("Заведение добавлено", true);
+    await reload();
+  }
+
+  async function renameRestaurant(id, newName) {
+    if (!newName.trim()) return;
+    await fetch(`/api/oko-print-admin/restaurants/${id}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ name: newName }) });
+    await reload();
+  }
+
+  async function deleteRestaurant(id, name) {
+    if (!confirm(`Удалить заведение "${name}" и весь список его принтеров? Токен перестанет работать сразу.`)) return;
+    await fetch(`/api/oko-print-admin/restaurants/${id}`, { method: "DELETE", headers: authHeaders() });
+    setStatus("Заведение удалено", true);
+    await reload();
+  }
+
+  async function regenerateToken(id, name) {
+    if (!confirm(`Выдать новый токен для "${name}"? Старый сразу перестанет работать — агент на моноблоке этого заведения нужно будет обновить.`)) return;
+    await fetch(`/api/oko-print-admin/restaurants/${id}/regenerate-token`, { method: "POST", headers: authHeaders() });
+    delete shownTokens[id];
+    setStatus("Токен перевыпущен", true);
+    await reload();
+  }
+
+  function toggleToken(id) {
+    shownTokens[id] = !shownTokens[id];
+    render();
+  }
+
+  async function copyToken(token, btn) {
+    try {
+      await navigator.clipboard.writeText(token);
+      const original = btn.innerText;
+      btn.innerText = "Скопировано";
+      setTimeout(() => { btn.innerText = original; }, 1200);
+    } catch {
+      alert(token);
+    }
+  }
+
+  async function addPrinter(restaurantId) {
+    const row = document.getElementById(`add-printer-${restaurantId}`);
+    const name = row.querySelector(".p-name").value.trim();
+    const ip = row.querySelector(".p-ip").value.trim();
+    const port = row.querySelector(".p-port").value.trim() || "9100";
+    if (!name || !ip) { setStatus("Укажите название и IP принтера", false); return; }
+    const res = await fetch(`/api/oko-print-admin/restaurants/${restaurantId}/printers`, {
+      method: "POST", headers: authHeaders(), body: JSON.stringify({ name, ip, port }),
+    });
+    if (!res.ok) { setStatus((await res.json()).error || "Не удалось добавить принтер", false); return; }
+    setStatus("Принтер добавлен", true);
+    await reload();
+  }
+
+  async function savePrinter(restaurantId, printerId, field, value) {
+    await fetch(`/api/oko-print-admin/restaurants/${restaurantId}/printers/${printerId}`, {
+      method: "PATCH", headers: authHeaders(), body: JSON.stringify({ [field]: value }),
+    });
+  }
+
+  async function deletePrinter(restaurantId, printerId, name) {
+    if (!confirm(`Убрать принтер "${name}"?`)) return;
+    await fetch(`/api/oko-print-admin/restaurants/${restaurantId}/printers/${printerId}`, { method: "DELETE", headers: authHeaders() });
+    setStatus("Принтер удалён", true);
+    await reload();
+  }
+
+  function escapeHtml(v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  }
+
+  function render() {
+    const list = document.getElementById("restaurantsList");
+    if (!restaurants.length) {
+      list.innerHTML = '<div class="empty">Заведений пока нет — добавьте первое выше.</div>';
+      return;
+    }
+    list.innerHTML = restaurants.map((r) => {
+      const shown = !!shownTokens[r.id];
+      const printersHtml = r.printers.length
+        ? r.printers.map((p) => `
+          <div class="printer-row">
+            <input value="${escapeHtml(p.name)}" onchange="savePrinter('${r.id}','${p.id}','name',this.value)">
+            <input value="${escapeHtml(p.ip)}" onchange="savePrinter('${r.id}','${p.id}','ip',this.value)">
+            <input value="${escapeHtml(p.port)}" onchange="savePrinter('${r.id}','${p.id}','port',this.value)">
+            <button class="danger" onclick="deletePrinter('${r.id}','${p.id}','${escapeHtml(p.name)}')">Убрать</button>
+          </div>`).join("")
+        : '<div class="empty">Принтеров пока нет.</div>';
+      return `
+      <div class="restaurant-card">
+        <div class="restaurant-head">
+          <div>
+            <input class="name-input" value="${escapeHtml(r.name)}" onchange="renameRestaurant('${r.id}', this.value)">
+            <div style="font-family: ui-monospace, monospace; font-size: 11px; color: #6e7681; margin-top: 4px;">ID: ${escapeHtml(r.id)}</div>
+          </div>
+          <button class="danger" onclick="deleteRestaurant('${r.id}','${escapeHtml(r.name)}')">Удалить заведение</button>
+        </div>
+        <div class="token-row">
+          <span>Токен агента:</span>
+          <span class="token-value ${shown ? "shown" : ""}">${shown ? escapeHtml(r.agentToken) : "••••••••••••••••••••••••"}</span>
+          <button class="secondary" onclick="toggleToken('${r.id}')">${shown ? "Скрыть" : "Показать"}</button>
+          <button class="secondary" onclick="copyToken('${escapeHtml(r.agentToken)}', this)">Копировать</button>
+          <button class="secondary" onclick="regenerateToken('${r.id}','${escapeHtml(r.name)}')">Перевыпустить</button>
+        </div>
+        <div class="printer-list">${printersHtml}</div>
+        <div class="add-printer-row" id="add-printer-${r.id}">
+          <input class="p-name" placeholder="Название (Раздача)">
+          <input class="p-ip" placeholder="IP принтера">
+          <input class="p-port" placeholder="9100">
+          <button class="secondary" onclick="addPrinter('${r.id}')">+ Принтер</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  if (password) {
+    document.getElementById("passwordInput").value = password;
+    tryLogin();
+  }
+</script>
+</body>
+</html>
