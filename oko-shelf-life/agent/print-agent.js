@@ -23,7 +23,7 @@ const { spawn, exec } = require("child_process");
 // с тем, что отдаёт сервер (см. checkForUpdate ниже), чтобы понять, есть ли
 // более новая версия. Никак не связана с версией KitchenDesk в целом, просто
 // метка для самообновления агента.
-const AGENT_VERSION = "2026-09-20.5";
+const AGENT_VERSION = "2026-09-20.6";
 
 // ---------------- НАСТРОЙКИ ----------------
 // Значения по умолчанию — реальные, "местные" настройки (токен, IP принтера
@@ -49,6 +49,15 @@ const DEFAULTS = {
   // неудобно было взять пальцами. Если мало/много — можно поправить прямо в
   // agent-config.json, без переустановки агента.
   FEED_LINES_BEFORE_CUT: 8,
+  // Оформление шапки "KitchenDesk" на чеке — раньше было жёстко зашито,
+  // теперь настраивается через страницу настроек (см. ниже), эти три флага
+  // независимы друг от друга.
+  HEADER_BOLD: true,
+  HEADER_CENTER: true,
+  HEADER_DOUBLE_HEIGHT: true,
+  // Порт локальной страницы настроек (http://localhost:<порт> на самом
+  // моноблоке) — см. "СТРАНИЦА НАСТРОЕК" ниже.
+  SETTINGS_PORT: 3500,
   // Разведка установленных в Windows принтеров (см. runPrinterRecon ниже) —
   // делается один раз, дальше это true и повтора не будет.
   reconReported: false,
@@ -208,15 +217,15 @@ function buildLabel(job) {
     // печатаем крупнее, жирным, по центру. Остальные строки — как обычно.
     const isBrandHeader = i === 0 && line.trim() === "KitchenDesk";
     if (isBrandHeader) {
-      chunks.push(Buffer.from([ESC, 0x61, 0x01])); // ESC a 1 — по центру
-      chunks.push(Buffer.from([ESC, 0x45, 0x01])); // ESC E 1 — жирный
-      chunks.push(Buffer.from([GS, 0x21, 0x01])); // GS ! 1 — увеличенная высота
+      if (CONFIG.HEADER_CENTER) chunks.push(Buffer.from([ESC, 0x61, 0x01])); // ESC a 1 — по центру
+      if (CONFIG.HEADER_BOLD) chunks.push(Buffer.from([ESC, 0x45, 0x01])); // ESC E 1 — жирный
+      if (CONFIG.HEADER_DOUBLE_HEIGHT) chunks.push(Buffer.from([GS, 0x21, 0x01])); // GS ! 1 — увеличенная высота
     }
     chunks.push(textToCp866(line));
     if (isBrandHeader) {
-      chunks.push(Buffer.from([GS, 0x21, 0x00])); // обратно обычный размер
-      chunks.push(Buffer.from([ESC, 0x45, 0x00])); // обратно не жирный
-      chunks.push(Buffer.from([ESC, 0x61, 0x00])); // обратно по левому краю
+      if (CONFIG.HEADER_DOUBLE_HEIGHT) chunks.push(Buffer.from([GS, 0x21, 0x00])); // обратно обычный размер
+      if (CONFIG.HEADER_BOLD) chunks.push(Buffer.from([ESC, 0x45, 0x00])); // обратно не жирный
+      if (CONFIG.HEADER_CENTER) chunks.push(Buffer.from([ESC, 0x61, 0x00])); // обратно по левому краю
     }
     chunks.push(Buffer.from([0x0a]));
   });
@@ -398,6 +407,164 @@ async function runPrinterRecon() {
   }
 }
 
+// ---------------- СТРАНИЦА НАСТРОЕК (чековый принтер) ----------------
+// http://localhost:3500 (или другой SETTINGS_PORT) — открывается обычным
+// браузером ПРЯМО НА МОНОБЛОКЕ (слушает только 127.0.0.1, снаружи сети не
+// видна — заходить нужно с той же машины, где работает агент, не с
+// телефона). Показывает текущие настройки чекового принтера и позволяет
+// их менять без редактирования agent-config.json руками и без
+// командной строки — обычная HTML-форма, без npm-пакетов/фреймворков.
+// Изменения применяются сразу (saveConfigPatch правит CONFIG в памяти),
+// перезапуск агента не нужен.
+function escapeHtmlAgent(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+}
+
+function renderSettingsPage(message) {
+  const checked = (v) => (v ? "checked" : "");
+  return `<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Настройки печати — KitchenDesk</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Arial, sans-serif; background: #f4f2ee; color: #1a1712; margin: 0; padding: 32px 20px; }
+  .wrap { max-width: 520px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #746b5c; font-size: 13px; margin: 0 0 24px; }
+  .card { background: #fff; border: 1px solid #e4ded2; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+  .card h2 { font-size: 14px; margin: 0 0 14px; text-transform: uppercase; letter-spacing: 0.04em; color: #8a8272; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f0ece2; font-size: 14px; }
+  .row:last-child { border-bottom: none; }
+  .row span.label { color: #4a4438; }
+  .row input[type="text"], .row input[type="number"] { width: 160px; padding: 6px 8px; border: 1px solid #dcd6c8; border-radius: 6px; font-size: 14px; text-align: right; }
+  .row.checkbox { justify-content: flex-start; gap: 10px; }
+  .msg { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
+  .msg.ok { background: #e8f3e8; color: #2f6844; }
+  .msg.err { background: #fbe9e7; color: #b3433b; }
+  button { font-family: inherit; font-size: 14px; padding: 10px 16px; border-radius: 8px; border: 1px solid #dcd6c8; background: #f0ece2; cursor: pointer; }
+  button.primary { background: #1a1712; color: #fff; border-color: #1a1712; }
+  .actions { display: flex; gap: 10px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Настройки печати</h1>
+  <p class="sub">Чековый принтер · агент версии ${escapeHtmlAgent(AGENT_VERSION)}</p>
+  ${message ? `<div class="msg ${message.ok ? "ok" : "err"}">${escapeHtmlAgent(message.text)}</div>` : ""}
+
+  <form method="POST" action="/save">
+    <div class="card">
+      <h2>Принтер</h2>
+      <div class="row"><span class="label">IP-адрес</span><input type="text" name="PRINTER_IP" value="${escapeHtmlAgent(CONFIG.PRINTER_IP)}"></div>
+      <div class="row"><span class="label">Порт</span><input type="number" name="PRINTER_PORT" value="${escapeHtmlAgent(CONFIG.PRINTER_PORT)}"></div>
+      <div class="row"><span class="label">Кодовая страница (кириллица)</span><input type="number" name="CYRILLIC_CODEPAGE" value="${escapeHtmlAgent(CONFIG.CYRILLIC_CODEPAGE)}"></div>
+    </div>
+
+    <div class="card">
+      <h2>Бумага</h2>
+      <div class="row"><span class="label">Отступ перед обрезкой (строк)</span><input type="number" name="FEED_LINES_BEFORE_CUT" value="${escapeHtmlAgent(CONFIG.FEED_LINES_BEFORE_CUT)}"></div>
+    </div>
+
+    <div class="card">
+      <h2>Шапка "KitchenDesk"</h2>
+      <label class="row checkbox"><input type="checkbox" name="HEADER_BOLD" ${checked(CONFIG.HEADER_BOLD)}> <span class="label">Жирным</span></label>
+      <label class="row checkbox"><input type="checkbox" name="HEADER_CENTER" ${checked(CONFIG.HEADER_CENTER)}> <span class="label">По центру</span></label>
+      <label class="row checkbox"><input type="checkbox" name="HEADER_DOUBLE_HEIGHT" ${checked(CONFIG.HEADER_DOUBLE_HEIGHT)}> <span class="label">Увеличенный размер</span></label>
+    </div>
+
+    <div class="actions">
+      <button type="submit" class="primary">Сохранить</button>
+    </div>
+  </form>
+
+  <div class="actions" style="margin-top: 24px;">
+    <form method="POST" action="/test-print"><button type="submit">Тестовая печать</button></form>
+    <form method="POST" action="/codepage-test"><button type="submit">Тест кодовых страниц</button></form>
+  </div>
+</div>
+</body>
+</html>`;
+}
+
+function readRequestBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    req.on("data", (chunk) => (data += chunk));
+    req.on("end", () => resolve(data));
+    req.on("error", reject);
+  });
+}
+
+function startSettingsServer() {
+  const server = http.createServer(async (req, res) => {
+    try {
+      if (req.method === "GET" && req.url === "/") {
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(renderSettingsPage(null));
+        return;
+      }
+
+      if (req.method === "POST" && req.url === "/save") {
+        const body = await readRequestBody(req);
+        const form = new URLSearchParams(body);
+        saveConfigPatch({
+          PRINTER_IP: form.get("PRINTER_IP") || CONFIG.PRINTER_IP,
+          PRINTER_PORT: Number(form.get("PRINTER_PORT")) || CONFIG.PRINTER_PORT,
+          CYRILLIC_CODEPAGE: Number(form.get("CYRILLIC_CODEPAGE")) || CONFIG.CYRILLIC_CODEPAGE,
+          FEED_LINES_BEFORE_CUT: Number(form.get("FEED_LINES_BEFORE_CUT")) || CONFIG.FEED_LINES_BEFORE_CUT,
+          HEADER_BOLD: form.get("HEADER_BOLD") === "on",
+          HEADER_CENTER: form.get("HEADER_CENTER") === "on",
+          HEADER_DOUBLE_HEIGHT: form.get("HEADER_DOUBLE_HEIGHT") === "on",
+        });
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(renderSettingsPage({ ok: true, text: "Настройки сохранены." }));
+        return;
+      }
+
+      if (req.method === "POST" && req.url === "/test-print") {
+        try {
+          await sendToPrinter(
+            buildLabel({
+              printLines: ["KitchenDesk", "------------------------------", "Тестовая печать", "Настройки применены", "------------------------------", "Обычная строка текста", "------------------------------"],
+            }),
+          );
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderSettingsPage({ ok: true, text: "Тестовый чек отправлен на принтер." }));
+        } catch (err) {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderSettingsPage({ ok: false, text: `Не удалось напечатать: ${err.message}` }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && req.url === "/codepage-test") {
+        try {
+          await codepageTest();
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderSettingsPage({ ok: true, text: "Тест кодовых страниц отправлен на принтер." }));
+        } catch (err) {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderSettingsPage({ ok: false, text: `Не удалось напечатать: ${err.message}` }));
+        }
+        return;
+      }
+
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Не найдено");
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(`Ошибка: ${err.message}`);
+    }
+  });
+  server.listen(CONFIG.SETTINGS_PORT, "127.0.0.1", () => {
+    console.log(`[настройки] страница настроек: http://localhost:${CONFIG.SETTINGS_PORT}`);
+  });
+  server.on("error", (err) => {
+    console.error("[настройки] не удалось запустить страницу настроек:", err.message);
+  });
+}
+
 // ---------------- АВТОЗАГРУЗКА ----------------
 // node print-agent.js --install-autostart
 // Сам кладёт файл запуска в папку автозагрузки Windows — руками искать
@@ -466,6 +633,7 @@ if (process.argv.includes("--codepage-test")) {
     console.log(`Агент печати KitchenDesk запущен (версия ${AGENT_VERSION}). Опрашиваю ${CONFIG.BACKEND_URL} каждые ${CONFIG.POLL_INTERVAL_MS / 1000} сек.`);
     printStartupConfirmation();
     runPrinterRecon();
+    startSettingsServer();
     setInterval(pollOnce, CONFIG.POLL_INTERVAL_MS);
     setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL_MS);
     pollOnce();
