@@ -30,6 +30,11 @@ const CONFIG = {
   // "node print-agent.js --codepage-test" (см. ниже) и впишите сюда номер,
   // при котором русский текст на бумаге читается нормально.
   CYRILLIC_CODEPAGE: 17,
+  // Сколько пустых строк оставлять перед обрезкой бумаги — раньше было 3,
+  // на реальном принтере резало прямо по последней строке/QR-коду, чек
+  // неудобно было взять пальцами. Если после правки всё ещё мало/много —
+  // просто поправить это число (примерно 4-5мм на строку).
+  FEED_LINES_BEFORE_CUT: 8,
 };
 // ------------------------------------------------------------------
 
@@ -154,7 +159,7 @@ function buildLabel(job) {
     chunks.push(Buffer.from([0x0a]));
     chunks.push(Buffer.from([ESC, 0x61, 0x00])); // обратно по левому краю
   }
-  chunks.push(Buffer.from([0x0a, 0x0a, 0x0a]));
+  chunks.push(Buffer.alloc(CONFIG.FEED_LINES_BEFORE_CUT, 0x0a));
   chunks.push(Buffer.from([GS, 0x56, 0x00])); // GS V 0 — обрезка
   return Buffer.concat(chunks);
 }
@@ -228,7 +233,7 @@ async function codepageTest() {
     chunks.push(textToCp866(sample));
     chunks.push(Buffer.from([0x0a]));
   }
-  chunks.push(Buffer.from([0x0a, 0x0a, 0x0a]));
+  chunks.push(Buffer.alloc(CONFIG.FEED_LINES_BEFORE_CUT, 0x0a));
   chunks.push(Buffer.from([GS, 0x56, 0x00]));
   console.log(`Отправляю тест кодовых страниц на ${CONFIG.PRINTER_IP}:${CONFIG.PRINTER_PORT}...`);
   await sendToPrinter(Buffer.concat(chunks));
