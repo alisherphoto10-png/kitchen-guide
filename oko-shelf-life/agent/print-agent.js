@@ -16,9 +16,22 @@ const https = require("https");
 const net = require("net");
 const path = require("path");
 const fs = require("fs");
+const { spawn } = require("child_process");
 
-// ---------------- НАСТРОЙКИ — поправить под себя ----------------
-const CONFIG = {
+// Версия КОДА этого файла — меняется при каждой правке агента, сравнивается
+// с тем, что отдаёт сервер (см. checkForUpdate ниже), чтобы понять, есть ли
+// более новая версия. Никак не связана с версией KitchenDesk в целом, просто
+// метка для самообновления агента.
+const AGENT_VERSION = "2026-09-20.2";
+
+// ---------------- НАСТРОЙКИ ----------------
+// Значения по умолчанию — реальные, "местные" настройки (токен, IP принтера
+// и т.п.) хранятся ОТДЕЛЬНО, в agent-config.json рядом с этим файлом, и
+// самообновление (перезапись этого файла новым кодом) их не трогает —
+// поэтому после обновления агента не нужно заново вписывать токен.
+// При самом первом запуске agent-config.json создаётся автоматически из
+// значений ниже.
+const DEFAULTS = {
   BACKEND_URL: "https://kitchendesk.chefplan.ru", // адрес KitchenDesk
   AGENT_TOKEN: "CHANGE_ME", // тот же секрет, что в OKO_SHELF_LIFE_AGENT_TOKEN на сервере
   PRINTER_IP: "192.168.0.122", // IP принтера (см. тестовую печать с самого принтера)
@@ -32,13 +45,32 @@ const CONFIG = {
   CYRILLIC_CODEPAGE: 17,
   // Сколько пустых строк оставлять перед обрезкой бумаги — раньше было 3,
   // на реальном принтере резало прямо по последней строке/QR-коду, чек
-  // неудобно было взять пальцами. Если после правки всё ещё мало/много —
-  // просто поправить это число (примерно 4-5мм на строку).
+  // неудобно было взять пальцами. Если мало/много — можно поправить прямо в
+  // agent-config.json, без переустановки агента.
   FEED_LINES_BEFORE_CUT: 8,
 };
+
+const CONFIG_PATH = path.join(__dirname, "agent-config.json");
+function loadConfig() {
+  try {
+    const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+    return { ...DEFAULTS, ...saved };
+  } catch {
+    // файла ещё нет (самый первый запуск) — создаём из значений по
+    // умолчанию, дальше обновления кода этот файл больше не пересоздают
+    try {
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify(DEFAULTS, null, 2), "utf8");
+      console.log(`Создан файл настроек: ${CONFIG_PATH}`);
+    } catch (err) {
+      console.error("Не удалось создать agent-config.json:", err.message);
+    }
+    return { ...DEFAULTS };
+  }
+}
+const CONFIG = loadConfig();
 // ------------------------------------------------------------------
 
-function httpJson(urlStr, { method = "GET", headers = {}, body } = {}) {
+function httpRaw(urlStr, { method = "GET", headers = {}, body } = {}) {
   return new Promise((resolve, reject) => {
     const url = new URL(urlStr);
     const lib = url.protocol === "https:" ? https : http;
@@ -57,11 +89,7 @@ function httpJson(urlStr, { method = "GET", headers = {}, body } = {}) {
         res.on("data", (chunk) => (data += chunk));
         res.on("end", () => {
           if (res.statusCode >= 400) return reject(new Error(`HTTP ${res.statusCode}: ${data}`));
-          try {
-            resolve(data ? JSON.parse(data) : null);
-          } catch (err) {
-            reject(err);
-          }
+          resolve(data);
         });
       },
     );
@@ -69,6 +97,15 @@ function httpJson(urlStr, { method = "GET", headers = {}, body } = {}) {
     if (payload) req.write(payload);
     req.end();
   });
+}
+
+async function httpJson(urlStr, options) {
+  const data = await httpRaw(urlStr, options);
+  return data ? JSON.parse(data) : null;
+}
+
+async function httpText(urlStr, options) {
+  return httpRaw(urlStr, options);
 }
 
 function sendToPrinter(buffer) {
@@ -195,6 +232,39 @@ async function pollOnce() {
   }
 }
 
+// ---------------- САМООБНОВЛЕНИЕ ----------------
+// Раз в несколько часов (и один раз при каждом старте) агент спрашивает у
+// сервера версию (AGENT_VERSION в этом же файле, деплоенном на сервере) —
+// если она новее той, что запущена сейчас, скачивает новый код, перезаписывает
+// ЭТОТ файл и перезапускается. agent-config.json (токен, IP принтера и
+// прочие местные настройки) при этом не трогается — он в отдельном файле,
+// самообновление переписывает только код. Так правки агента (как раньше
+// правки дизайна чека) больше не требуют вручную скачивать и переносить файл
+// на моноблок — только задеплоить на сервер, агент сам подхватит.
+async function checkForUpdate() {
+  try {
+    const { version } = await httpJson(`${CONFIG.BACKEND_URL}/api/oko-shelf-life-print/agent-version`, {
+      headers: { "X-Agent-Token": CONFIG.AGENT_TOKEN },
+    });
+    if (!version || version === AGENT_VERSION) return;
+    console.log(`[обновление] на сервере версия ${version}, у меня ${AGENT_VERSION} — скачиваю новый код...`);
+    const newCode = await httpText(`${CONFIG.BACKEND_URL}/api/oko-shelf-life-print/agent-latest`, {
+      headers: { "X-Agent-Token": CONFIG.AGENT_TOKEN },
+    });
+    fs.writeFileSync(__filename, newCode, "utf8");
+    console.log("[обновление] файл обновлён, перезапускаюсь с новой версией...");
+    const child = spawn(process.execPath, [__filename], {
+      cwd: __dirname,
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+    process.exit(0);
+  } catch (err) {
+    console.error("[обновление] проверка не удалась (не критично, попробую позже):", err.message);
+  }
+}
+
 // Печатается один раз при каждом запуске агента (в том числе — при
 // автозагрузке молча в фоне) — просто физическое подтверждение "агент
 // жив", чтобы не гадать, поднялся ли он после включения моноблока.
@@ -301,8 +371,14 @@ if (process.argv.includes("--codepage-test")) {
 } else if (process.argv.includes("--install-autostart")) {
   installAutostart();
 } else {
-  console.log(`Агент печати KitchenDesk запущен. Опрашиваю ${CONFIG.BACKEND_URL} каждые ${CONFIG.POLL_INTERVAL_MS / 1000} сек.`);
-  printStartupConfirmation();
-  setInterval(pollOnce, CONFIG.POLL_INTERVAL_MS);
-  pollOnce();
+  const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // раз в 6 часов
+  checkForUpdate().then(() => {
+    // если было обновление — checkForUpdate уже вызвал process.exit сам,
+    // сюда дойдём только если обновления не было (либо проверка не удалась)
+    console.log(`Агент печати KitchenDesk запущен (версия ${AGENT_VERSION}). Опрашиваю ${CONFIG.BACKEND_URL} каждые ${CONFIG.POLL_INTERVAL_MS / 1000} сек.`);
+    printStartupConfirmation();
+    setInterval(pollOnce, CONFIG.POLL_INTERVAL_MS);
+    setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL_MS);
+    pollOnce();
+  });
 }

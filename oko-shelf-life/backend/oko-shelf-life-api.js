@@ -1,5 +1,17 @@
 const express = require("express");
+const fs = require("fs");
+const path = require("path");
 const store = require("./oko-shelf-life-store");
+
+// Файл агента лежит рядом с бэкендом в этом же репозитории/деплое — сервер
+// просто отдаёт его как есть, отдельно публиковать "последнюю версию" не
+// нужно: что задеплоено на сервере, то и раздаётся агентам на самообновление.
+const AGENT_SCRIPT_PATH = path.join(__dirname, "..", "agent", "print-agent.js");
+function readAgentVersion() {
+  const src = fs.readFileSync(AGENT_SCRIPT_PATH, "utf8");
+  const match = /AGENT_VERSION\s*=\s*"([^"]+)"/.exec(src);
+  return match ? match[1] : null;
+}
 
 function requireAdmin(req, res, next) {
   const password = req.header("X-Admin-Password");
@@ -100,6 +112,26 @@ function createOkoShelfLifePrintRouter() {
     const job = store.markPrintJobDone(req.params.id);
     if (!job) return res.status(404).json({ error: "Задание не найдено" });
     res.json(job);
+  });
+
+  // Самообновление агента (print-agent.js на моноблоке) — см. AGENT_VERSION
+  // и checkForUpdate() в самом агенте. /agent-latest отдаёт код как есть,
+  // без секретов — реальный токен/IP агент хранит отдельно, в
+  // agent-config.json рядом с собой, который самообновление не трогает.
+  router.get("/agent-version", requireAgent, (req, res) => {
+    try {
+      res.json({ version: readAgentVersion() });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get("/agent-latest", requireAgent, (req, res) => {
+    try {
+      res.type("text/javascript").send(fs.readFileSync(AGENT_SCRIPT_PATH, "utf8"));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   return router;
