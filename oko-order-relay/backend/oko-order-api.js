@@ -13,6 +13,50 @@ const {
 
 const ACCEPT_CALLBACK_PREFIX = "oko_accept:";
 
+// Печать тикета заказа на кухонный принтер — переиспользует уже
+// существующую очередь печати (oko-shelf-life-print) и агента на моноблоке,
+// ничего нового не заводим. createRawPrintJob ничего не знает про заказы,
+// просто кладёт в очередь произвольные строки текста — то же самое, чем уже
+// пользуется печать чек-листа смены (см. oko-checklist-print/README.md и
+// print-agent/README.md в этом репозитории). Require — ЛЕНИВЫЙ (внутри
+// функции, не в начале файла): путь до oko-shelf-life-store.js на сервере
+// нужно проверить/поправить при деплое (см. заметку в README этого модуля) —
+// если сделать require наверху файла и путь окажется неверным, это уронит
+// вообще весь приём заказов при старте процесса, а не только печать.
+function buildOrderPrintLines(order, venueConfig) {
+  const lines = ["KitchenDesk", "------------------------------", `Заказ — ${venueConfig.label}`, order.date || "", "------------------------------"];
+  (order.items || []).forEach((item) => {
+    lines.push(`${item.name} — ${item.qty} шт.`);
+  });
+  if (order.comment) {
+    lines.push("------------------------------", "Комментарий:", order.comment);
+  }
+  if (order.name) {
+    lines.push("------------------------------", `Отправил: ${order.name}`);
+  }
+  lines.push("------------------------------");
+  return lines;
+}
+
+function printOrderTicket(order, venueConfig) {
+  try {
+    // ПРОВЕРИТЬ этот путь при деплое — предположение по аналогии с тем, как
+    // это уже сделано в api/plan.js для чек-листа (require('../oko-shelf-life-store')),
+    // но oko-order-api.js копируется в другое место (README: "туда же, где
+    // bot.js"), реальный относительный путь может отличаться.
+    const { createRawPrintJob } = require("./oko-shelf-life-store");
+    createRawPrintJob({
+      printLines: buildOrderPrintLines(order, venueConfig),
+      itemName: `Заказ — ${venueConfig.label}`,
+      by: order.name || "",
+    });
+  } catch (err) {
+    // Не критично — сам заказ уже ушёл в Telegram, печать тикета
+    // дополнительная, не блокирующая.
+    console.error("[oko-order] не удалось поставить тикет на печать (не критично):", err.message);
+  }
+}
+
 function formatTime(ms) {
   return new Date(ms).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
@@ -221,6 +265,11 @@ function createOkoOrderRouter(bot) {
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
+
+    // Печатаем бумажный тикет заказа сразу же, тем же временем, что и
+    // Telegram-сообщение — best-effort, ошибка печати не должна ронять
+    // приём заказа (сообщение в группу уже ушло, это важнее).
+    printOrderTicket(order, venueConfig);
 
     // Best-effort confirmation back in the topic the order was placed from —
     // a failure here shouldn't fail the request, the order already reached
