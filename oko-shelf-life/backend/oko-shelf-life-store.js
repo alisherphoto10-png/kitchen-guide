@@ -3,6 +3,7 @@ const path = require("path");
 
 const DATA_DIR = path.join(__dirname, "data");
 const ITEMS_PATH = path.join(DATA_DIR, "oko-shelf-life-items.json");
+const PRINT_JOBS_PATH = path.join(DATA_DIR, "oko-shelf-life-print-jobs.json");
 
 function ensureDirs() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -103,11 +104,81 @@ function deleteItem(id) {
   return true;
 }
 
+// ---------- печать этикеток разморозки/заморозки ----------
+// Задание кладёт повар (со страницы без пароля админки), забирает и
+// печатает локальный агент на моноблоке (сервер до принтера в сети
+// заведения не достаёт — см. README). Очередь — просто список заданий,
+// не более пары десятков за смену, файла на диске достаточно, отдельная
+// БД не нужна.
+function readPrintJobs() {
+  return readJson(PRINT_JOBS_PATH, []);
+}
+function writePrintJobs(jobs) {
+  writeJson(PRINT_JOBS_PATH, jobs);
+}
+
+function createPrintJob({ itemId, action, by }) {
+  if (action !== "разморозка" && action !== "заморозка") {
+    throw new Error("action должен быть 'разморозка' или 'заморозка'");
+  }
+  const item = readItems().find((it) => it.id === itemId);
+  if (!item) throw new Error("Позиция не найдена в справочнике");
+
+  const now = Date.now();
+  const expiresAt = item.shelfLifeHours != null ? now + item.shelfLifeHours * 3600 * 1000 : null;
+
+  const jobs = readPrintJobs();
+  const job = {
+    id: makeId(),
+    itemId: item.id,
+    itemName: item.name,
+    shelfLifeText: item.shelfLifeText,
+    action,
+    by: (by || "").trim() || "Без имени",
+    createdAt: now,
+    expiresAt,
+    status: "pending",
+    printedAt: null,
+  };
+  jobs.push(job);
+  writePrintJobs(jobs);
+  return job;
+}
+
+function listPendingPrintJobs() {
+  return readPrintJobs()
+    .filter((j) => j.status === "pending")
+    .sort((a, b) => a.createdAt - b.createdAt);
+}
+
+function markPrintJobDone(id) {
+  const jobs = readPrintJobs();
+  const job = jobs.find((j) => j.id === id);
+  if (!job) return null;
+  job.status = "printed";
+  job.printedAt = Date.now();
+  writePrintJobs(jobs);
+  return job;
+}
+
+// Последние N заданий (любого статуса) — для владельца, чтобы видеть,
+// что вообще печаталось, не только то, что ещё в очереди.
+function listRecentPrintJobs(limit) {
+  return readPrintJobs()
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, limit || 50);
+}
+
 module.exports = {
   readItems,
   addItem,
   updateItem,
   deleteItem,
   parseShelfLifeHours,
+  createPrintJob,
+  listPendingPrintJobs,
+  markPrintJobDone,
+  listRecentPrintJobs,
   ITEMS_PATH,
+  PRINT_JOBS_PATH,
 };
