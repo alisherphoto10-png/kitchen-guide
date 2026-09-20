@@ -12,6 +12,7 @@
   button.action { background: #238636; color: white; border: none; border-radius: 6px; padding: 9px 14px; cursor: pointer; font-size: 14px; }
   button.secondary { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
   button.danger { background: #21262d; color: #f85149; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 12px; }
+  button:disabled { opacity: 0.5; cursor: default; }
   .status { font-size: 13px; margin-top: 8px; min-height: 16px; }
   .status.error { color: #f85149; }
   .status.ok { color: #3fb950; }
@@ -24,9 +25,12 @@
   .view-head h1 { margin: 0 0 4px; font-size: 20px; }
 
   .restaurant-card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+  .restaurant-card.disabled { opacity: 0.75; }
   .restaurant-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
   .restaurant-head h2 { margin: 0; font-size: 16px; }
-  .restaurant-head input.name-input { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 16px; font-weight: 600; padding: 4px 8px; width: 220px; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle; }
+  .badge.on { background: #0d2818; color: #3fb950; border: 1px solid #23663a; }
+  .badge.off { background: #21262d; color: #8b949e; border: 1px solid #30363d; }
 
   .token-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 12.5px; }
   .token-row .token-value { font-family: ui-monospace, monospace; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; color: #8b949e; flex: 1; overflow-x: auto; white-space: nowrap; }
@@ -35,14 +39,9 @@
   .printer-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
   .printer-row { display: grid; grid-template-columns: 1fr 1fr 90px auto; gap: 8px; align-items: center; background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
   .printer-row input { background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; padding: 6px 8px; font-size: 13px; width: 100%; }
-  .printer-row .save-hint { color: #6e7681; font-size: 11px; }
 
   .add-printer-row { display: grid; grid-template-columns: 1fr 1fr 90px auto; gap: 8px; margin-top: 6px; }
   .add-printer-row input { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; padding: 7px 9px; font-size: 13px; }
-
-  .new-restaurant { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-  .new-restaurant input { flex: 1; min-width: 160px; padding: 10px 12px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; color: #e6edf3; font-size: 14px; }
-  .new-restaurant input.id-input { flex: 0 0 200px; font-family: ui-monospace, monospace; }
 
   .empty { color: #6e7681; font-size: 12.5px; padding: 6px 0; }
 </style>
@@ -59,15 +58,9 @@
 <div id="app">
   <div class="view-head">
     <h1>Заведения и принтеры</h1>
-    <p class="hint">Каждое заведение — свой токен агента и свой список принтеров. Задание на печать уходит только тому заведению, которому принадлежит, и печатается на том принтере, который для него указан.</p>
+    <p class="hint">Список заведений — тот же, что в супер-админке KitchenDesk (живой, читается из настоящей базы, ничего здесь руками не заводится). Для каждого заведения печать можно включить — тогда у него появляется свой токен агента и свой список принтеров, задание на печать уходит только туда, куда принадлежит.</p>
   </div>
 
-  <div class="new-restaurant">
-    <input type="text" id="newRestaurantName" placeholder="Название нового заведения" onkeydown="if(event.key==='Enter') addRestaurant()">
-    <input type="text" id="newRestaurantId" class="id-input" placeholder="ID (необязательно, напр. oblako)" onkeydown="if(event.key==='Enter') addRestaurant()">
-    <button class="action" onclick="addRestaurant()">+ Добавить заведение</button>
-  </div>
-  <p class="hint" style="margin-top: 0;">ID — только если это заведение уже известно ДРУГОМУ модулю под своим именем (например, приём заказов зовёт заведения "oblako"/"myaso" в своём конфиге) — впишите точно так же, иначе задания того модуля не найдут принтер. Для обычных заведений просто оставьте пустым.</p>
   <div class="status" id="topStatus"></div>
 
   <div id="restaurantsList"></div>
@@ -98,6 +91,7 @@
 
   async function reload() {
     const res = await fetch("/api/oko-print-admin/restaurants", { headers: authHeaders() });
+    if (!res.ok) { setStatus((await res.json()).error || "Не удалось загрузить список", false); return; }
     restaurants = await res.json();
     render();
   }
@@ -109,30 +103,18 @@
     if (text) setTimeout(() => { el.innerText = ""; }, 3000);
   }
 
-  async function addRestaurant() {
-    const nameInput = document.getElementById("newRestaurantName");
-    const idInput = document.getElementById("newRestaurantId");
-    const name = nameInput.value.trim();
-    const id = idInput.value.trim();
-    if (!name) return;
-    const res = await fetch("/api/oko-print-admin/restaurants", { method: "POST", headers: authHeaders(), body: JSON.stringify({ name, id: id || undefined }) });
-    if (!res.ok) { setStatus((await res.json()).error || "Не удалось добавить", false); return; }
-    nameInput.value = "";
-    idInput.value = "";
-    setStatus("Заведение добавлено", true);
+  async function enableRestaurant(id, name) {
+    if (!confirm(`Включить печать для "${name}"? Будет выпущен новый токен агента.`)) return;
+    const res = await fetch(`/api/oko-print-admin/restaurants/${id}/enable`, { method: "POST", headers: authHeaders(), body: JSON.stringify({}) });
+    if (!res.ok) { setStatus((await res.json()).error || "Не удалось включить печать", false); return; }
+    setStatus("Печать включена", true);
     await reload();
   }
 
-  async function renameRestaurant(id, newName) {
-    if (!newName.trim()) return;
-    await fetch(`/api/oko-print-admin/restaurants/${id}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ name: newName }) });
-    await reload();
-  }
-
-  async function deleteRestaurant(id, name) {
-    if (!confirm(`Удалить заведение "${name}" и весь список его принтеров? Токен перестанет работать сразу.`)) return;
+  async function disableRestaurant(id, name) {
+    if (!confirm(`Выключить печать для "${name}"? Токен и список принтеров пропадут, само заведение в KitchenDesk не изменится.`)) return;
     await fetch(`/api/oko-print-admin/restaurants/${id}`, { method: "DELETE", headers: authHeaders() });
-    setStatus("Заведение удалено", true);
+    setStatus("Печать выключена", true);
     await reload();
   }
 
@@ -194,10 +176,22 @@
   function render() {
     const list = document.getElementById("restaurantsList");
     if (!restaurants.length) {
-      list.innerHTML = '<div class="empty">Заведений пока нет — добавьте первое выше.</div>';
+      list.innerHTML = '<div class="empty">В KitchenDesk пока нет активных заведений.</div>';
       return;
     }
     list.innerHTML = restaurants.map((r) => {
+      if (!r.enabled) {
+        return `
+        <div class="restaurant-card disabled">
+          <div class="restaurant-head">
+            <div>
+              <h2>${escapeHtml(r.name)}<span class="badge off">печать выключена</span></h2>
+              <div style="font-family: ui-monospace, monospace; font-size: 11px; color: #6e7681; margin-top: 4px;">ID: ${escapeHtml(r.id)}</div>
+            </div>
+            <button class="action" onclick="enableRestaurant('${r.id}','${escapeHtml(r.name)}')">Включить печать</button>
+          </div>
+        </div>`;
+      }
       const shown = !!shownTokens[r.id];
       const printersHtml = r.printers.length
         ? r.printers.map((p) => `
@@ -212,10 +206,10 @@
       <div class="restaurant-card">
         <div class="restaurant-head">
           <div>
-            <input class="name-input" value="${escapeHtml(r.name)}" onchange="renameRestaurant('${r.id}', this.value)">
+            <h2>${escapeHtml(r.name)}<span class="badge on">печать включена</span></h2>
             <div style="font-family: ui-monospace, monospace; font-size: 11px; color: #6e7681; margin-top: 4px;">ID: ${escapeHtml(r.id)}</div>
           </div>
-          <button class="danger" onclick="deleteRestaurant('${r.id}','${escapeHtml(r.name)}')">Удалить заведение</button>
+          <button class="danger" onclick="disableRestaurant('${r.id}','${escapeHtml(r.name)}')">Выключить печать</button>
         </div>
         <div class="token-row">
           <span>Токен агента:</span>

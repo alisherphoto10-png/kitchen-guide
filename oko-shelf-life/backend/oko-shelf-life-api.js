@@ -162,32 +162,35 @@ function createOkoShelfLifePrintRouter() {
 // заботы, общий только пароль (OKO_ADMIN_PASSWORD). Токен показываем
 // целиком (не маскируем) — владельцу и нужно его скопировать и передать
 // агенту, это не чужой секрет, а его собственный, который он сам выдаёт.
+//
+// Список заведений здесь — ВСЕГДА живой список из KitchenDesk (см.
+// listRestaurantsWithStatus в сторе), панель больше не позволяет завести
+// заведение, которого там нет — только "включить" печать для одного из
+// реальных, уже существующих.
 function createOkoPrintAdminRouter() {
   const router = express.Router();
   router.use(requireAdmin);
 
-  router.get("/restaurants", (req, res) => {
-    res.json(store.listRestaurants());
+  router.get("/restaurants", async (req, res) => {
+    try {
+      res.json(await store.listRestaurantsWithStatus());
+    } catch (err) {
+      res.status(500).json({ error: `Не удалось получить список заведений KitchenDesk: ${err.message}` });
+    }
   });
 
-  router.post("/restaurants", (req, res) => {
+  router.post("/restaurants/:id/enable", async (req, res) => {
     try {
-      const restaurant = store.addRestaurant({ name: (req.body || {}).name, id: (req.body || {}).id });
+      const restaurant = await store.enableRestaurant(req.params.id, req.body || {});
       res.json(restaurant);
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
   });
 
-  router.patch("/restaurants/:id", (req, res) => {
-    const restaurant = store.updateRestaurant(req.params.id, req.body || {});
-    if (!restaurant) return res.status(404).json({ error: "Заведение не найдено" });
-    res.json(restaurant);
-  });
-
   router.delete("/restaurants/:id", (req, res) => {
-    const ok = store.deleteRestaurant(req.params.id);
-    if (!ok) return res.status(404).json({ error: "Заведение не найдено" });
+    const ok = store.disableRestaurant(req.params.id);
+    if (!ok) return res.status(404).json({ error: "Печать для этого заведения не настроена" });
     res.json({ ok: true });
   });
 

@@ -57,42 +57,79 @@ function writeRestaurants(list) {
   writeJson(RESTAURANTS_PATH, list);
 }
 
-function slugify(name) {
-  const base = (name || "")
-    .toLowerCase()
-    .replace(/[^a-zа-я0-9]+/gi, "-")
-    .replace(/^-+|-+$/g, "");
-  return base || "zavedenie";
+// ---------- настоящий реестр заведений KitchenDesk (источник истины) ----------
+// Раньше эта панель сама была источником истины — заведение заводилось
+// просто вводом названия (и опционально ID) в форме. Пользователь (реальный
+// владелец KitchenDesk) явно потребовал так не делать: "в print агенте не
+// должно быть других заведений, которые нету, которые не подключены к
+// kitchen desk" — то есть список ЗАВЕДЕНИЙ, доступных для настройки печати,
+// должен читаться из настоящей таблицы KitchenDesk, а не вводиться руками
+// здесь. Эта функция читает её напрямую (тот же процесс, тот же принцип, что
+// и у createRawPrintJob — без HTTP между "серверами", их и не два).
+//
+// ПРОВЕРИТЬ при деплое: путь до db-модуля и сигнатуру db.getAllRestaurants().
+// Предположение (по аналогии с api/admin.js:92, который уже дёргает эту же
+// функцию для существующей /api/admin/restaurants) — oko-shelf-life-store.js
+// лежит в корне backend/, на одном уровне с db/, значит "../db/postgres" от
+// него — это db/postgres от корня backend/. Если раскладка на сервере другая
+// (например, если этот файл в подпапке) — поправить путь здесь. Таблица
+// restaurants: активные — deleted_at IS NULL; здесь фильтруем именно так,
+// но на случай, если getAllRestaurants() уже сама фильтрует и деплойный
+// deleted_at отсутствует в возвращаемых полях — проверка "!r.deleted_at"
+// в этом случае просто всегда true, лишним не будет.
+async function listKitchenDeskTenants() {
+  const db = require("../db/postgres");
+  const rows = await db.getAllRestaurants();
+  return rows
+    .filter((r) => !r.deleted_at)
+    .map((r) => ({ id: String(r.id), name: r.name }))
+    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
 }
 
-// customId — необязательно, но важно для заведений, которых уже знают
-// ДРУГИЕ модули под своим именем (например, oko-order-relay зовёт заведения
-// "oblako"/"myaso" в своём конфиге, латиницей — не так, как они называются
-// по-русски в этой панели). Если печать тикетов заказа должна прийти на
-// принтер именно этого заведения — id здесь ДОЛЖЕН совпадать с тем, как
-// заведение называется в том, другом, модуле, иначе задания будут просто
-// молча копиться в очереди, никем не забираемые (см. printOrderTicket в
-// oko-order-relay/backend/oko-order-api.js).
-function addRestaurant({ name, id: customId }) {
-  if (!name || !name.trim()) throw new Error("Укажите название заведения");
+// Печать для заведения "включена" здесь = у него есть локальная запись
+// (токен агента + принтеры). "Выключена" = заведение реальное и активное в
+// KitchenDesk, но печать для него ещё не настраивали — не то же самое, что
+// "заведения не существует". listRestaurantsWithStatus (ниже) — то, что
+// реально показывает панель: полный список настоящих заведений KitchenDesk,
+// с пометкой, у кого уже настроена печать.
+async function listRestaurantsWithStatus() {
+  const tenants = await listKitchenDeskTenants();
+  const local = readRestaurants();
+  return tenants.map((t) => {
+    const cfg = local.find((r) => r.id === t.id);
+    return {
+      id: t.id,
+      name: t.name,
+      enabled: !!cfg,
+      agentToken: cfg ? cfg.agentToken : null,
+      printers: cfg ? cfg.printers : [],
+    };
+  });
+}
+
+// Включить печать для настоящего заведения KitchenDesk (id — реальный id из
+// таблицы restaurants, не придуманный). Имя всегда берётся из живого списка
+// KitchenDesk, а не то, что ввели в форме — панель больше не даёт завести
+// заведение, которого нет в KitchenDesk.
+//
+// opts.agentToken — необязательно, ТОЛЬКО для переноса уже работающего
+// агента на новую схему без его переконфигурации (например, миграция ОКО:
+// если задать здесь тот же секрет, что уже лежит в переменной окружения
+// OKO_SHELF_LIFE_AGENT_TOKEN на моноблоке, физический агент продолжит
+// работать без единой правки на своей стороне — просто найдётся через эту
+// новую запись вместо старой легаси-заглушки в findRestaurantByToken). Для
+// обычного нового заведения этот параметр не передают — токен генерируется.
+async function enableRestaurant(tenantId, opts = {}) {
+  const tenants = await listKitchenDeskTenants();
+  const tenant = tenants.find((t) => t.id === String(tenantId));
+  if (!tenant) throw new Error("Заведение не найдено среди активных клиентов KitchenDesk");
   const list = readRestaurants();
-  let id = (customId && customId.trim()) || slugify(name);
-  if (customId && customId.trim()) {
-    if (list.some((r) => r.id === id) || id === LEGACY_RESTAURANT_ID) {
-      throw new Error(`ID "${id}" уже занят`);
-    }
-  } else {
-    let suffix = 1;
-    while (list.some((r) => r.id === id) || id === LEGACY_RESTAURANT_ID) {
-      suffix += 1;
-      id = `${slugify(name)}-${suffix}`;
-    }
-  }
+  if (list.some((r) => r.id === tenant.id)) throw new Error("Печать для этого заведения уже настроена");
   const restaurant = {
-    id,
-    name: name.trim(),
-    agentToken: makeToken(),
-    printers: [],
+    id: tenant.id,
+    name: tenant.name,
+    agentToken: (opts.agentToken && opts.agentToken.trim()) || makeToken(),
+    printers: Array.isArray(opts.printers) ? opts.printers : [],
     createdAt: Date.now(),
   };
   list.push(restaurant);
@@ -100,16 +137,11 @@ function addRestaurant({ name, id: customId }) {
   return restaurant;
 }
 
-function updateRestaurant(id, patch) {
-  const list = readRestaurants();
-  const restaurant = list.find((r) => r.id === id);
-  if (!restaurant) return null;
-  if (patch.name !== undefined && patch.name.trim()) restaurant.name = patch.name.trim();
-  writeRestaurants(list);
-  return restaurant;
-}
-
-function deleteRestaurant(id) {
+// Выключить печать для заведения — убирает только локальную запись (токен +
+// принтеры этой панели). Само заведение в KitchenDesk этим не трогается,
+// удалить его отсюда нельзя (и не должно быть можно) — это просто "больше
+// не печатаем туда", а не "такого заведения не существует".
+function disableRestaurant(id) {
   const list = readRestaurants();
   const next = list.filter((r) => r.id !== id);
   if (next.length === list.length) return false;
@@ -124,10 +156,6 @@ function regenerateRestaurantToken(id) {
   restaurant.agentToken = makeToken();
   writeRestaurants(list);
   return restaurant;
-}
-
-function listRestaurants() {
-  return readRestaurants();
 }
 
 function getRestaurant(id) {
@@ -193,17 +221,26 @@ function deletePrinter(restaurantId, printerId) {
   return true;
 }
 
-// Токен агента -> заведение. Поддерживает и новые заведения (из панели), и
-// старый единственный токен из переменной окружения (легаси, см. коммент у
-// LEGACY_RESTAURANT_ID выше) — чтобы уже работающий на реальном моноблоке
-// агент не сломался при переходе на многозаведенческую схему.
+// Токен агента -> заведение. Сначала ищем среди настоящих заведений с
+// включённой печатью (см. enableRestaurant) — после миграции ОКО (см.
+// print-agent/README.md, п.14) она тоже находится здесь, как обычная
+// запись с id="1", а не через отдельную ветку ниже.
+//
+// Ветка с переменной окружения OKO_SHELF_LIFE_AGENT_TOKEN — переходная
+// подстраховка, не постоянная часть схемы: пока на сервере не выполнена
+// миграция (POST /restaurants/1/enable с agentToken = значение этой
+// переменной), уже работающий на реальном моноблоке агент продолжает
+// находиться через неё, чтобы ничего не сломалось между деплоем кода и
+// выполнением миграционного шага. После миграции эта ветка больше не
+// участвует (токен находится в основном списке первым), но и не мешает —
+// можно оставить как есть, а не вырезать отдельным деплоем.
 function findRestaurantByToken(token) {
   if (!token) return null;
   const match = readRestaurants().find((r) => r.agentToken === token);
   if (match) return match;
   const legacyToken = process.env.OKO_SHELF_LIFE_AGENT_TOKEN;
   if (legacyToken && token === legacyToken) {
-    return { id: LEGACY_RESTAURANT_ID, name: "ОКО (легаси)", agentToken: legacyToken, printers: [] };
+    return { id: LEGACY_RESTAURANT_ID, name: "ОКО (легаси, до миграции)", agentToken: legacyToken, printers: [] };
   }
   return null;
 }
@@ -465,11 +502,11 @@ module.exports = {
   listRecentPrintJobs,
   saveAgentReport,
   listAgentReports,
-  listRestaurants,
+  listKitchenDeskTenants,
+  listRestaurantsWithStatus,
   getRestaurant,
-  addRestaurant,
-  updateRestaurant,
-  deleteRestaurant,
+  enableRestaurant,
+  disableRestaurant,
   regenerateRestaurantToken,
   addPrinter,
   updatePrinter,

@@ -38,6 +38,19 @@ function buildOrderPrintLines(order, venueConfig) {
   return lines;
 }
 
+// "Облако" и "Мясо" (order.venue, ключи ИЗ ЭТОГО КОНФИГА — см.
+// data/oko-order-config.example.json) — это просто разные формы заказа,
+// НЕ заведения KitchenDesk: они не зарегистрированы в таблице restaurants
+// и никогда не будут (пользователь явно подтвердил: "облако и мясо, они
+// пока к kitchen desk вообще ничего не отношения не имеют... я просто хочу
+// подключить принтер, чтобы он что-то дублировал"). Поэтому тикеты обеих
+// форм печатаются на принтере ОДНОГО реального заведения — ОКО, просто
+// дублируя то, что и так приходит в Telegram-группу. "1" — настоящий id
+// ОКО Гастробар в таблице restaurants KitchenDesk (не придуманный, см.
+// print-agent/README.md, п.14 — миграция ОКО на схему синхронизации с
+// реальными заведениями).
+const OKO_KITCHENDESK_TENANT_ID = "1";
+
 function printOrderTicket(order, venueConfig) {
   try {
     // ПРОВЕРИТЬ этот путь при деплое — предположение по аналогии с тем, как
@@ -45,22 +58,11 @@ function printOrderTicket(order, venueConfig) {
     // но oko-order-api.js копируется в другое место (README: "туда же, где
     // bot.js"), реальный относительный путь может отличаться.
     const { createRawPrintJob } = require("./oko-shelf-life-store");
-    // restaurantId = order.venue ("oblako"/"myaso" — ключ ИЗ ЭТОГО КОНФИГА,
-    // см. data/oko-order-config.example.json). Если заведение с таким ID
-    // ЕЩЁ НЕ заведено в панели заведений/принтеров (oko-print-admin) —
-    // не страшно: resolveRestaurantId в oko-shelf-life-store.js подстрахует
-    // и отправит задание в общую легаси-очередь (ту, что уже опрашивает
-    // реальный агент ОКО), не потеряет. Как только заведение с этим ID
-    // заведут в панели — задания сами начнут приходить именно туда, без
-    // правок здесь. (Раньше тут было НЕВЕРНОЕ предположение, что так уже
-    // работает "само собой" — на деле до фикса в сторе задание без
-    // существующего заведения становилось невидимым вообще ни для кого;
-    // поймали на живом деплое, исправили в сторе, не здесь.)
     createRawPrintJob({
       printLines: buildOrderPrintLines(order, venueConfig),
       itemName: `Заказ — ${venueConfig.label}`,
       by: order.name || "",
-      restaurantId: order.venue,
+      restaurantId: OKO_KITCHENDESK_TENANT_ID,
     });
   } catch (err) {
     // Не критично — сам заказ уже ушёл в Telegram, печать тикета
