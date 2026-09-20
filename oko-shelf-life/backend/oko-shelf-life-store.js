@@ -4,6 +4,7 @@ const path = require("path");
 const DATA_DIR = path.join(__dirname, "data");
 const ITEMS_PATH = path.join(DATA_DIR, "oko-shelf-life-items.json");
 const PRINT_JOBS_PATH = path.join(DATA_DIR, "oko-shelf-life-print-jobs.json");
+const AGENT_REPORTS_PATH = path.join(DATA_DIR, "oko-shelf-life-agent-reports.json");
 
 function ensureDirs() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -221,6 +222,27 @@ function listRecentPrintJobs(limit) {
     .slice(0, limit || 50);
 }
 
+// Отчёты от агента (сейчас — разведка установленных в Windows принтеров
+// для второго, этикеточного принтера по USB, см. runPrinterRecon в
+// print-agent.js). Агент шлёт сюда, владелец (или Claude через этот
+// эндпоинт с паролем) читает — без необходимости пересылать вывод команд
+// вручную через человека.
+function saveAgentReport(report) {
+  const reports = readJson(AGENT_REPORTS_PATH, []);
+  const saved = { id: makeId(), receivedAt: Date.now(), ...report };
+  reports.push(saved);
+  // держим только последние 20 — это диагностика, не история, которую
+  // нужно хранить вечно
+  writeJson(AGENT_REPORTS_PATH, reports.slice(-20));
+  return saved;
+}
+
+function listAgentReports(limit) {
+  return readJson(AGENT_REPORTS_PATH, [])
+    .sort((a, b) => b.receivedAt - a.receivedAt)
+    .slice(0, limit || 20);
+}
+
 module.exports = {
   readItems,
   addItem,
@@ -232,6 +254,9 @@ module.exports = {
   listPendingPrintJobs,
   markPrintJobDone,
   listRecentPrintJobs,
+  saveAgentReport,
+  listAgentReports,
   ITEMS_PATH,
   PRINT_JOBS_PATH,
+  AGENT_REPORTS_PATH,
 };

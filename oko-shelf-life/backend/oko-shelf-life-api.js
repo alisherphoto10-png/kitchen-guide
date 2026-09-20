@@ -59,6 +59,12 @@ function createOkoShelfLifeRouter() {
     res.json(store.listRecentPrintJobs(Number(req.query.limit) || 50));
   });
 
+  // Отчёты от агента (сейчас — разведка принтеров, см. runPrinterRecon в
+  // print-agent.js) — владельцу почитать, что агент нашёл на моноблоке.
+  router.get("/agent-reports", (req, res) => {
+    res.json(store.listAgentReports(Number(req.query.limit) || 20));
+  });
+
   return router;
 }
 
@@ -132,6 +138,14 @@ function createOkoShelfLifePrintRouter() {
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // Разведка принтеров (runPrinterRecon в агенте) шлёт сюда сырой вывод
+  // системных команд с моноблока — владелец/Claude читает через
+  // GET /agent-reports (пароль админки) выше, не через пересказ человеком.
+  router.post("/agent-report", requireAgent, (req, res) => {
+    const report = store.saveAgentReport(req.body || {});
+    res.json(report);
   });
 
   return router;

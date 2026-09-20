@@ -16,13 +16,14 @@ const https = require("https");
 const net = require("net");
 const path = require("path");
 const fs = require("fs");
-const { spawn } = require("child_process");
+const os = require("os");
+const { spawn, exec } = require("child_process");
 
 // Версия КОДА этого файла — меняется при каждой правке агента, сравнивается
 // с тем, что отдаёт сервер (см. checkForUpdate ниже), чтобы понять, есть ли
 // более новая версия. Никак не связана с версией KitchenDesk в целом, просто
 // метка для самообновления агента.
-const AGENT_VERSION = "2026-09-20.4";
+const AGENT_VERSION = "2026-09-20.5";
 
 // ---------------- НАСТРОЙКИ ----------------
 // Значения по умолчанию — реальные, "местные" настройки (токен, IP принтера
@@ -48,6 +49,9 @@ const DEFAULTS = {
   // неудобно было взять пальцами. Если мало/много — можно поправить прямо в
   // agent-config.json, без переустановки агента.
   FEED_LINES_BEFORE_CUT: 8,
+  // Разведка установленных в Windows принтеров (см. runPrinterRecon ниже) —
+  // делается один раз, дальше это true и повтора не будет.
+  reconReported: false,
 };
 
 const CONFIG_PATH = path.join(__dirname, "agent-config.json");
@@ -68,6 +72,19 @@ function loadConfig() {
   }
 }
 const CONFIG = loadConfig();
+
+// Записать несколько полей в agent-config.json и сразу применить их к
+// CONFIG в памяти — используется для флагов вроде "разведка уже сделана",
+// которые агент выставляет сам себе, не только для того, что правит
+// человек руками.
+function saveConfigPatch(patch) {
+  Object.assign(CONFIG, patch);
+  try {
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(CONFIG, null, 2), "utf8");
+  } catch (err) {
+    console.error("Не удалось сохранить agent-config.json:", err.message);
+  }
+}
 // ------------------------------------------------------------------
 
 function httpRaw(urlStr, { method = "GET", headers = {}, body } = {}) {
@@ -332,6 +349,55 @@ async function codepageTest() {
   console.log("Готово — посмотрите на чек, какая строка читается нормально, впишите этот номер в CYRILLIC_CODEPAGE.");
 }
 
+// ---------------- РАЗВЕДКА ВТОРОГО ПРИНТЕРА (этикеточный, по USB) ----------------
+// Одноразовая, при первом же запуске (и на каждом следующем, пока не
+// удастся успешно отправить отчёт) — собирает список принтеров, которые
+// Windows видит установленными (имя, порт, драйвер), и шлёт на сервер, а
+// не заставляет человека самого открывать командную строку и что-то там
+// читать/переписывать. Как только отчёт успешно ушёл — reconReported
+// выставляется в true в agent-config.json, повторов больше не будет.
+function runShellCommand(cmd, timeoutMs = 15000) {
+  return new Promise((resolve) => {
+    exec(cmd, { timeout: timeoutMs, windowsHide: true }, (err, stdout, stderr) => {
+      resolve({ ok: !err, error: err ? err.message : null, stdout: stdout || "", stderr: stderr || "" });
+    });
+  });
+}
+
+async function runPrinterRecon() {
+  if (CONFIG.reconReported) return;
+  console.log("[разведка] собираю список установленных в Windows принтеров...");
+  const printers = await runShellCommand("wmic printer get name,portname,drivername,default /format:csv");
+  const report = {
+    hostname: os.hostname(),
+    platform: process.platform,
+    at: new Date().toISOString(),
+    commands: {
+      "wmic printer get name,portname,drivername,default /format:csv": printers,
+    },
+  };
+  try {
+    await httpJson(`${CONFIG.BACKEND_URL}/api/oko-shelf-life-print/agent-report`, {
+      method: "POST",
+      headers: { "X-Agent-Token": CONFIG.AGENT_TOKEN },
+      body: report,
+    });
+    console.log("[разведка] отчёт отправлен на сервер.");
+    saveConfigPatch({ reconReported: true });
+    try {
+      await sendToPrinter(
+        buildLabel({
+          printLines: ["KitchenDesk", "------------------------------", "Разведка принтеров", "выполнена, отчёт отправлен", "------------------------------"],
+        }),
+      );
+    } catch (err) {
+      console.error("[разведка] не удалось напечатать подтверждение (не критично):", err.message);
+    }
+  } catch (err) {
+    console.error("[разведка] не удалось отправить отчёт, попробую при следующем запуске:", err.message);
+  }
+}
+
 // ---------------- АВТОЗАГРУЗКА ----------------
 // node print-agent.js --install-autostart
 // Сам кладёт файл запуска в папку автозагрузки Windows — руками искать
@@ -399,6 +465,7 @@ if (process.argv.includes("--codepage-test")) {
     // сюда дойдём только если обновления не было (либо проверка не удалась)
     console.log(`Агент печати KitchenDesk запущен (версия ${AGENT_VERSION}). Опрашиваю ${CONFIG.BACKEND_URL} каждые ${CONFIG.POLL_INTERVAL_MS / 1000} сек.`);
     printStartupConfirmation();
+    runPrinterRecon();
     setInterval(pollOnce, CONFIG.POLL_INTERVAL_MS);
     setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL_MS);
     pollOnce();
