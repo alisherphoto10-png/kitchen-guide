@@ -22,7 +22,7 @@ const { spawn } = require("child_process");
 // с тем, что отдаёт сервер (см. checkForUpdate ниже), чтобы понять, есть ли
 // более новая версия. Никак не связана с версией KitchenDesk в целом, просто
 // метка для самообновления агента.
-const AGENT_VERSION = "2026-09-20.2";
+const AGENT_VERSION = "2026-09-20.3";
 
 // ---------------- НАСТРОЙКИ ----------------
 // Значения по умолчанию — реальные, "местные" настройки (токен, IP принтера
@@ -253,6 +253,15 @@ async function checkForUpdate() {
     });
     fs.writeFileSync(__filename, newCode, "utf8");
     console.log("[обновление] файл обновлён, перезапускаюсь с новой версией...");
+    try {
+      await sendToPrinter(
+        buildLabel({
+          printLines: ["KitchenDesk", "------------------------------", "Агент обновлён", `Версия: ${version}`, "------------------------------"],
+        }),
+      );
+    } catch (err) {
+      console.error("[обновление] не удалось напечатать подтверждение обновления (не критично):", err.message);
+    }
     const child = spawn(process.execPath, [__filename], {
       cwd: __dirname,
       detached: true,
