@@ -237,9 +237,16 @@ async function codepageTest() {
 
 // ---------------- АВТОЗАГРУЗКА ----------------
 // node print-agent.js --install-autostart
-// Сам кладёт .bat-файл в папку автозагрузки Windows — руками искать
-// "shell:startup" и делать ярлык не нужно. Windows запускает любой
-// .bat, лежащий прямо в этой папке, при каждом входе в систему.
+// Сам кладёт файл запуска в папку автозагрузки Windows — руками искать
+// "shell:startup" и делать ярлык не нужно.
+//
+// Запускается БЕЗ видимого окна консоли: в папку автозагрузки кладётся
+// не сам .bat, а маленький .vbs-скрипт, который запускает .bat через
+// WScript.Shell.Run с окном "0" (скрытое) — это стандартный способ на
+// Windows запустить консольную программу вообще без чёрного окна.
+// Подтверждение, что агент поднялся, — тестовый чек на принтере при
+// каждом старте (см. printStartupConfirmation выше), окно на экране не
+// нужно и не появляется.
 function installAutostart() {
   const appData = process.env.APPDATA; // на Windows всегда задана, кроме как в testing-окружениях
   if (!appData) {
@@ -247,18 +254,39 @@ function installAutostart() {
     return;
   }
   const startupDir = path.join(appData, "Microsoft", "Windows", "Start Menu", "Programs", "Startup");
-  const batPath = path.join(startupDir, "KitchenDeskPrintAgent.bat");
   const scriptDir = __dirname;
+  // .bat лежит рядом со скриптом (не в автозагрузке) — его запускает .vbs
+  const batPath = path.join(scriptDir, "KitchenDeskPrintAgentLauncher.bat");
   const batContent = `@echo off\r\ncd /d "${scriptDir}"\r\nnode print-agent.js\r\n`;
+  const vbsName = "KitchenDeskPrintAgent.vbs";
+  const vbsContent = `Set WshShell = CreateObject("WScript.Shell")\r\nWshShell.Run Chr(34) & "${batPath}" & Chr(34), 0, False\r\n`;
+  const startupVbsPath = path.join(startupDir, vbsName);
+  const localVbsPath = path.join(scriptDir, vbsName); // копия рядом со скриптом — чтобы запустить прямо сейчас, не дожидаясь перезагрузки
+
   try {
     fs.mkdirSync(startupDir, { recursive: true }); // на реальном Windows папка уже есть, это просто подстраховка
     fs.writeFileSync(batPath, batContent, "utf8");
-    console.log(`Готово! Агент добавлен в автозагрузку: ${batPath}`);
-    console.log("При каждом включении компьютера он будет запускаться сам.");
-    console.log("Проверить сразу можно, перезапустив компьютер, либо просто продолжить — сейчас можно запустить агент и вручную командой ниже.");
+    fs.writeFileSync(startupVbsPath, vbsContent, "utf8");
+    fs.writeFileSync(localVbsPath, vbsContent, "utf8");
+
+    // старая версия клала видимый .bat прямо в автозагрузку под тем же
+    // именем — если он остался с прошлого раза, при входе в систему
+    // запустятся ОБА (старый видимый + новый скрытый) и агент задвоится.
+    const oldVisibleBatPath = path.join(startupDir, "KitchenDeskPrintAgent.bat");
+    try {
+      fs.unlinkSync(oldVisibleBatPath);
+    } catch {
+      // не было — и хорошо
+    }
+
+    console.log("Готово! Агент добавлен в автозагрузку — БЕЗ видимого окна на экране.");
+    console.log("При каждом включении компьютера он будет запускаться сам в фоне, тихо.");
+    console.log("Подтверждение, что он поднялся, — тестовый чек на принтере при каждом запуске.");
+    console.log("");
+    console.log(`Запустить прямо сейчас (тоже без окна) — дважды кликните файл "${vbsName}" рядом со print-agent.js,`);
+    console.log(`либо командой: wscript "${localVbsPath}"`);
   } catch (err) {
-    console.error("Не получилось создать файл автозагрузки:", err.message);
-    console.error(`Попробуйте вручную: скопируйте print-agent.js в ${startupDir} — только не сам файл, а .bat, который его запускает.`);
+    console.error("Не получилось создать файлы автозагрузки:", err.message);
   }
 }
 
