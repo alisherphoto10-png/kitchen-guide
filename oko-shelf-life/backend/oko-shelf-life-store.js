@@ -134,6 +134,29 @@ function getRestaurant(id) {
   return readRestaurants().find((r) => r.id === id) || null;
 }
 
+// ВАЖНО (найден и исправлен реальный баг 2026-09-20): если вызывающий код
+// передаёт restaurantId, которого ещё нет в списке заведений (например,
+// order.venue = "oblako" до того, как это заведение завели в панели) —
+// задание раньше сохранялось с этим restaurantId буквально и становилось
+// НЕВИДИМЫМ ВООБЩЕ ДЛЯ ЛЮБОГО ТОКЕНА, включая легаси (listPendingPrintJobs
+// фильтрует строго по совпадению restaurantId, а "заведения-сироты" не
+// существует и опросить его нечем). Это НЕ то же самое, что "restaurantId
+// не передан вообще" (тот случай действительно уходит в легаси через
+// `restaurantId || LEGACY_RESTAURANT_ID` при создании) — спутал одно с
+// другим в первой версии, реальные тикеты заказов несколько минут молча
+// терялись в проде, пока это не поймали и не откатили руками.
+// createPrintJob/createRawPrintJob теперь всегда прогоняют restaurantId
+// через эту функцию — неизвестное заведение тихо (с логом) уходит в
+// легаси-очередь вместо того, чтобы стать сиротой без единого читателя.
+function resolveRestaurantId(restaurantId) {
+  if (!restaurantId || restaurantId === LEGACY_RESTAURANT_ID) return LEGACY_RESTAURANT_ID;
+  if (getRestaurant(restaurantId)) return restaurantId;
+  console.error(
+    `[печать] заведение "${restaurantId}" не найдено в панели /print-admin/ — задание уходит в очередь по умолчанию (default), чтобы не потеряться. Заведите это заведение в панели, если оно должно печататься отдельно.`,
+  );
+  return LEGACY_RESTAURANT_ID;
+}
+
 function addPrinter(restaurantId, { name, ip, port }) {
   if (!name || !name.trim()) throw new Error("Укажите название принтера");
   if (!ip || !ip.trim()) throw new Error("Укажите IP принтера");
@@ -310,7 +333,7 @@ function createPrintJob({ itemId, action, by, restaurantId, printerTarget }) {
   const jobs = readPrintJobs();
   const job = {
     id: makeId(),
-    restaurantId: restaurantId || LEGACY_RESTAURANT_ID,
+    restaurantId: resolveRestaurantId(restaurantId),
     printerTarget: printerTarget || null,
     itemId: item.id,
     itemName: item.name,
@@ -348,7 +371,7 @@ function createRawPrintJob({ printLines, qrData, itemName, by, restaurantId, pri
   const jobs = readPrintJobs();
   const job = {
     id: makeId(),
-    restaurantId: restaurantId || LEGACY_RESTAURANT_ID,
+    restaurantId: resolveRestaurantId(restaurantId),
     printerTarget: printerTarget || null,
     itemId: null,
     itemName: itemName || "Печать",
@@ -415,7 +438,7 @@ function listRecentPrintJobs(limit) {
 // вручную через человека.
 function saveAgentReport(report, restaurantId) {
   const reports = readJson(AGENT_REPORTS_PATH, []);
-  const saved = { id: makeId(), receivedAt: Date.now(), restaurantId: restaurantId || LEGACY_RESTAURANT_ID, ...report };
+  const saved = { id: makeId(), receivedAt: Date.now(), restaurantId: resolveRestaurantId(restaurantId), ...report };
   reports.push(saved);
   // держим только последние 20 — это диагностика, не история, которую
   // нужно хранить вечно
