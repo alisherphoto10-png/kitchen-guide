@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OKO — сроки хранения</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #0d1117; color: #e6edf3; }
+  .hint { font-size: 12px; color: #8b949e; margin: 0 0 16px; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  input, select, textarea { font-family: inherit; }
+  button.action { background: #238636; color: white; border: none; border-radius: 6px; padding: 9px 14px; cursor: pointer; font-size: 14px; }
+  button.secondary { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
+  button.danger { background: #21262d; color: #f85149; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 12px; }
+  .status { font-size: 13px; margin-top: 8px; min-height: 16px; }
+  .status.error { color: #f85149; }
+  .status.ok { color: #3fb950; }
+
+  #gate { max-width: 320px; margin: 80px auto; padding: 0 16px; }
+  #gate input { width: 100%; padding: 10px 12px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; color: #e6edf3; font-size: 14px; margin-bottom: 10px; }
+  #app { display: none; max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
+  #app.visible { display: block; }
+
+  .view-head h1 { margin: 0 0 4px; font-size: 20px; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  #search { flex: 1; min-width: 200px; padding: 10px 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; color: #e6edf3; font-size: 14px; }
+
+  .sl-table { background: #161b22; border: 1px solid #30363d; border-radius: 10px; overflow: hidden; }
+  .sl-row-head, .sl-row {
+    display: grid; grid-template-columns: 40px 1.4fr 1.3fr 110px 1.2fr 90px; gap: 10px; align-items: center; padding: 10px 14px;
+  }
+  .sl-row-head { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 1px solid #21262d; }
+  .sl-row { border-bottom: 1px solid #21262d; font-size: 13px; }
+  .sl-row:last-child { border-bottom: none; }
+  .sl-row:hover { background: #1a2029; }
+  .sl-row .num { color: #8b949e; font-variant-numeric: tabular-nums; }
+  .sl-row .name { font-weight: 600; }
+  .sl-row .cond { color: #8b949e; font-size: 12px; }
+  .sl-row .term { font-weight: 700; }
+  .sl-row .term.unparsed { color: #d29922; font-weight: 500; }
+  .sl-row .note { color: #8b949e; font-size: 12px; }
+  .sl-row .act { text-align: right; white-space: nowrap; }
+  .sl-row .act button { margin-left: 4px; }
+
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0); opacity: 0; pointer-events: none;
+    align-items: center; justify-content: center; z-index: 50; transition: opacity 0.15s;
+  }
+  .modal-overlay.open { display: flex; background: rgba(0,0,0,0.6); opacity: 1; pointer-events: auto; }
+  .modal-box { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; width: 480px; max-width: calc(100vw - 32px); max-height: 86vh; overflow-y: auto; transform: scale(0.97); transition: transform 0.15s; }
+  .modal-overlay.open .modal-box { transform: scale(1); }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .modal-head h2 { margin: 0; font-size: 16px; }
+  .modal-close { background: none; border: none; color: #8b949e; font-size: 20px; cursor: pointer; line-height: 1; padding: 4px; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 4px; }
+  .field input, .field textarea {
+    width: 100%; padding: 8px 10px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 13.5px;
+  }
+  .field textarea { resize: vertical; min-height: 50px; }
+  .field-hint { font-size: 11px; color: #6e7681; margin-top: 3px; }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <h2>OKO — сроки хранения</h2>
+  <input type="password" id="passwordInput" placeholder="Пароль" onkeydown="if(event.key==='Enter') tryLogin()">
+  <button class="action" onclick="tryLogin()" style="width:100%">Войти</button>
+  <div class="status error" id="gateStatus"></div>
+</div>
+
+<div id="app">
+  <div class="view-head">
+    <h1>Сроки хранения заготовок</h1>
+    <p class="hint">Справочник ПФ (полуфабрикатов): условия и срок хранения — основа для будущих этикеток разморозки/заморозки.</p>
+  </div>
+
+  <div class="toolbar">
+    <input type="search" id="search" placeholder="Поиск по названию..." oninput="render()">
+    <button class="action" onclick="openItemModal(null)">+ Добавить заготовку</button>
+  </div>
+
+  <div class="sl-table">
+    <div class="sl-row-head">
+      <div>№</div>
+      <div>Название</div>
+      <div>Условия хранения</div>
+      <div>Срок</div>
+      <div>Примечание</div>
+      <div></div>
+    </div>
+    <div id="list"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="itemModalOverlay" onclick="if(event.target===this) closeItemModal()">
+  <div class="modal-box">
+    <div class="modal-head"><h2 id="modalTitle">Добавить заготовку</h2><button class="modal-close" onclick="closeItemModal()">✕</button></div>
+    <div class="field">
+      <label>Название</label>
+      <input type="text" id="fName" placeholder="Например: ПФ Крем ОКО">
+    </div>
+    <div class="field">
+      <label>Условия хранения</label>
+      <input type="text" id="fCondition" placeholder="0..+4°C, герметичная тара">
+    </div>
+    <div class="field">
+      <label>Срок хранения</label>
+      <input type="text" id="fTerm" placeholder="24 часа / 3 суток / 2 недели" oninput="updateParsedHint()">
+      <div class="field-hint" id="parsedHint"></div>
+    </div>
+    <div class="field">
+      <label>Примечание (необязательно)</label>
+      <textarea id="fNote" placeholder="Почему такой срок / на что обратить внимание"></textarea>
+    </div>
+    <button class="action" onclick="saveItem()">Сохранить</button>
+    <button class="secondary" id="deleteBtn" style="display:none" onclick="deleteCurrentItem()">Удалить</button>
+    <div class="status" id="modalStatus"></div>
+  </div>
+</div>
+
+<script>
+  let password = sessionStorage.getItem("oko_sl_password") || "";
+  let items = [];
+  let editingId = null;
+
+  function authHeaders(extra) {
+    return Object.assign({ "X-Admin-Password": password }, extra || {});
+  }
+
+  async function tryLogin() {
+    password = document.getElementById("passwordInput").value;
+    const res = await fetch("/api/oko-shelf-life/items", { headers: authHeaders() });
+    if (!res.ok) {
+      document.getElementById("gateStatus").innerText = "Неверный пароль";
+      return;
+    }
+    sessionStorage.setItem("oko_sl_password", password);
+    items = await res.json();
+    document.getElementById("gate").style.display = "none";
+    document.getElementById("app").classList.add("visible");
+    render();
+  }
+
+  async function reload() {
+    const res = await fetch("/api/oko-shelf-life/items", { headers: authHeaders() });
+    items = await res.json();
+    render();
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function getFiltered() {
+    const q = (document.getElementById("search").value || "").trim().toLowerCase();
+    const filtered = q ? items.filter((it) => it.name.toLowerCase().includes(q)) : items.slice();
+    return filtered.sort((a, b) => a.number - b.number);
+  }
+
+  function render() {
+    const filtered = getFiltered();
+    const list = document.getElementById("list");
+    if (!filtered.length) {
+      list.innerHTML = `<p class="hint" style="padding:14px;margin:0">Ничего не найдено.</p>`;
+      return;
+    }
+    list.innerHTML = filtered
+      .map(
+        (it) => `
+      <div class="sl-row">
+        <div class="num">${it.number}</div>
+        <div class="name">${escapeHtml(it.name)}</div>
+        <div class="cond">${escapeHtml(it.storageCondition) || "—"}</div>
+        <div class="term ${it.shelfLifeHours == null ? "unparsed" : ""}" title="${it.shelfLifeHours == null ? "Не удалось распознать как число часов/суток/недель" : ""}">${escapeHtml(it.shelfLifeText) || "—"}</div>
+        <div class="note">${escapeHtml(it.note) || "—"}</div>
+        <div class="act"><button class="secondary" onclick="openItemModal('${it.id}')">Изменить</button></div>
+      </div>`,
+      )
+      .join("");
+  }
+
+  function updateParsedHint() {
+    const text = document.getElementById("fTerm").value;
+    const hours = parseShelfLifeHoursClient(text);
+    const el = document.getElementById("parsedHint");
+    if (!text.trim()) { el.innerText = ""; return; }
+    el.innerText = hours == null
+      ? "Не распознано как число — сохранится только текстом, без автоматического расчёта"
+      : `Распознано: ${hours} ч.`;
+  }
+
+  // Тот же парсер, что и на бэкенде (oko-shelf-life-store.js) — просто для
+  // живой подсказки в форме, сама проверка/сохранение — всегда на сервере.
+  function parseShelfLifeHoursClient(text) {
+    if (!text) return null;
+    const m = /(\d+)\s*(час|сут|недел)/i.exec(text.trim());
+    if (!m) return null;
+    const n = Number(m[1]);
+    const unit = m[2].toLowerCase();
+    if (unit === "час") return n;
+    if (unit === "сут") return n * 24;
+    if (unit === "недел") return n * 24 * 7;
+    return null;
+  }
+
+  function openItemModal(id) {
+    editingId = id;
+    const item = id ? items.find((it) => it.id === id) : null;
+    document.getElementById("modalTitle").innerText = item ? `№${item.number} — редактирование` : "Добавить заготовку";
+    document.getElementById("fName").value = item ? item.name : "";
+    document.getElementById("fCondition").value = item ? item.storageCondition : "";
+    document.getElementById("fTerm").value = item ? item.shelfLifeText : "";
+    document.getElementById("fNote").value = item ? item.note : "";
+    document.getElementById("deleteBtn").style.display = item ? "inline-block" : "none";
+    document.getElementById("modalStatus").innerText = "";
+    document.getElementById("modalStatus").className = "status";
+    updateParsedHint();
+    document.getElementById("itemModalOverlay").classList.add("open");
+  }
+  function closeItemModal() {
+    document.getElementById("itemModalOverlay").classList.remove("open");
+    editingId = null;
+  }
+
+  async function saveItem() {
+    const statusEl = document.getElementById("modalStatus");
+    statusEl.className = "status";
+    const name = document.getElementById("fName").value.trim();
+    if (!name) {
+      statusEl.className = "status error";
+      statusEl.innerText = "Укажите название";
+      return;
+    }
+    const payload = {
+      name,
+      storageCondition: document.getElementById("fCondition").value,
+      shelfLifeText: document.getElementById("fTerm").value,
+      note: document.getElementById("fNote").value,
+    };
+    const url = editingId ? `/api/oko-shelf-life/items/${editingId}` : "/api/oko-shelf-life/items";
+    const res = await fetch(url, {
+      method: editingId ? "PATCH" : "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      statusEl.className = "status error";
+      statusEl.innerText = data.error || "Не удалось сохранить";
+      return;
+    }
+    closeItemModal();
+    await reload();
+  }
+
+  async function deleteCurrentItem() {
+    if (!editingId) return;
+    if (!confirm("Удалить эту заготовку из справочника?")) return;
+    await fetch(`/api/oko-shelf-life/items/${editingId}`, { method: "DELETE", headers: authHeaders() });
+    closeItemModal();
+    await reload();
+  }
+</script>
+
+</body>
+</html>
