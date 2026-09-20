@@ -22,7 +22,7 @@ const { spawn } = require("child_process");
 // с тем, что отдаёт сервер (см. checkForUpdate ниже), чтобы понять, есть ли
 // более новая версия. Никак не связана с версией KitchenDesk в целом, просто
 // метка для самообновления агента.
-const AGENT_VERSION = "2026-09-20.3";
+const AGENT_VERSION = "2026-09-20.4";
 
 // ---------------- НАСТРОЙКИ ----------------
 // Значения по умолчанию — реальные, "местные" настройки (токен, IP принтера
@@ -186,8 +186,21 @@ function buildLabel(job) {
   const chunks = [];
   chunks.push(Buffer.from([ESC, 0x40])); // ESC @ — сброс
   chunks.push(Buffer.from([ESC, 0x74, CONFIG.CYRILLIC_CODEPAGE])); // ESC t n — кодовая страница
-  lines.forEach((line) => {
+  lines.forEach((line, i) => {
+    // Первая строка "KitchenDesk" — на всех наших чеках это шапка/бренд,
+    // печатаем крупнее, жирным, по центру. Остальные строки — как обычно.
+    const isBrandHeader = i === 0 && line.trim() === "KitchenDesk";
+    if (isBrandHeader) {
+      chunks.push(Buffer.from([ESC, 0x61, 0x01])); // ESC a 1 — по центру
+      chunks.push(Buffer.from([ESC, 0x45, 0x01])); // ESC E 1 — жирный
+      chunks.push(Buffer.from([GS, 0x21, 0x01])); // GS ! 1 — увеличенная высота
+    }
     chunks.push(textToCp866(line));
+    if (isBrandHeader) {
+      chunks.push(Buffer.from([GS, 0x21, 0x00])); // обратно обычный размер
+      chunks.push(Buffer.from([ESC, 0x45, 0x00])); // обратно не жирный
+      chunks.push(Buffer.from([ESC, 0x61, 0x00])); // обратно по левому краю
+    }
     chunks.push(Buffer.from([0x0a]));
   });
   if (job.qrData) {
