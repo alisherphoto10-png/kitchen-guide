@@ -167,6 +167,36 @@ function createPrintJob({ itemId, action, by }) {
   return job;
 }
 
+// Произвольное задание печати — не привязано к позиции справочника.
+// Для чек-листа смены (kitchen2026-план -> QR-завершение): изначально
+// задумывался отдельный HTTP-роут с секретом между "двумя серверами"
+// (см. oko-checklist-print/README.md), но оказалось, что оба модуля
+// живут в одном процессе (/root/kitchendesk/backend) — вызывается
+// напрямую как функция, без HTTP и без отдельного токена.
+function createRawPrintJob({ printLines, qrData, itemName, by }) {
+  if (!Array.isArray(printLines) || printLines.length === 0) {
+    throw new Error("printLines обязателен и должен быть непустым массивом строк");
+  }
+  const jobs = readPrintJobs();
+  const job = {
+    id: makeId(),
+    itemId: null,
+    itemName: itemName || "Печать",
+    shelfLifeText: null,
+    action: "raw",
+    by: (by || "").trim(),
+    createdAt: Date.now(),
+    expiresAt: null,
+    status: "pending",
+    printedAt: null,
+    printLines,
+    qrData: qrData || null,
+  };
+  jobs.push(job);
+  writePrintJobs(jobs);
+  return job;
+}
+
 function listPendingPrintJobs() {
   return readPrintJobs()
     .filter((j) => j.status === "pending")
@@ -198,6 +228,7 @@ module.exports = {
   deleteItem,
   parseShelfLifeHours,
   createPrintJob,
+  createRawPrintJob,
   listPendingPrintJobs,
   markPrintJobDone,
   listRecentPrintJobs,
