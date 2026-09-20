@@ -14,6 +14,8 @@
 const http = require("http");
 const https = require("https");
 const net = require("net");
+const path = require("path");
+const fs = require("fs");
 
 // ---------------- НАСТРОЙКИ — поправить под себя ----------------
 const CONFIG = {
@@ -210,9 +212,38 @@ async function codepageTest() {
   console.log("Готово — посмотрите на чек, какая строка читается нормально, впишите этот номер в CYRILLIC_CODEPAGE.");
 }
 
+// ---------------- АВТОЗАГРУЗКА ----------------
+// node print-agent.js --install-autostart
+// Сам кладёт .bat-файл в папку автозагрузки Windows — руками искать
+// "shell:startup" и делать ярлык не нужно. Windows запускает любой
+// .bat, лежащий прямо в этой папке, при каждом входе в систему.
+function installAutostart() {
+  const appData = process.env.APPDATA; // на Windows всегда задана, кроме как в testing-окружениях
+  if (!appData) {
+    console.error("Не нашёл папку автозагрузки (переменная APPDATA пустая) — это точно Windows?");
+    return;
+  }
+  const startupDir = path.join(appData, "Microsoft", "Windows", "Start Menu", "Programs", "Startup");
+  const batPath = path.join(startupDir, "KitchenDeskPrintAgent.bat");
+  const scriptDir = __dirname;
+  const batContent = `@echo off\r\ncd /d "${scriptDir}"\r\nnode print-agent.js\r\n`;
+  try {
+    fs.mkdirSync(startupDir, { recursive: true }); // на реальном Windows папка уже есть, это просто подстраховка
+    fs.writeFileSync(batPath, batContent, "utf8");
+    console.log(`Готово! Агент добавлен в автозагрузку: ${batPath}`);
+    console.log("При каждом включении компьютера он будет запускаться сам.");
+    console.log("Проверить сразу можно, перезапустив компьютер, либо просто продолжить — сейчас можно запустить агент и вручную командой ниже.");
+  } catch (err) {
+    console.error("Не получилось создать файл автозагрузки:", err.message);
+    console.error(`Попробуйте вручную: скопируйте print-agent.js в ${startupDir} — только не сам файл, а .bat, который его запускает.`);
+  }
+}
+
 // ---------------- запуск ----------------
 if (process.argv.includes("--codepage-test")) {
   codepageTest().catch((err) => console.error("Ошибка теста:", err.message));
+} else if (process.argv.includes("--install-autostart")) {
+  installAutostart();
 } else {
   console.log(`Агент печати KitchenDesk запущен. Опрашиваю ${CONFIG.BACKEND_URL} каждые ${CONFIG.POLL_INTERVAL_MS / 1000} сек.`);
   setInterval(pollOnce, CONFIG.POLL_INTERVAL_MS);
