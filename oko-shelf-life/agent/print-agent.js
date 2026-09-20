@@ -110,10 +110,33 @@ function textToCp866(text) {
   return Buffer.from(bytes);
 }
 
+// GS ( k — печать QR-кода, стандартная для ESC/POS-принтеров с
+// поддержкой 2D-штрихкодов (у нашего подтверждено самотестом принтера:
+// "Barcode 2D Support: QRCODE..."). Данные — просто строка (ссылка,
+// id чек-листа, что угодно), сам принтер рисует код, агенту не нужна
+// библиотека рисования QR.
+function qrCodeCommand(data) {
+  const dataBytes = Buffer.from(data, "utf8"); // QR сам по себе кодирует байты как есть, не через CP866
+  const storeLen = dataBytes.length + 3;
+  const pL = storeLen & 0xff;
+  const pH = (storeLen >> 8) & 0xff;
+  return Buffer.concat([
+    Buffer.from([GS, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]), // модель QR — модель 2
+    Buffer.from([GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, 0x06]), // размер модуля — 6 (крупнее/мельче: 1-16)
+    Buffer.from([GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31]), // коррекция ошибок — уровень M
+    Buffer.from([GS, 0x28, 0x6b, pL, pH, 0x31, 0x50, 0x30]), // сохранить данные в буфер QR
+    dataBytes,
+    Buffer.from([GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30]), // напечатать сохранённый QR
+  ]);
+}
+
 // Сами строки этикетки (что печатать и в каком порядке) присылает
 // сервер в job.printLines — агент их не сочиняет, только кодирует и
 // шлёт байты. Так любая правка дизайна чека — только на сервере, этот
-// файл на моноблоке трогать больше не придётся (см. README).
+// файл на моноблоке трогать больше не придётся (см. README). Помимо
+// текста задание может нести job.qrData (строка) — тогда после текста
+// печатается QR-код с этими данными (например, для будущей идеи:
+// отсканировать QR и закрыть чек-лист смены).
 function buildLabel(job) {
   const lines = job.printLines || [job.itemName || "(пустая этикетка)"];
   const chunks = [];
@@ -123,6 +146,12 @@ function buildLabel(job) {
     chunks.push(textToCp866(line));
     chunks.push(Buffer.from([0x0a]));
   });
+  if (job.qrData) {
+    chunks.push(Buffer.from([ESC, 0x61, 0x01])); // ESC a 1 — по центру, только для QR
+    chunks.push(qrCodeCommand(job.qrData));
+    chunks.push(Buffer.from([0x0a]));
+    chunks.push(Buffer.from([ESC, 0x61, 0x00])); // обратно по левому краю
+  }
   chunks.push(Buffer.from([0x0a, 0x0a, 0x0a]));
   chunks.push(Buffer.from([GS, 0x56, 0x00])); // GS V 0 — обрезка
   return Buffer.concat(chunks);
