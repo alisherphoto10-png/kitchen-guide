@@ -81,13 +81,6 @@ function sendToPrinter(buffer) {
 const ESC = 0x1b;
 const GS = 0x1d;
 
-function formatDateTime(ts) {
-  if (!ts) return null;
-  const d = new Date(ts);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 // Кириллица через кодовую страницу принтера, не UTF-8 (ESC/POS-принтеры
 // почти никогда не понимают UTF-8 напрямую) — CP866 (та же, что в
 // старом MS-DOS) конвертируется вручную, без внешних библиотек: таблица
@@ -117,21 +110,12 @@ function textToCp866(text) {
   return Buffer.from(bytes);
 }
 
+// Сами строки этикетки (что печатать и в каком порядке) присылает
+// сервер в job.printLines — агент их не сочиняет, только кодирует и
+// шлёт байты. Так любая правка дизайна чека — только на сервере, этот
+// файл на моноблоке трогать больше не придётся (см. README).
 function buildLabel(job) {
-  const actionLabel = job.action === "заморозка" ? "Заморожено" : "Разморожено";
-  const lines = [];
-  lines.push("KitchenDesk");
-  lines.push("------------------------------");
-  lines.push(job.itemName);
-  lines.push(`${actionLabel}: ${formatDateTime(job.createdAt)}`);
-  if (job.expiresAt) {
-    lines.push(`Годен до: ${formatDateTime(job.expiresAt)}`);
-  } else {
-    lines.push("Годен до: _______________ (впишите)");
-  }
-  lines.push(`Кто: ${job.by}`);
-  lines.push("------------------------------");
-
+  const lines = job.printLines || [job.itemName || "(пустая этикетка)"];
   const chunks = [];
   chunks.push(Buffer.from([ESC, 0x40])); // ESC @ — сброс
   chunks.push(Buffer.from([ESC, 0x74, CONFIG.CYRILLIC_CODEPAGE])); // ESC t n — кодовая страница

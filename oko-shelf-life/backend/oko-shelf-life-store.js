@@ -117,6 +117,27 @@ function writePrintJobs(jobs) {
   writeJson(PRINT_JOBS_PATH, jobs);
 }
 
+function formatDateTime(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Текст этикетки строится ЗДЕСЬ, не в агенте на моноблоке — так правки
+// дизайна чека (порядок строк, формулировки, новые поля) остаются
+// только на сервере, агент просто печатает присланные строки как есть.
+// Раньше (первая версия) текст собирался в print-agent.js — при любой
+// правке дизайна пришлось бы заново раздавать файл на моноблок.
+function buildPrintLines(job, item) {
+  const actionLabel = job.action === "заморозка" ? "Заморожено" : "Разморожено";
+  const lines = ["KitchenDesk", "------------------------------", item.name, `${actionLabel}: ${formatDateTime(job.createdAt)}`];
+  lines.push(job.expiresAt ? `Годен до: ${formatDateTime(job.expiresAt)}` : "Годен до: _______________ (впишите)");
+  lines.push(`Кто: ${job.by}`);
+  lines.push("------------------------------");
+  return lines;
+}
+
 function createPrintJob({ itemId, action, by }) {
   if (action !== "разморозка" && action !== "заморозка") {
     throw new Error("action должен быть 'разморозка' или 'заморозка'");
@@ -140,6 +161,7 @@ function createPrintJob({ itemId, action, by }) {
     status: "pending",
     printedAt: null,
   };
+  job.printLines = buildPrintLines(job, item);
   jobs.push(job);
   writePrintJobs(jobs);
   return job;
