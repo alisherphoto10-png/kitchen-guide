@@ -398,6 +398,10 @@ table.datatable tbody tr:hover{background:#fafbfa;}
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         Автоответчик
       </li>
+      <li data-page="broadcast" onclick="switchPage('broadcast')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11v2a1 1 0 0 0 1 1h2l4 5V5L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 8a3 3 0 0 1 0 6"/><path d="M18 5a7 7 0 0 1 0 12"/></svg>
+        Рассылка
+      </li>
       <li data-page="settings" onclick="switchPage('settings')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Настройки
@@ -560,6 +564,20 @@ table.datatable tbody tr:hover{background:#fafbfa;}
         </div>
       </section>
 
+      <!-- PAGE: broadcast -->
+      <section class="page" id="page-broadcast">
+        <div class="page-head">
+          <div><h1>Рассылка поставщикам</h1><div class="sub">Только уже известным поставщикам (с кем есть переписка по заказам) — новым контактам эта форма не пишет</div></div>
+        </div>
+        <div class="card settings-card" style="max-width:640px;">
+          <div class="field"><label>Текст сообщения</label><textarea id="broadcastText" rows="4" placeholder="Например: Уважаемые партнёры, поздравляем с праздником!"></textarea></div>
+          <div class="field"><label>Получатели</label><div id="broadcastSuppliersList" style="max-height:220px;overflow:auto;border:1px solid var(--cp-border);border-radius:9px;padding:8px;"></div></div>
+          <div class="d" style="margin:0 0 12px;">Сообщения уходят по одному с паузой в несколько секунд — не одновременно всем, чтобы Telegram не расценил это как подозрительную активность.</div>
+          <button class="btn btn-primary" id="broadcastSendBtn" onclick="sendBroadcastFrom('broadcastText','broadcastSuppliersList-cb','broadcastResults','broadcastSendBtn')">Отправить рассылку</button>
+        </div>
+        <div class="review-cols" id="broadcastResults" style="margin-top:16px;"></div>
+      </section>
+
       <!-- PAGE: settings -->
       <section class="page" id="page-settings">
         <div class="page-head"><div><h1>Настройки</h1><div class="sub">Профиль и подключение Telegram-аккаунта</div></div></div>
@@ -718,6 +736,7 @@ table.datatable tbody tr:hover{background:#fafbfa;}
     <div class="m-more-row" onclick="showMscreen2('m-history')">🕒 История заказов</div>
     <div class="m-more-row" onclick="showToast('Заказ на {дата}: {товары} {комментарий} Спасибо!')">📝 Шаблоны сообщений</div>
     <div class="m-more-row" onclick="openModal('modalAutoreplyMobile')">🤖 Автоответчик</div>
+    <div class="m-more-row" onclick="openBroadcastMobile()">📣 Рассылка поставщикам</div>
     <div class="m-more-row" onclick="checkTelegramStatus()">🔌 Настройки Telegram</div>
   </div>
 
@@ -820,6 +839,22 @@ table.datatable tbody tr:hover{background:#fafbfa;}
     <div class="modal-foot">
       <button class="btn btn-secondary" onclick="closeModal('modalAutoreplyMobile')">Закрыть</button>
       <button class="btn btn-primary" onclick="saveAutoresponderText()">Сохранить текст</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalBroadcastMobile">
+  <div class="modal-box">
+    <div class="modal-head"><h3>Рассылка поставщикам</h3><span class="x" onclick="closeModal('modalBroadcastMobile')">✕</span></div>
+    <div class="modal-body">
+      <div class="d" style="margin:0 0 10px;">Только уже известным поставщикам (с кем есть переписка) — уходит по одному с паузой.</div>
+      <div class="field"><label>Текст сообщения</label><textarea id="broadcastTextM" rows="4"></textarea></div>
+      <div class="field"><label>Получатели</label><div id="broadcastSuppliersListM" style="max-height:200px;overflow:auto;border:1px solid var(--cp-border);border-radius:9px;padding:8px;"></div></div>
+      <div id="broadcastResultsM"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="closeModal('modalBroadcastMobile')">Закрыть</button>
+      <button class="btn btn-primary" id="broadcastSendBtnM" onclick="sendBroadcastFrom('broadcastTextM','broadcastSuppliersListM-cb','broadcastResultsM','broadcastSendBtnM')">Отправить</button>
     </div>
   </div>
 </div>
@@ -935,6 +970,7 @@ function switchPage(id){
   if(id === 'suppliers') renderSuppliersTable();
   if(id === 'history') renderHistoryTable();
   if(id === 'settings') renderSettingsStats();
+  if(id === 'broadcast') renderBroadcastSuppliersInto('broadcastSuppliersList');
 }
 
 function onTopSearch(v){
@@ -1289,7 +1325,7 @@ async function reloadAndRerenderAll(){
   await loadRealCatalog();
   renderOrderPage(); renderCatalogMgmt(); renderSuppliersTable();
   renderMobileList(); renderMobileOrder(); renderMobileSuppliers();
-  updateHomeStats(); renderSettingsStats();
+  updateHomeStats(); renderSettingsStats(); renderBroadcastSuppliers();
 }
 
 function openProductModal(id){
@@ -1673,6 +1709,74 @@ async function toggleAutoresponder(){
   if(!res.ok){ showToast('Не удалось переключить: ' + await res.text()); return; }
   await loadAutoresponderUI();
   showToast(willTurnOn ? 'Автоответчик включён' : 'Автоответчик выключен');
+}
+
+/* ---------------------------------------------------------------------
+   РАССЫЛКА — намеренно ограничена уже известными поставщиками (у кого
+   задан chat_id, то есть переписка уже идёт через заказы). Массовые
+   ПЕРВЫЕ сообщения незнакомым людям с личного Telegram-аккаунта — то,
+   за что Telegram банит userbot'ов (PeerFloodError), поэтому список
+   получателей здесь — это ровно те, кому и так уходят заказы, а не
+   произвольные контакты. Общие с /api/order сетевые/UI-паттерны (см.
+   sendOrderDesktop) — та же обработка ошибок, тот же SEND_STATUS_LABEL.
+   --------------------------------------------------------------------- */
+function renderBroadcastSuppliersInto(elId){
+  const list = document.getElementById(elId);
+  if(!list) return;
+  const connected = suppliers.filter(s => s.chat_id != null);
+  if(connected.length === 0){
+    list.innerHTML = '<div class="d" style="margin:0;">Нет ни одного поставщика с заданным chat_id — рассылать пока некому.</div>';
+    return;
+  }
+  list.innerHTML = connected.map(s => `
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:13.5px;">
+      <input type="checkbox" class="${elId}-cb" value="${esc(s.name)}" checked style="width:auto;flex:none;">
+      <span>${s.name}</span>
+    </label>`).join('');
+}
+function renderBroadcastSuppliers(){
+  renderBroadcastSuppliersInto('broadcastSuppliersList');
+  renderBroadcastSuppliersInto('broadcastSuppliersListM');
+}
+function openBroadcastMobile(){
+  renderBroadcastSuppliersInto('broadcastSuppliersListM');
+  document.getElementById('broadcastResultsM').innerHTML = '';
+  openModal('modalBroadcastMobile');
+}
+async function sendBroadcastFrom(textElId, cbClass, resultsElId, btnElId){
+  const textEl = document.getElementById(textElId);
+  const text = textEl.value.trim();
+  if(!text){ showToast('Укажите текст сообщения'); return; }
+  const checked = [...document.querySelectorAll('.'+cbClass+':checked')].map(cb => cb.value);
+  if(checked.length === 0){ showToast('Выберите хотя бы одного получателя'); return; }
+  const btn = document.getElementById(btnElId);
+  const resultsEl = document.getElementById(resultsElId);
+  if(btn){ btn.disabled = true; btn.textContent = 'Отправляю…'; }
+  if(resultsEl) resultsEl.innerHTML = '<div class="d">Сообщения уходят по одному с паузой — это может занять время.</div>';
+  let res;
+  try{
+    res = await fetch('/api/broadcast', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text, suppliers: checked})});
+  } catch(err){
+    showToast('Не удалось отправить: ' + err.message);
+    if(btn){ btn.disabled = false; btn.textContent = 'Отправить рассылку'; }
+    return;
+  }
+  if(!res.ok){
+    showToast('Не удалось отправить: ' + await res.text());
+    if(btn){ btn.disabled = false; btn.textContent = 'Отправить рассылку'; }
+    return;
+  }
+  const data = await res.json();
+  if(resultsEl){
+    resultsEl.innerHTML = data.results.map(r => `
+      <div class="card review-sup-card">
+        <div class="rsh"><div class="n">${r.supplier}</div><span class="chip">${SEND_STATUS_LABEL[r.status] || r.status}</span></div>
+        ${r.reason ? `<div class="d" style="color:var(--cp-danger);margin:0;">${r.reason}</div>` : ''}
+      </div>`).join('');
+  }
+  if(btn){ btn.disabled = false; btn.textContent = 'Отправить рассылку'; }
+  textEl.value = '';
+  showToast('Рассылка завершена');
 }
 
 /* ---------------------------------------------------------------------

@@ -25,6 +25,11 @@
                                                {"id": null} выключить автоответчик
   GET    /api/orders                 — история отправленных заказов (см.
                                         orders_store.py), новые первыми
+  POST   /api/broadcast              — {"text": "...", "suppliers": [имена]}
+                                        рассылка ТОЛЬКО уже известным
+                                        поставщикам (у кого задан chat_id) —
+                                        с паузой между отправками, см.
+                                        api_broadcast ниже
 
 Один процесс держит один долгоживущий авторизованный TelegramClient —
 логиниться заново не нужно, session уже создана (см. README).
@@ -32,12 +37,14 @@
 
 import asyncio
 import os
+import random
 import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from aiohttp import web
 from dotenv import load_dotenv
+from telethon.errors import FloodWaitError
 
 import autoresponder_store
 import orders_store
@@ -178,6 +185,50 @@ async def api_order(request: web.Request) -> web.Response:
 @routes.get("/api/orders")
 async def api_orders(request: web.Request) -> web.Response:
     return web.json_response(orders_store.load_orders())
+
+
+# Рассылка — сознательно ограничена уже известными поставщиками (у кого есть
+# chat_id, то есть переписка уже идёт через заказы). Это НЕ инструмент для
+# холодных/новых контактов: Telegram резко банит личные аккаунты именно за
+# массовые ПЕРВЫЕ сообщения незнакомым людям (PeerFloodError). Даже для
+# безопасной аудитории отправляем по одному с паузой, а не разом — это
+# нормальная гигиена для userbot, не изображение "живого набора текста".
+@routes.post("/api/broadcast")
+async def api_broadcast(request: web.Request) -> web.Response:
+    payload = await request.json()
+    text = payload.get("text", "").strip()
+    if not text:
+        raise web.HTTPBadRequest(text="Текст сообщения обязателен")
+    only_names = payload.get("suppliers")  # None = все с chat_id
+
+    catalog = load_catalog()
+    targets = [
+        s
+        for s in catalog["suppliers"]
+        if s.get("chat_id") and (only_names is None or s["name"] in only_names)
+    ]
+
+    client = request.app["tg_client"]
+    results = []
+    for i, supplier in enumerate(targets):
+        if i > 0:
+            await asyncio.sleep(random.uniform(2.5, 5.5))
+        try:
+            await client.send_message(supplier["chat_id"], text)
+            results.append({"supplier": supplier["name"], "status": "sent"})
+        except FloodWaitError as exc:
+            results.append(
+                {
+                    "supplier": supplier["name"],
+                    "status": "error",
+                    "reason": f"Telegram просит подождать {exc.seconds} сек — рассылка остановлена, оставшихся не трогали",
+                }
+            )
+            break
+        except Exception as exc:  # noqa: BLE001
+            results.append({"supplier": supplier["name"], "status": "error", "reason": str(exc)})
+
+    return web.json_response({"results": results})
 
 
 def _parse_chat_id(raw) -> int | None:
