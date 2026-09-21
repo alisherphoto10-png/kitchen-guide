@@ -357,7 +357,7 @@ table.datatable tbody tr:hover{background:#fafbfa;}
 </head>
 <body>
 
-<div id="demoBanner">🧪 <b>Дизайн-прототип ChefPlan</b> — данные каталога реальные (из вашего xlsx), но подключение к Telegram и отправка — заглушки, для демонстрации флоу.</div>
+<div id="demoBanner">✅ <b>ChefPlan</b> — реальный каталог, реальная отправка заказов через Telegram-аккаунт Алишера. Категория и цена у товара — опциональные поля, задаются по мере использования.</div>
 
 <!-- =========================================================
      DESKTOP SHELL
@@ -454,7 +454,7 @@ table.datatable tbody tr:hover{background:#fafbfa;}
             <div class="card">
               <table class="datatable">
                 <thead><tr>
-                  <th>Товар</th><th>Поставщик</th><th>Ед. изм.</th><th>Статус</th><th style="width:120px;">В заказе</th>
+                  <th>Товар</th><th>Категория</th><th>Поставщик</th><th>Ед. изм.</th><th>Цена</th><th>Статус</th><th style="width:120px;">В заказе</th>
                 </tr></thead>
                 <tbody id="catalogTableBody"></tbody>
               </table>
@@ -482,7 +482,7 @@ table.datatable tbody tr:hover{background:#fafbfa;}
         </div>
         <div class="card">
           <table class="datatable">
-            <thead><tr><th>Товар</th><th>Поставщик</th><th>Ед. изм.</th><th style="width:90px;">Действия</th></tr></thead>
+            <thead><tr><th>Товар</th><th>Категория</th><th>Поставщик</th><th>Ед. изм.</th><th>Цена</th><th style="width:90px;">Действия</th></tr></thead>
             <tbody id="catalogMgmtBody"></tbody>
           </table>
         </div>
@@ -509,7 +509,7 @@ table.datatable tbody tr:hover{background:#fafbfa;}
         </div>
         <div class="card">
           <table class="datatable">
-            <thead><tr><th>№</th><th>Дата</th><th>Поставщиков</th><th>Позиций</th><th>Сумма (пример)</th><th>Статус</th></tr></thead>
+            <thead><tr><th>№</th><th>Дата</th><th>Поставщиков</th><th>Позиций</th><th>Сумма</th><th>Статус</th></tr></thead>
             <tbody id="historyTableBody"></tbody>
           </table>
         </div>
@@ -684,7 +684,7 @@ table.datatable tbody tr:hover{background:#fafbfa;}
     </div>
     <div class="m-list" id="mSentList" style="padding:0 4px;"></div>
     <div class="m-cta" style="margin-top:14px;">
-      <button class="btn btn-secondary btn-block" onclick="showMscreen2('m-suppliers')">Открыть историю заказов</button>
+      <button class="btn btn-secondary btn-block" onclick="showMscreen2('m-history')">Открыть историю заказов</button>
     </div>
     <div class="m-cta"><button class="btn btn-block" style="background:none;color:var(--cp-accent-dark);font-weight:700;" onclick="resetOrderMobile()">Создать новый заказ</button></div>
   </div>
@@ -700,6 +700,13 @@ table.datatable tbody tr:hover{background:#fafbfa;}
     <div class="m-cta" style="margin-top:10px;"><button class="btn btn-primary btn-block" onclick="openSupplierModal(null)">+ Добавить поставщика</button></div>
   </div>
 
+  <!-- HISTORY -->
+  <div class="mscreen" id="m-history">
+    <div class="m-back" onclick="showMscreen2('m-more')">← Назад</div>
+    <div class="m-title"><h2>История заказов</h2></div>
+    <div class="m-list" id="mHistoryList"></div>
+  </div>
+
   <!-- MORE / SETTINGS -->
   <div class="mscreen" id="m-more">
     <div class="m-more-profile">
@@ -708,7 +715,7 @@ table.datatable tbody tr:hover{background:#fafbfa;}
     </div>
     <div class="m-more-row" onclick="showMscreen2('m-catalog')">📦 Каталог товаров</div>
     <div class="m-more-row" onclick="showMscreen2('m-suppliers')">🏪 Поставщики</div>
-    <div class="m-more-row" onclick="showToast('История заказов пока не сохраняется на сервере')">🕒 История заказов</div>
+    <div class="m-more-row" onclick="showMscreen2('m-history')">🕒 История заказов</div>
     <div class="m-more-row" onclick="showToast('Заказ на {дата}: {товары} {комментарий} Спасибо!')">📝 Шаблоны сообщений</div>
     <div class="m-more-row" onclick="openModal('modalAutoreplyMobile')">🤖 Автоответчик</div>
     <div class="m-more-row" onclick="checkTelegramStatus()">🔌 Настройки Telegram</div>
@@ -745,6 +752,10 @@ table.datatable tbody tr:hover{background:#fafbfa;}
       <div class="field-row">
         <div class="field"><label>Поставщик *</label><select id="pf_supplier"></select></div>
         <div class="field"><label>Единица измерения *</label><select id="pf_unit"><option>кг</option><option>шт</option><option>л</option></select></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Категория</label><select id="pf_category"></select></div>
+        <div class="field"><label>Цена (сум, опционально)</label><input id="pf_price" type="number" min="0" placeholder="Например: 45000"></div>
       </div>
     </div>
     <div class="modal-foot">
@@ -823,15 +834,13 @@ const AVATAR_COLORS = ['#F59E0B','#3B82F6','#EF4444','#10B981','#8B5CF6','#EC489
 const CATEGORIES = ['Молочная продукция','Мясо','Рыба и морепродукты','Овощи и фрукты','Бакалея','Соусы','Прочее'];
 const CATEGORY_ICON = {'Молочная продукция':'🥛','Мясо':'🥩','Рыба и морепродукты':'🐟','Овощи и фрукты':'🥬','Бакалея':'🌾','Соусы':'🧂','Прочее':'📦'};
 
-/* Реальных цен и категорий в бэкенде нет (см. data/catalog.json — только
-   name/unit/supplier/photo у товара, name/phone/telegram/note/chat_id у
-   поставщика) — это НЕ демо-заглушки, каталог грузится с сервера ниже
-   (loadRealCatalog). CATEGORIES очищается после первой загрузки (см. init) —
-   чипы категорий сворачиваются к одному "Все", чтобы не показывать нерабочий
-   фильтр по категориям, которых в реальных данных не существует. */
+/* DATA: каталог грузится с сервера (loadRealCatalog) — не демо-данные. category/
+   price у товара необязательны в бэкенде (см. data/README.md): у старых
+   позиций из xlsx их может не быть вовсе, тогда здесь будет null, а не 0 —
+   это важно, потому что 0 выглядел бы как "бесплатно", а null честно
+   говорит "цена не указана" (money()/sumIfComplete() ниже это учитывают). */
 let suppliers = [];
 let catalog = [];
-const ORDER_HISTORY = [];
 
 async function loadRealCatalog(){
   const res = await fetch('/api/catalog');
@@ -847,7 +856,7 @@ async function loadRealCatalog(){
     const sup = suppliers.find(s => s.name === p.supplier);
     return {
       id: idx, _idx: idx,
-      name: p.name, category:'', unit: p.unit||'', price:0,
+      name: p.name, category: p.category || null, unit: p.unit||'', price: p.price!=null ? p.price : null,
       supplierId: sup ? sup.id : null, _supplierName: p.supplier,
       photo: p.photo || null,
     };
@@ -872,6 +881,19 @@ function money(n){ if(!n) return ''; return Math.round(n).toString().replace(/\B
 // висящего " · " в конце, когда её нет.
 function qtyUnitLine(qty, unit, price){ const m = money(qty*(price||0)); return m ? `${qty} ${unit} · ${m}` : `${qty} ${unit}`; }
 function countSumLine(count, sum){ const m = money(sum); return m ? `${count} позиций · ${m}` : `${count} позиций`; }
+// Сумма только если цена известна у КАЖДОГО товара в группе — иначе частичная
+// сумма выглядела бы как полная (например, 2 из 3 позиций с ценой).
+function sumIfComplete(items){
+  if(!items.length || items.some(i => i.price == null)) return null;
+  return items.reduce((a,i)=>a+i.qty*i.price,0);
+}
+function formatDateTimeHuman(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d)) return iso;
+  const pad = n => String(n).padStart(2,'0');
+  return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 function supplierById(id){ return suppliers.find(s => s.id === id); }
 function supplierName(id){ const s = supplierById(id); return s ? s.name : '—'; }
 function hashColor(str){ let h=0; for(let i=0;i<str.length;i++) h = str.charCodeAt(i) + ((h<<5)-h); return AVATAR_COLORS[Math.abs(h)%AVATAR_COLORS.length]; }
@@ -959,11 +981,16 @@ function populateSupplierSelects(){
   filterSel.innerHTML = '<option value="">Все поставщики</option>' + opts;
   document.getElementById('pf_supplier').innerHTML = opts;
 }
+function populateCategorySelect(){
+  document.getElementById('pf_category').innerHTML = '<option value="">Без категории</option>' + CATEGORIES.map(c => `<option>${c}</option>`).join('');
+}
+
+const NO_VALUE = '<span style="color:var(--cp-text-hint);">—</span>';
 
 function renderCatalogTable(){
   const tbody = document.getElementById('catalogTableBody');
   const rows = filteredCatalog();
-  if(rows.length === 0){ tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Ничего не найдено</td></tr>'; return; }
+  if(rows.length === 0){ tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Ничего не найдено</td></tr>'; return; }
   let sortKey = document.getElementById('catSort').value;
   const sorted = [...rows].sort((a,b) => {
     if(sortKey === 'supplier') return supplierName(a.supplierId).localeCompare(supplierName(b.supplierId));
@@ -976,9 +1003,11 @@ function renderCatalogTable(){
       ? `<div class="stepper-inline"><button onclick="changeQty(${p.id},-1)">−</button><div class="q">${qty}</div><button onclick="changeQty(${p.id},1)">+</button></div>`
       : `<button class="add-cell-btn" onclick="changeQty(${p.id},1)">+</button>`;
     return `<tr>
-      <td><div class="prod-cell"><div class="prod-thumb">📦</div><div><div class="prod-name">${p.name}</div></div></div></td>
+      <td><div class="prod-cell"><div class="prod-thumb">${CATEGORY_ICON[p.category]||'📦'}</div><div><div class="prod-name">${p.name}</div></div></div></td>
+      <td>${p.category ? `<span class="chip">${p.category}</span>` : NO_VALUE}</td>
       <td><div class="sup-cell">${avatarHtml(sup?sup.name:'?',24)}${sup?sup.name:'—'}</div></td>
       <td>${p.unit}</td>
+      <td>${p.price!=null ? money(p.price) : NO_VALUE}</td>
       <td>${supplierStatusBadge(sup||{})}</td>
       <td>${stepper}</td>
     </tr>`;
@@ -1020,12 +1049,12 @@ function renderOrderPanel(){
     body.innerHTML = '<div class="op-empty">Заказ пуст — добавьте товары из каталога слева</div>';
     return;
   }
-  let totalSum = 0, totalQty = 0;
+  let totalQty = 0;
   const groupsHtml = supIds.map(sid => {
     const items = groups[sid];
     const sup = supplierById(sid);
-    const supSum = items.reduce((a,i)=>a+i.qty*i.price,0);
-    totalSum += supSum; totalQty += items.reduce((a,i)=>a+i.qty,0);
+    const supSum = sumIfComplete(items);
+    totalQty += items.reduce((a,i)=>a+i.qty,0);
     const lines = items.map(i => `
       <div class="sup-line">
         <div class="ln">${i.name}<div class="lp">${qtyUnitLine(i.qty, i.unit, i.price)}</div></div>
@@ -1039,8 +1068,9 @@ function renderOrderPanel(){
       ${lines}
     </div>`;
   }).join('');
+  const grandSum = sumIfComplete(cartItemsWithData());
   body.innerHTML = groupsHtml + `
-    <div class="op-total"><div class="lbl">${totalQty} поз. · ${supIds.length} пост.</div></div>
+    <div class="op-total"><div class="lbl">${totalQty} поз. · ${supIds.length} пост.</div>${grandSum!=null ? `<div class="val">${money(grandSum)}</div>` : ''}</div>
     <button class="btn btn-primary btn-block" onclick="switchPage('review')">Перейти к проверке заказа →</button>
   `;
 }
@@ -1080,11 +1110,12 @@ function renderReviewPage(){
   cont.innerHTML = supIds.map(sid => {
     const sup = supplierById(sid);
     const items = groups[sid];
-    const lines = items.map(i => `<div class="review-line"><div>${i.name}</div><div>${i.qty} ${i.unit}</div></div>`).join('');
+    const sum = sumIfComplete(items);
+    const lines = items.map(i => `<div class="review-line"><div>${i.name}</div><div>${qtyUnitLine(i.qty, i.unit, i.price)}</div></div>`).join('');
     const comment = commentsBySupplier[sid] || '';
     const d = dateBySupplier[sid];
     return `<div class="card review-sup-card">
-      <div class="rsh"><div class="n">${sup.name}</div>${supplierStatusBadge(sup)}</div>
+      <div class="rsh"><div class="n">${sup.name}</div><div style="display:flex;gap:6px;align-items:center;">${supplierStatusBadge(sup)}${sum!=null ? `<span class="chip">${money(sum)}</span>` : ''}</div></div>
       ${lines}
       <div class="review-foot-row">
         <div class="field"><label>Дата поставки</label><input type="date" value="${d}" onchange="dateBySupplier['${sid}']=this.value;renderReviewPage()"></div>
@@ -1157,9 +1188,11 @@ function renderCatalogMgmt(){
   tbody.innerHTML = catalog.map(p => {
     const sup = supplierById(p.supplierId);
     return `<tr>
-      <td><div class="prod-cell"><div class="prod-thumb">📦</div><div class="prod-name">${p.name}</div></div></td>
+      <td><div class="prod-cell"><div class="prod-thumb">${CATEGORY_ICON[p.category]||'📦'}</div><div class="prod-name">${p.name}</div></div></td>
+      <td>${p.category ? `<span class="chip">${p.category}</span>` : NO_VALUE}</td>
       <td><div class="sup-cell">${avatarHtml(sup?sup.name:'?',22)}${sup?sup.name:'—'}</div></td>
       <td>${p.unit}</td>
+      <td>${p.price!=null ? money(p.price) : NO_VALUE}</td>
       <td>
         <button class="icon-btn" onclick="openProductModal(${p.id})" title="Редактировать">✎</button>
         <button class="icon-btn" onclick="deleteProduct(${p.id})" title="Удалить">🗑</button>
@@ -1210,13 +1243,35 @@ async function deleteSupplier(id){
 }
 
 /* ---------------------------------------------------------------------
-   DESKTOP: history page — бэкенд пока не хранит историю отправленных
-   заказов (нет соответствующего API/файла), поэтому здесь честно пусто,
-   а не выдуманные цифры.
+   DESKTOP: history page — реальный /api/orders (см. orders_store.py),
+   пишется бэкендом при каждой настоящей отправке через /api/order.
    --------------------------------------------------------------------- */
-function renderHistoryTable(){
+const ORDER_STATUS_BADGE = {
+  sent: '<span class="badge ok"><span class="dot"></span>Отправлен</span>',
+  partial: '<span class="badge warn"><span class="dot"></span>Частично</span>',
+  failed: '<span class="badge bad"><span class="dot"></span>Ошибка</span>',
+};
+async function renderHistoryTable(){
   const tbody = document.getElementById('historyTableBody');
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="6">История заказов пока не сохраняется на сервере</td></tr>';
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Загрузка…</td></tr>';
+  let orders;
+  try{
+    const res = await fetch('/api/orders');
+    if(!res.ok) throw new Error(await res.text());
+    orders = await res.json();
+  } catch(err){
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="6">Не удалось загрузить историю: ${err.message}</td></tr>`;
+    return;
+  }
+  if(!orders.length){ tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Заказов пока нет</td></tr>'; return; }
+  tbody.innerHTML = orders.map(o => `<tr>
+    <td>№${o.id}</td>
+    <td>${formatDateTimeHuman(o.created_at)}</td>
+    <td>${o.suppliers_count}</td>
+    <td>${o.items_count}</td>
+    <td>${o.total_price!=null ? money(o.total_price) : NO_VALUE}</td>
+    <td>${ORDER_STATUS_BADGE[o.status] || o.status}</td>
+  </tr>`).join('');
 }
 
 function renderSettingsStats(){
@@ -1239,6 +1294,7 @@ async function reloadAndRerenderAll(){
 
 function openProductModal(id){
   populateSupplierSelects();
+  populateCategorySelect();
   editingProductId = id;
   // ВАЖНО: id — числовой индекс в каталоге, 0 (первый товар) — валидный id,
   // но falsy — "id ? ... : null" ошибочно принял бы его за "новый товар" и
@@ -1249,6 +1305,8 @@ function openProductModal(id){
   document.getElementById('pf_name').value = p ? p.name : '';
   document.getElementById('pf_supplier').value = p ? p.supplierId : (suppliers[0]?suppliers[0].id:'');
   document.getElementById('pf_unit').value = p ? p.unit : 'кг';
+  document.getElementById('pf_category').value = p ? (p.category || '') : '';
+  document.getElementById('pf_price').value = p && p.price!=null ? p.price : '';
   openModal('modalProduct');
 }
 async function saveProductModal(){
@@ -1261,6 +1319,8 @@ async function saveProductModal(){
   const body = {
     name, unit: document.getElementById('pf_unit').value,
     supplier: sup.name,
+    category: document.getElementById('pf_category').value,
+    price: document.getElementById('pf_price').value,
     photo: existing ? existing.photo : null,
   };
   const url = existing ? `/api/catalog/products/${existing._idx}` : '/api/catalog/products';
@@ -1310,7 +1370,7 @@ function showMscreen(id){
   document.querySelectorAll('.mscreen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
-function showMscreen2(id){ showMscreen(id); syncTabbar(id); if(id==='m-catalog') renderMobileList(); if(id==='m-suppliers') renderMobileSuppliers(); }
+function showMscreen2(id){ showMscreen(id); syncTabbar(id); if(id==='m-catalog') renderMobileList(); if(id==='m-suppliers') renderMobileSuppliers(); if(id==='m-history') renderMobileHistory(); }
 function tabbarGo(id){
   const map = {'m-home':'m-home','m-catalog':'m-catalog','m-order':'m-order','m-more':'m-more'};
   showMscreen(map[id]);
@@ -1319,7 +1379,7 @@ function tabbarGo(id){
   if(id==='m-order') renderMobileOrder();
 }
 function syncTabbar(activeId){
-  const map = {'m-home':'m-home','m-catalog':'m-catalog','m-order':'m-order','m-review':'m-order','m-sending':'m-order','m-sent':'m-order','m-more':'m-more','m-suppliers':'m-more'};
+  const map = {'m-home':'m-home','m-catalog':'m-catalog','m-order':'m-order','m-review':'m-order','m-sending':'m-order','m-sent':'m-order','m-more':'m-more','m-suppliers':'m-more','m-history':'m-more'};
   const tab = map[activeId] || 'm-home';
   document.querySelectorAll('.m-tabbar .tb-item').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
 }
@@ -1342,7 +1402,7 @@ function renderMobileList(){
       : `<button class="m-stepper addbtn" onclick="changeQty(${p.id},1)">Добавить</button>`;
     return `<div class="m-item">
       <div class="m-item-left"><div class="m-item-thumb">${CATEGORY_ICON[p.category]||'📦'}</div>
-        <div><div class="m-item-name">${p.name}</div><div class="m-item-sub">${supplierName(p.supplierId)}</div><div class="m-item-price">${p.unit}</div></div>
+        <div><div class="m-item-name">${p.name}</div><div class="m-item-sub">${supplierName(p.supplierId)}</div><div class="m-item-price">${p.unit}${p.price!=null ? ' · ' + money(p.price) : ''}</div></div>
       </div>
       ${stepper}
     </div>`;
@@ -1375,17 +1435,20 @@ function renderMobileOrder(){
     totalEl.innerHTML = ''; metaEl.textContent = '';
     return;
   }
-  let totalSum=0, totalQty=0;
+  let totalQty=0;
   metaEl.textContent = `${supIds.length} поставщика`;
   wrap.innerHTML = supIds.map(sid => {
     const sup = supplierById(sid);
     const items = groups[sid];
-    const supSum = items.reduce((a,i)=>a+i.qty*i.price,0);
-    totalSum += supSum; totalQty += items.reduce((a,i)=>a+i.qty,0);
-    const lines = items.map(i => `<div class="m-gline"><div>${i.name}<div class="m-item-sub">${i.qty} ${i.unit}</div></div><div class="m-stepper"><button onclick="changeQty(${i.id},-1)">−</button><div class="q">${i.qty}</div><button onclick="changeQty(${i.id},1)">+</button></div></div>`).join('');
+    const supSum = sumIfComplete(items);
+    totalQty += items.reduce((a,i)=>a+i.qty,0);
+    const lines = items.map(i => `<div class="m-gline"><div>${i.name}<div class="m-item-sub">${qtyUnitLine(i.qty, i.unit, i.price)}</div></div><div class="m-stepper"><button onclick="changeQty(${i.id},-1)">−</button><div class="q">${i.qty}</div><button onclick="changeQty(${i.id},1)">+</button></div></div>`).join('');
     return `<div class="m-group-card"><div class="m-group-head"><div class="n">${sup.name}</div><div class="c">${countSumLine(items.length, supSum)}</div></div>${lines}</div>`;
   }).join('');
-  totalEl.innerHTML = `<div class="l">Итого к заказу (пример)</div><div class="v">${money(totalSum)}</div>`;
+  const grandSum = sumIfComplete(cartItemsWithData());
+  totalEl.innerHTML = grandSum!=null
+    ? `<div class="l">Итого к заказу</div><div class="v">${money(grandSum)}</div>`
+    : `<div class="l">${totalQty} позиций · ${supIds.length} поставщика</div>`;
   updateMobileCartBar();
 }
 
@@ -1395,9 +1458,10 @@ function showReviewMobile(){
   wrap.innerHTML = Object.keys(groups).map(sid => {
     const sup = supplierById(sid);
     const items = groups[sid];
+    const sum = sumIfComplete(items);
     const d = dateBySupplier[sid];
-    const lines = items.map(i => `<div class="m-gline"><div>${i.name}</div><div>${i.qty} ${i.unit}</div></div>`).join('');
-    return `<div class="m-group-card"><div class="m-group-head"><div class="n">${sup.name}</div>${supplierStatusBadge(sup)}</div>${lines}
+    const lines = items.map(i => `<div class="m-gline"><div>${i.name}</div><div>${qtyUnitLine(i.qty, i.unit, i.price)}</div></div>`).join('');
+    return `<div class="m-group-card"><div class="m-group-head"><div class="n">${sup.name}</div><div style="display:flex;gap:6px;align-items:center;">${supplierStatusBadge(sup)}${sum!=null ? `<span class="chip">${money(sum)}</span>` : ''}</div></div>${lines}
       <div class="m-date-row"><span>Дата поставки</span><input type="date" value="${d}" onchange="dateBySupplier['${sid}']=this.value"></div>
     </div>`;
   }).join('');
@@ -1482,6 +1546,33 @@ function renderMobileSuppliers(){
       ${supplierStatusBadge(s)}
     </div>`;
   }).join('');
+}
+
+/* ---------------------------------------------------------------------
+   MOBILE: order history — тот же /api/orders, что и десктопная страница.
+   --------------------------------------------------------------------- */
+async function renderMobileHistory(){
+  const list = document.getElementById('mHistoryList');
+  if(!list) return;
+  list.innerHTML = '<div class="empty-hint" style="padding:20px;text-align:center;color:var(--cp-text-hint);">Загрузка…</div>';
+  let orders;
+  try{
+    const res = await fetch('/api/orders');
+    if(!res.ok) throw new Error(await res.text());
+    orders = await res.json();
+  } catch(err){
+    list.innerHTML = `<div class="empty-hint" style="padding:20px;text-align:center;color:var(--cp-text-hint);">Не удалось загрузить: ${err.message}</div>`;
+    return;
+  }
+  if(!orders.length){ list.innerHTML = '<div class="empty-hint" style="padding:20px;text-align:center;color:var(--cp-text-hint);">Заказов пока нет</div>'; return; }
+  const STATUS_LABEL = {sent:'ok', partial:'warn', failed:'bad'};
+  const STATUS_TEXT = {sent:'Отправлен', partial:'Частично', failed:'Ошибка'};
+  list.innerHTML = orders.map(o => `<div class="m-item">
+    <div class="m-item-left"><div class="m-item-thumb">🧾</div>
+      <div><div class="m-item-name">№${o.id}</div><div class="m-item-sub">${formatDateTimeHuman(o.created_at)} · ${o.suppliers_count} поставщика · ${o.items_count} поз.</div></div>
+    </div>
+    <span class="badge ${STATUS_LABEL[o.status]||'neutral'}"><span class="dot"></span>${STATUS_TEXT[o.status]||o.status}</span>
+  </div>`).join('');
 }
 
 /* ---------------------------------------------------------------------
@@ -1618,7 +1709,6 @@ async function init(){
   } catch(err){
     showToast('Не удалось загрузить каталог: ' + err.message);
   }
-  CATEGORIES.length = 0; // категорий в реальных данных нет — сворачиваем чипы к одному "Все"
   renderOrderPage();
   renderCatalogMgmt();
   renderSuppliersTable();

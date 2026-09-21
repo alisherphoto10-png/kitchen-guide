@@ -23,6 +23,8 @@
   DELETE /api/autoresponder/templates/{id}  — удалить шаблон (снимает с активных)
   POST   /api/autoresponder/activate        — {"id": "..."} включить шаблон,
                                                {"id": null} выключить автоответчик
+  GET    /api/orders                 — история отправленных заказов (см.
+                                        orders_store.py), новые первыми
 
 Один процесс держит один долгоживущий авторизованный TelegramClient —
 логиниться заново не нужно, session уже создана (см. README).
@@ -31,13 +33,14 @@
 import asyncio
 import os
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from aiohttp import web
 from dotenv import load_dotenv
 
 import autoresponder_store
+import orders_store
 from catalog import get_product, get_supplier, load_catalog, save_catalog
 from client import SESSION_NAME, get_client, start_client
 from message import group_by_supplier, render_message
@@ -54,6 +57,7 @@ WEBAPP_SESSION_NAME = os.environ.get("WEBAPP_SESSION_NAME", f"{SESSION_NAME}_web
 # затёрли друг друга.
 catalog_lock = asyncio.Lock()
 autoresponder_lock = asyncio.Lock()
+orders_lock = asyncio.Lock()
 
 routes = web.RouteTableDef()
 
@@ -146,7 +150,34 @@ async def api_order(request: web.Request) -> web.Response:
         except Exception as exc:  # noqa: BLE001 — reportится клиенту как есть
             results.append({"supplier": supplier_name, "status": "error", "reason": str(exc)})
 
+    statuses = {r["status"] for r in results}
+    overall = "sent" if statuses == {"sent"} else ("partial" if "sent" in statuses else "failed")
+
+    prices = [line.get("price") for line in order_lines]
+    total_price = (
+        sum(line["qty"] * line["price"] for line in order_lines)
+        if order_lines and all(p is not None for p in prices)
+        else None
+    )
+
+    order_entry = {
+        "id": uuid.uuid4().hex[:8],
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "suppliers_count": len(grouped),
+        "items_count": sum(line["qty"] for line in order_lines),
+        "total_price": total_price,
+        "status": overall,
+        "results": results,
+    }
+    async with orders_lock:
+        orders_store.add_order(order_entry)
+
     return web.json_response({"results": results})
+
+
+@routes.get("/api/orders")
+async def api_orders(request: web.Request) -> web.Response:
+    return web.json_response(orders_store.load_orders())
 
 
 def _parse_chat_id(raw) -> int | None:
@@ -158,6 +189,15 @@ def _parse_chat_id(raw) -> int | None:
         raise web.HTTPBadRequest(text="chat_id должен быть числом")
 
 
+def _parse_price(raw) -> int | None:
+    if raw in (None, ""):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise web.HTTPBadRequest(text="Цена должна быть числом")
+
+
 def _product_from_body(body: dict) -> dict:
     if not body.get("name", "").strip():
         raise web.HTTPBadRequest(text="Название товара обязательно")
@@ -167,6 +207,8 @@ def _product_from_body(body: dict) -> dict:
         "name": body["name"].strip(),
         "unit": body.get("unit", "").strip(),
         "supplier": body["supplier"].strip(),
+        "category": (body.get("category") or "").strip() or None,
+        "price": _parse_price(body.get("price")),
         "photo": body.get("photo") or None,
     }
 

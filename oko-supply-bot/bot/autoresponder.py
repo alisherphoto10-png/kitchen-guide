@@ -16,6 +16,12 @@
   - Алишер прочитал чат и сам что-то ответил — значит уже в переписке,
     автоответ больше не лезет, пока не появится новый цикл «прочитал и
     промолчал».
+
+Плюс: как только Алишер открывает (читает) чат, где уже ушёл автоответ,
+это сообщение удаляется — revoke=True отзывает свои сообщения у Telegram
+без ограничения по времени, так что оно пропадает и у собеседника тоже.
+Если удаление всё же не пройдёт (сообщение уже стёрто вручную и т.п.) —
+ошибка тихо проглатывается, ничего не ломает.
 """
 
 import asyncio
@@ -30,6 +36,8 @@ FREE_COMMAND = "/free"
 DEFAULT_TEMPLATE_ID = "busy"
 
 already_replied: set[int] = set()
+# chat_id -> id отправленного автоответа, чтобы удалить его при заходе в чат
+autoreply_message_ids: dict[int, int] = {}
 
 
 async def main() -> None:
@@ -69,11 +77,18 @@ async def main() -> None:
         if chat_id in already_replied:
             return
         already_replied.add(chat_id)
-        await event.reply(reply_text)
+        sent = await event.reply(reply_text)
+        autoreply_message_ids[chat_id] = sent.id
 
     @client.on(events.MessageRead(inbox=True))
     async def on_read(event):
         already_replied.discard(event.chat_id)
+        msg_id = autoreply_message_ids.pop(event.chat_id, None)
+        if msg_id is not None:
+            try:
+                await client.delete_messages(event.chat_id, [msg_id], revoke=True)
+            except Exception:
+                pass
 
     @client.on(events.NewMessage(outgoing=True))
     async def on_manual_reply(event):
