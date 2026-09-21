@@ -830,6 +830,7 @@ table.datatable tbody tr:hover{background:#fafbfa;}
       <div class="field"><label>Комментарий (для себя)</label><textarea id="pf_comment" rows="2" placeholder="Например: это тот самый соус в жёлтой банке от Хайнц"></textarea></div>
     </div>
     <div class="modal-foot">
+      <button class="btn btn-danger-outline" id="productDeleteBtn" style="display:none;" onclick="deleteProductFromModal()">Удалить</button>
       <button class="btn btn-secondary" onclick="closeModal('modalProduct')">Отмена</button>
       <button class="btn btn-primary" onclick="saveProductModal()">Сохранить</button>
     </div>
@@ -1161,7 +1162,7 @@ function renderCatalogTable(){
       ? `<div class="stepper-inline"><button onclick="changeQty(${p.id},-1)">−</button><div class="q">${qty}</div><button onclick="changeQty(${p.id},1)">+</button></div>`
       : `<button class="add-cell-btn" onclick="changeQty(${p.id},1)">+</button>`;
     return `<tr>
-      <td><div class="prod-cell">${prodThumbHtml(p,'prod-thumb')}<div><div class="prod-name">${p.name}${commentBadge(p)}</div></div></div></td>
+      <td><div class="prod-cell" style="cursor:pointer;" onclick="openProductModal(${p.id})" title="Открыть карточку товара">${prodThumbHtml(p,'prod-thumb')}<div><div class="prod-name">${p.name}${commentBadge(p)}</div></div></div></td>
       <td>${p.category ? `<span class="chip">${p.category}</span>` : NO_VALUE}</td>
       <td><div class="sup-cell">${avatarHtml(sup?sup.name:'?',24,sup?.photo)}${sup?sup.name:'—'}</div></td>
       <td>${p.unit}</td>
@@ -1415,13 +1416,14 @@ function renderCatalogMgmt(){
 }
 async function deleteProduct(id){
   const p = catalog.find(x => x.id === id);
-  if(!p) return;
-  if(!confirm(`Удалить товар «${p.name}»?`)) return;
+  if(!p) return false;
+  if(!confirm(`Удалить товар «${p.name}»?`)) return false;
   const res = await fetch(`/api/catalog/products/${p._idx}`, {method:'DELETE'});
-  if(!res.ok){ showToast('Не удалось удалить: ' + await res.text()); return; }
+  if(!res.ok){ showToast('Не удалось удалить: ' + await res.text()); return false; }
   delete cart[id];
   await reloadAndRerenderAll();
   showToast('Товар удалён');
+  return true;
 }
 
 /* ---------------------------------------------------------------------
@@ -1574,7 +1576,13 @@ function openProductModal(id){
   document.getElementById('pf_comment').value = p ? (p.comment || '') : '';
   pendingProductPhoto = p ? (p.photo || null) : null;
   document.getElementById('productPhotoPreview').innerHTML = pendingProductPhoto ? `<img src="${pendingProductPhoto}">` : 'Добавить фото';
+  document.getElementById('productDeleteBtn').style.display = p ? '' : 'none';
   openModal('modalProduct');
+}
+async function deleteProductFromModal(){
+  if(editingProductId == null) return;
+  const deleted = await deleteProduct(editingProductId);
+  if(deleted) closeModal('modalProduct');
 }
 async function saveProductModal(){
   const name = document.getElementById('pf_name').value.trim();
@@ -1672,7 +1680,7 @@ function renderMobileList(){
       ? `<div class="m-stepper"><button onclick="changeQty(${p.id},-1)">−</button><div class="q">${qty}</div><button onclick="changeQty(${p.id},1)">+</button></div>`
       : `<button class="m-stepper addbtn" onclick="changeQty(${p.id},1)">Добавить</button>`;
     return `<div class="m-item">
-      <div class="m-item-left">${prodThumbHtml(p,'m-item-thumb')}
+      <div class="m-item-left" style="cursor:pointer;" onclick="openProductModal(${p.id})">${prodThumbHtml(p,'m-item-thumb')}
         <div><div class="m-item-name">${p.name}${commentBadge(p)}</div><div class="m-item-sub">${supplierName(p.supplierId)}</div><div class="m-item-price">${p.unit}${p.price!=null ? ' · ' + money(p.price) : ''}</div></div>
       </div>
       ${stepper}
