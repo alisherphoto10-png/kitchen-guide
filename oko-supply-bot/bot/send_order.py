@@ -12,6 +12,7 @@ from datetime import date, timedelta
 from catalog import get_product, get_supplier, load_catalog
 from client import get_client, start_client
 from message import group_by_supplier, render_message
+from order_template_store import load_template
 
 TEST_ORDER = [
     {"product": "Романо", "qty": 2},
@@ -40,8 +41,8 @@ async def main() -> None:
                 print(f"[пропущено] у поставщика «{supplier_name}» не задан chat_id в data/catalog.json")
                 continue
 
-            text = render_message(lines, delivery_date=date.today() + timedelta(days=1))
-            await client.send_message(supplier["chat_id"], text)
+            text = render_message(lines, delivery_date=date.today() + timedelta(days=1), template=load_template())
+            await client.send_message(supplier["chat_id"], text, parse_mode="html")
             print(f"[отправлено] {supplier_name}: {len(lines)} позиций")
 
 

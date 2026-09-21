@@ -14,6 +14,12 @@
   PUT    /api/catalog/suppliers/{idx} — изменить поставщика (переименование
                                          каскадно обновляет supplier у товаров)
   DELETE /api/catalog/suppliers/{idx} — удалить поставщика вместе с его товарами
+  POST   /api/catalog/categories       — добавить категорию
+  PUT    /api/catalog/categories/{idx} — переименовать (каскадно обновляет
+                                          category у товаров этой категории)
+  DELETE /api/catalog/categories/{idx} — удалить категорию (товары этой
+                                          категории остаются без категории,
+                                          не удаляются)
   GET    /api/chats                  — последние диалоги Telethon-клиента
                                         (id, имя, тип) для выбора chat_id
                                         прямо в карточке поставщика
@@ -30,6 +36,10 @@
                                         поставщикам (у кого задан chat_id) —
                                         с паузой между отправками, см.
                                         api_broadcast ниже
+  GET    /api/order-template         — текущий шаблон сообщения заказу
+  PUT    /api/order-template         — {"text": "..."} сохранить новый
+                                        шаблон (переменные {дата}/{товары}/
+                                        {комментарий}, см. message.py)
 
 Один процесс держит один долгоживущий авторизованный TelegramClient —
 логиниться заново не нужно, session уже создана (см. README).
@@ -47,6 +57,7 @@ from dotenv import load_dotenv
 from telethon.errors import FloodWaitError
 
 import autoresponder_store
+import order_template_store
 import orders_store
 from catalog import get_product, get_supplier, load_catalog, save_catalog
 from client import SESSION_NAME, get_client, start_client
@@ -149,10 +160,15 @@ async def api_order(request: web.Request) -> web.Response:
         delivery_date = (
             date.fromisoformat(delivery_date_str) if delivery_date_str else date.today() + timedelta(days=1)
         )
-        text = render_message(lines, delivery_date=delivery_date, comment=meta.get("comment", ""))
+        text = render_message(
+            lines,
+            delivery_date=delivery_date,
+            comment=meta.get("comment", ""),
+            template=order_template_store.load_template(),
+        )
 
         try:
-            await client.send_message(supplier["chat_id"], text)
+            await client.send_message(supplier["chat_id"], text, parse_mode="html")
             results.append({"supplier": supplier_name, "status": "sent"})
         except Exception as exc:  # noqa: BLE001 — reportится клиенту как есть
             results.append({"supplier": supplier_name, "status": "error", "reason": str(exc)})
@@ -214,7 +230,7 @@ async def api_broadcast(request: web.Request) -> web.Response:
         if i > 0:
             await asyncio.sleep(random.uniform(2.5, 5.5))
         try:
-            await client.send_message(supplier["chat_id"], text)
+            await client.send_message(supplier["chat_id"], text, parse_mode="html")
             results.append({"supplier": supplier["name"], "status": "sent"})
         except FloodWaitError as exc:
             results.append(
@@ -358,6 +374,61 @@ async def delete_supplier(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+def _category_from_body(body: dict) -> str:
+    name = body.get("name", "").strip()
+    if not name:
+        raise web.HTTPBadRequest(text="Название категории обязательно")
+    return name
+
+
+@routes.post("/api/catalog/categories")
+async def create_category(request: web.Request) -> web.Response:
+    body = await request.json()
+    name = _category_from_body(body)
+    async with catalog_lock:
+        catalog = load_catalog()
+        if name in catalog["categories"]:
+            raise web.HTTPBadRequest(text="Такая категория уже есть")
+        catalog["categories"].append(name)
+        save_catalog(catalog)
+        index = len(catalog["categories"]) - 1
+    return web.json_response({"index": index, "name": name})
+
+
+@routes.put("/api/catalog/categories/{idx}")
+async def update_category(request: web.Request) -> web.Response:
+    idx = int(request.match_info["idx"])
+    body = await request.json()
+    new_name = _category_from_body(body)
+    async with catalog_lock:
+        catalog = load_catalog()
+        if not (0 <= idx < len(catalog["categories"])):
+            raise web.HTTPNotFound()
+        old_name = catalog["categories"][idx]
+        catalog["categories"][idx] = new_name
+        if new_name != old_name:
+            for p in catalog["products"]:
+                if p.get("category") == old_name:
+                    p["category"] = new_name
+        save_catalog(catalog)
+    return web.json_response({"ok": True})
+
+
+@routes.delete("/api/catalog/categories/{idx}")
+async def delete_category(request: web.Request) -> web.Response:
+    idx = int(request.match_info["idx"])
+    async with catalog_lock:
+        catalog = load_catalog()
+        if not (0 <= idx < len(catalog["categories"])):
+            raise web.HTTPNotFound()
+        name = catalog["categories"].pop(idx)
+        for p in catalog["products"]:
+            if p.get("category") == name:
+                p["category"] = None
+        save_catalog(catalog)
+    return web.json_response({"ok": True})
+
+
 @routes.get("/api/autoresponder")
 async def api_autoresponder_get(request: web.Request) -> web.Response:
     return web.json_response(autoresponder_store.load_config())
@@ -419,6 +490,21 @@ async def api_autoresponder_activate(request: web.Request) -> web.Response:
             raise web.HTTPNotFound()
         config["active_template_id"] = tid
         autoresponder_store.save_config(config)
+    return web.json_response({"ok": True})
+
+
+@routes.get("/api/order-template")
+async def api_order_template_get(request: web.Request) -> web.Response:
+    return web.json_response({"text": order_template_store.load_template()})
+
+
+@routes.put("/api/order-template")
+async def api_order_template_put(request: web.Request) -> web.Response:
+    body = await request.json()
+    text = body.get("text", "").strip()
+    if not text:
+        raise web.HTTPBadRequest(text="Текст шаблона не может быть пустым")
+    order_template_store.save_template(text)
     return web.json_response({"ok": True})
 
 

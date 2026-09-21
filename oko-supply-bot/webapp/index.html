@@ -123,10 +123,21 @@ a{color:inherit;}
 .page-head .sub{font-size:13.5px;color:var(--cp-text-secondary);}
 .page-head .actions{display:flex;gap:8px;flex:none;}
 
-/* order page layout: table + right panel */
+/* order page layout: full-width table, order summary lives in a floating
+   bar + modal (see #desktopCartBar / #modalOrderSummary) instead of an
+   always-visible column that looked awkward empty. */
 .order-layout{display:flex;gap:20px;align-items:flex-start;}
 .catalog-col{flex:1;min-width:0;}
-.orderpanel-col{width:340px;flex:none;}
+.desktop-cartbar{
+  position:fixed;right:26px;bottom:24px;width:320px;z-index:40;
+  background:var(--cp-sidebar);color:#fff;border-radius:14px;padding:14px 18px;
+  display:flex;align-items:center;justify-content:space-between;cursor:pointer;
+  box-shadow:0 10px 30px rgba(13,58,44,.3);
+}
+.desktop-cartbar.hidden{display:none;}
+.desktop-cartbar .t{font-size:12.5px;}
+.desktop-cartbar .t b{font-size:14.5px;}
+.desktop-cartbar .go{font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:4px;}
 
 .filters-row{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;}
 .filters-row select{border:1px solid var(--cp-border);border-radius:9px;padding:7px 10px;font-size:13px;background:#fff;color:var(--cp-text);}
@@ -196,6 +207,8 @@ table.datatable tbody tr:hover{background:#fafbfa;}
   width:100%;border:1px solid var(--cp-border);border-radius:9px;padding:9px 11px;font-size:13.5px;color:var(--cp-text);
 }
 .field textarea{resize:vertical;min-height:60px;}
+.fmt-toolbar{display:flex;gap:6px;margin-bottom:6px;}
+.fmt-toolbar .icon-btn{width:30px;height:30px;font-size:13px;}
 .field-row{display:flex;gap:10px;}
 .field-row .field{flex:1;}
 .photo-upload{
@@ -224,7 +237,7 @@ table.datatable tbody tr:hover{background:#fafbfa;}
 .copy-field code{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
 .toast{
-  position:fixed;bottom:24px;right:24px;background:var(--cp-sidebar);color:#fff;padding:13px 18px;border-radius:11px;
+  position:fixed;bottom:110px;right:24px;background:var(--cp-sidebar);color:#fff;padding:13px 18px;border-radius:11px;
   font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.2);display:flex;align-items:center;gap:10px;z-index:200;
   opacity:0;transform:translateY(10px);transition:all .25s;pointer-events:none;
 }
@@ -464,25 +477,28 @@ table.datatable tbody tr:hover{background:#fafbfa;}
               </table>
             </div>
           </div>
-          <div class="orderpanel-col">
-            <div class="card orderpanel">
-              <div class="op-head">
-                <h3>Текущий заказ</h3>
-                <button class="icon-btn" onclick="clearOrder()" title="Очистить">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
-                </button>
-              </div>
-              <div id="orderPanelBody"></div>
-            </div>
-          </div>
         </div>
       </section>
+
+      <div class="desktop-cartbar hidden" id="desktopCartBar" onclick="openModal('modalOrderSummary')">
+        <div class="t"><b id="dCartCount">0</b> товаров · <span id="dCartSuppliers">0</span> поставщика</div>
+        <div class="go">Открыть заказ →</div>
+      </div>
 
       <!-- PAGE: catalog (full management) -->
       <section class="page" id="page-catalog">
         <div class="page-head">
           <div><h1>Каталог товаров</h1><div class="sub">Полный список товаров и их привязка к поставщикам</div></div>
           <div class="actions"><button class="btn btn-primary" onclick="openProductModal(null)">+ Добавить товар</button></div>
+        </div>
+        <div class="card settings-card" style="margin-bottom:16px;">
+          <h4>Категории</h4>
+          <div class="d">Добавляйте, переименовывайте (клик по названию) и удаляйте — товары удалённой категории просто останутся без категории.</div>
+          <div id="categoryChipsEditable" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
+          <div style="display:flex;gap:8px;">
+            <input id="newCategoryInput" placeholder="Новая категория..." style="flex:1;border:1px solid var(--cp-border);border-radius:9px;padding:8px 11px;font-size:13.5px;" onkeydown="if(event.key==='Enter')addCategory()">
+            <button class="btn btn-primary" onclick="addCategory()">Добавить</button>
+          </div>
         </div>
         <div class="card">
           <table class="datatable">
@@ -534,33 +550,31 @@ table.datatable tbody tr:hover{background:#fafbfa;}
 
       <!-- PAGE: templates -->
       <section class="page" id="page-templates">
-        <div class="page-head"><div><h1>Шаблоны сообщений</h1><div class="sub">Как выглядит сообщение, которое получит поставщик</div></div></div>
+        <div class="page-head"><div><h1>Шаблон заказа поставщику</h1><div class="sub">Переменные {дата}, {товары}, {комментарий} подставляются автоматически при отправке</div></div></div>
         <div class="card settings-card" style="max-width:640px;">
-          <h4>Шаблон заказа поставщику</h4>
-          <div class="d">Переменные подставляются автоматически при отправке</div>
-          <div class="msg-preview">Заказ на {дата_поставки}:
-{список_товаров_с_количеством}
-
-{комментарий_если_есть}
-
-Спасибо!</div>
+          <div class="fmt-toolbar">
+            <button type="button" class="icon-btn" style="font-weight:700;" onclick="fmtBold('orderTemplateText')">B</button>
+            <button type="button" class="icon-btn" style="font-style:italic;" onclick="fmtItalic('orderTemplateText')">I</button>
+            <button type="button" class="icon-btn" onclick="fmtQuote('orderTemplateText')">❝</button>
+          </div>
+          <textarea id="orderTemplateText" rows="6" oninput="updateOrderTemplatePreview()"></textarea>
+          <div class="d" style="margin:10px 0 6px;">Предпросмотр с примерными данными:</div>
+          <div class="msg-preview" id="orderTemplatePreview"></div>
+          <button class="btn btn-primary" style="margin-top:10px;" onclick="saveOrderTemplate()">Сохранить шаблон</button>
         </div>
       </section>
 
       <!-- PAGE: autoreply -->
       <section class="page" id="page-autoreply">
-        <div class="page-head"><div><h1>Автоответчик</h1><div class="sub">Фиксированный ответ на личные сообщения, пока вы заняты</div></div></div>
-        <div class="card settings-card" style="max-width:560px;">
-          <div class="kv-row">
-            <div class="k">Автоответчик</div>
-            <button class="toggle" id="autoreplyToggle" onclick="toggleAutoresponder()"><span class="knob"></span></button>
-          </div>
-          <div class="field" style="margin-top:14px;">
-            <label>Текст ответа</label>
-            <textarea id="autoreplyText" rows="3"></textarea>
-          </div>
-          <div class="d" style="margin:8px 0 12px;">Без ИИ-подстановки — просто фиксированный текст. Как только вы заходите в сеть и отвечаете сами, автоответчик для этого диалога отключается.</div>
-          <button class="btn btn-primary" onclick="saveAutoresponderText()">Сохранить текст</button>
+        <div class="page-head">
+          <div><h1>Автоответчик</h1><div class="sub">Разные сценарии — занят, выходной, сплю и т.п. Активен только один одновременно</div></div>
+          <div class="actions"><button class="btn btn-primary" onclick="openAutoresponderModal(null)">+ Новый сценарий</button></div>
+        </div>
+        <div class="card">
+          <table class="datatable">
+            <thead><tr><th>Название</th><th>Текст</th><th>Статус</th><th style="width:190px;">Действия</th></tr></thead>
+            <tbody id="autoresponderTableBody"></tbody>
+          </table>
         </div>
       </section>
 
@@ -570,7 +584,16 @@ table.datatable tbody tr:hover{background:#fafbfa;}
           <div><h1>Рассылка поставщикам</h1><div class="sub">Только уже известным поставщикам (с кем есть переписка по заказам) — новым контактам эта форма не пишет</div></div>
         </div>
         <div class="card settings-card" style="max-width:640px;">
-          <div class="field"><label>Текст сообщения</label><textarea id="broadcastText" rows="4" placeholder="Например: Уважаемые партнёры, поздравляем с праздником!"></textarea></div>
+          <div class="field">
+            <label>Текст сообщения</label>
+            <div class="fmt-toolbar">
+              <button type="button" class="icon-btn" style="font-weight:700;" onclick="fmtBold('broadcastText')">B</button>
+              <button type="button" class="icon-btn" style="font-style:italic;" onclick="fmtItalic('broadcastText')">I</button>
+              <button type="button" class="icon-btn" onclick="fmtQuote('broadcastText')">❝</button>
+            </div>
+            <textarea id="broadcastText" rows="4" placeholder="Например: Уважаемые партнёры, поздравляем с праздником!" oninput="updateFmtPreview('broadcastText','broadcastTextPreview')"></textarea>
+            <div class="msg-preview" id="broadcastTextPreview"></div>
+          </div>
           <div class="field"><label>Получатели</label><div id="broadcastSuppliersList" style="max-height:220px;overflow:auto;border:1px solid var(--cp-border);border-radius:9px;padding:8px;"></div></div>
           <div class="d" style="margin:0 0 12px;">Сообщения уходят по одному с паузой в несколько секунд — не одновременно всем, чтобы Telegram не расценил это как подозрительную активность.</div>
           <button class="btn btn-primary" id="broadcastSendBtn" onclick="sendBroadcastFrom('broadcastText','broadcastSuppliersList-cb','broadcastResults','broadcastSendBtn')">Отправить рассылку</button>
@@ -735,7 +758,7 @@ table.datatable tbody tr:hover{background:#fafbfa;}
     <div class="m-more-row" onclick="showMscreen2('m-suppliers')">🏪 Поставщики</div>
     <div class="m-more-row" onclick="showMscreen2('m-history')">🕒 История заказов</div>
     <div class="m-more-row" onclick="showToast('Заказ на {дата}: {товары} {комментарий} Спасибо!')">📝 Шаблоны сообщений</div>
-    <div class="m-more-row" onclick="openModal('modalAutoreplyMobile')">🤖 Автоответчик</div>
+    <div class="m-more-row" onclick="openAutoresponderListMobile()">🤖 Автоответчик</div>
     <div class="m-more-row" onclick="openBroadcastMobile()">📣 Рассылка поставщикам</div>
     <div class="m-more-row" onclick="checkTelegramStatus()">🔌 Настройки Telegram</div>
   </div>
@@ -762,6 +785,21 @@ table.datatable tbody tr:hover{background:#fafbfa;}
 <!-- =========================================================
      SHARED MODALS
      ========================================================= -->
+<div class="modal-overlay" id="modalOrderSummary">
+  <div class="modal-box" style="max-width:420px;">
+    <div class="modal-head">
+      <h3>Текущий заказ</h3>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button class="icon-btn" onclick="clearOrder()" title="Очистить">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
+        </button>
+        <span class="x" onclick="closeModal('modalOrderSummary')">✕</span>
+      </div>
+    </div>
+    <div class="modal-body" style="padding-top:12px;" id="orderPanelBody"></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modalProduct">
   <div class="modal-box">
     <div class="modal-head"><h3 id="productModalTitle">Добавить товар</h3><span class="x" onclick="closeModal('modalProduct')">✕</span></div>
@@ -780,6 +818,29 @@ table.datatable tbody tr:hover{background:#fafbfa;}
     <div class="modal-foot">
       <button class="btn btn-secondary" onclick="closeModal('modalProduct')">Отмена</button>
       <button class="btn btn-primary" onclick="saveProductModal()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalAutoresponderTemplate">
+  <div class="modal-box">
+    <div class="modal-head"><h3 id="artModalTitle">Новый сценарий</h3><span class="x" onclick="closeModal('modalAutoresponderTemplate')">✕</span></div>
+    <div class="modal-body">
+      <div class="field"><label>Название сценария</label><input id="art_name" placeholder="Например: Выходной"></div>
+      <div class="field">
+        <label>Текст ответа</label>
+        <div class="fmt-toolbar">
+          <button type="button" class="icon-btn" style="font-weight:700;" onclick="fmtBold('art_text')">B</button>
+          <button type="button" class="icon-btn" style="font-style:italic;" onclick="fmtItalic('art_text')">I</button>
+          <button type="button" class="icon-btn" onclick="fmtQuote('art_text')">❝</button>
+        </div>
+        <textarea id="art_text" rows="4" oninput="updateFmtPreview('art_text','art_preview')"></textarea>
+      </div>
+      <div class="msg-preview" id="art_preview"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="closeModal('modalAutoresponderTemplate')">Отмена</button>
+      <button class="btn btn-primary" onclick="saveAutoresponderTemplateModal()">Сохранить</button>
     </div>
   </div>
 </div>
@@ -822,23 +883,16 @@ table.datatable tbody tr:hover{background:#fafbfa;}
   </div>
 </div>
 
-<div class="modal-overlay" id="modalAutoreplyMobile">
+<div class="modal-overlay" id="modalAutoresponderList">
   <div class="modal-box">
-    <div class="modal-head"><h3>Автоответчик</h3><span class="x" onclick="closeModal('modalAutoreplyMobile')">✕</span></div>
+    <div class="modal-head"><h3>Автоответчик</h3><span class="x" onclick="closeModal('modalAutoresponderList')">✕</span></div>
     <div class="modal-body">
-      <div class="kv-row">
-        <div class="k">Автоответчик</div>
-        <button class="toggle" id="autoreplyToggleM" onclick="toggleAutoresponder()"><span class="knob"></span></button>
-      </div>
-      <div class="field" style="margin-top:14px;">
-        <label>Текст ответа</label>
-        <textarea id="autoreplyTextM" rows="3"></textarea>
-      </div>
-      <div class="d" style="margin:8px 0 0;">Без ИИ-подстановки — просто фиксированный текст. Как только вы заходите в сеть и отвечаете сами, автоответчик для этого диалога отключается.</div>
+      <div class="d" style="margin:0 0 10px;">Активен только один сценарий одновременно — тап включает/выключает.</div>
+      <div id="autoresponderListMobile"></div>
+      <button class="add-row-btn" style="width:100%;margin:10px 0 0;border:1px dashed var(--cp-border);border-radius:10px;padding:10px;background:none;color:var(--cp-accent-dark);font-size:13.5px;cursor:pointer;" onclick="openAutoresponderModal(null)">+ Новый сценарий</button>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-secondary" onclick="closeModal('modalAutoreplyMobile')">Закрыть</button>
-      <button class="btn btn-primary" onclick="saveAutoresponderText()">Сохранить текст</button>
+      <button class="btn btn-secondary btn-block" onclick="closeModal('modalAutoresponderList')">Закрыть</button>
     </div>
   </div>
 </div>
@@ -848,7 +902,16 @@ table.datatable tbody tr:hover{background:#fafbfa;}
     <div class="modal-head"><h3>Рассылка поставщикам</h3><span class="x" onclick="closeModal('modalBroadcastMobile')">✕</span></div>
     <div class="modal-body">
       <div class="d" style="margin:0 0 10px;">Только уже известным поставщикам (с кем есть переписка) — уходит по одному с паузой.</div>
-      <div class="field"><label>Текст сообщения</label><textarea id="broadcastTextM" rows="4"></textarea></div>
+      <div class="field">
+        <label>Текст сообщения</label>
+        <div class="fmt-toolbar">
+          <button type="button" class="icon-btn" style="font-weight:700;" onclick="fmtBold('broadcastTextM')">B</button>
+          <button type="button" class="icon-btn" style="font-style:italic;" onclick="fmtItalic('broadcastTextM')">I</button>
+          <button type="button" class="icon-btn" onclick="fmtQuote('broadcastTextM')">❝</button>
+        </div>
+        <textarea id="broadcastTextM" rows="4" oninput="updateFmtPreview('broadcastTextM','broadcastTextPreviewM')"></textarea>
+        <div class="msg-preview" id="broadcastTextPreviewM"></div>
+      </div>
       <div class="field"><label>Получатели</label><div id="broadcastSuppliersListM" style="max-height:200px;overflow:auto;border:1px solid var(--cp-border);border-radius:9px;padding:8px;"></div></div>
       <div id="broadcastResultsM"></div>
     </div>
@@ -866,7 +929,10 @@ table.datatable tbody tr:hover{background:#fafbfa;}
    DATA (реальные позиции из data/Поставщики_и_товары.xlsx; цены — пример)
    --------------------------------------------------------------------- */
 const AVATAR_COLORS = ['#F59E0B','#3B82F6','#EF4444','#10B981','#8B5CF6','#EC4899','#14B8A6','#F97316','#6366F1','#84CC16'];
-const CATEGORIES = ['Молочная продукция','Мясо','Рыба и морепродукты','Овощи и фрукты','Бакалея','Соусы','Прочее'];
+// Категории теперь реальные редактируемые данные (data/catalog.json,
+// "categories") — CATEGORIES заполняется в loadRealCatalog(), это только
+// фолбэк на случай сетевой ошибки при первой загрузке.
+let CATEGORIES = ['Молочная продукция','Мясо','Рыба и морепродукты','Овощи и фрукты','Бакалея','Соусы','Прочее'];
 const CATEGORY_ICON = {'Молочная продукция':'🥛','Мясо':'🥩','Рыба и морепродукты':'🐟','Овощи и фрукты':'🥬','Бакалея':'🌾','Соусы':'🧂','Прочее':'📦'};
 
 /* DATA: каталог грузится с сервера (loadRealCatalog) — не демо-данные. category/
@@ -881,6 +947,7 @@ async function loadRealCatalog(){
   const res = await fetch('/api/catalog');
   if(!res.ok) throw new Error('Не удалось загрузить каталог: ' + await res.text());
   const data = await res.json();
+  CATEGORIES = data.categories || [];
   suppliers = data.suppliers.map((s, idx) => ({
     id: 's'+idx, _idx: idx,
     name: s.name, phone: s.phone||'', telegram: s.telegram||'',
@@ -938,6 +1005,33 @@ function formatDateHuman(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-');
 function cssSafe(s){ return String(s).replace(/[^a-zA-Zа-яА-Я0-9]/g,'_'); }
 function esc(s){ return String(s).replace(/'/g,"\\'"); }
 
+/* ---------------------------------------------------------------------
+   ФОРМАТИРОВАНИЕ ТЕКСТА — оборачивает выделение в textarea тегами
+   <b>/<i>/<blockquote>. Реальная отправка (order/broadcast/autoresponder)
+   идёт с parse_mode="html" на бэкенде, так что эти теги действительно
+   рендерятся в Telegram жирным/курсивом/цитатой, а не остаются текстом.
+   --------------------------------------------------------------------- */
+function wrapSelection(textareaId, prefix, suffix, placeholder){
+  const ta = document.getElementById(textareaId);
+  if(!ta) return;
+  const start = ta.selectionStart, end = ta.selectionEnd;
+  const value = ta.value;
+  const selected = value.slice(start, end) || placeholder;
+  ta.value = value.slice(0, start) + prefix + selected + suffix + value.slice(end);
+  const cursorStart = start + prefix.length;
+  ta.focus();
+  ta.setSelectionRange(cursorStart, cursorStart + selected.length);
+  ta.dispatchEvent(new Event('input'));
+}
+function fmtBold(id){ wrapSelection(id, '<b>', '</b>', 'жирный текст'); }
+function fmtItalic(id){ wrapSelection(id, '<i>', '</i>', 'курсив'); }
+function fmtQuote(id){ wrapSelection(id, '<blockquote>', '</blockquote>', 'цитата'); }
+function updateFmtPreview(textareaId, previewId){
+  const ta = document.getElementById(textareaId), prev = document.getElementById(previewId);
+  if(!ta || !prev) return;
+  prev.innerHTML = ta.value || '<span style="color:var(--cp-text-hint);">Предпросмотр появится здесь</span>';
+}
+
 function showToast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -970,7 +1064,7 @@ function switchPage(id){
   if(id === 'suppliers') renderSuppliersTable();
   if(id === 'history') renderHistoryTable();
   if(id === 'settings') renderSettingsStats();
-  if(id === 'broadcast') renderBroadcastSuppliersInto('broadcastSuppliersList');
+  if(id === 'broadcast'){ renderBroadcastSuppliersInto('broadcastSuppliersList'); updateFmtPreview('broadcastText','broadcastTextPreview'); }
 }
 
 function onTopSearch(v){
@@ -1081,8 +1175,20 @@ function renderOrderPanel(){
   const body = document.getElementById('orderPanelBody');
   const groups = groupCartBySupplier();
   const supIds = Object.keys(groups);
+  const bar = document.getElementById('desktopCartBar');
+  if(bar){
+    const items = cartItemsWithData();
+    if(items.length === 0){
+      bar.classList.add('hidden');
+      closeModal('modalOrderSummary');
+    } else {
+      bar.classList.remove('hidden');
+      document.getElementById('dCartCount').textContent = items.reduce((a,i)=>a+i.qty,0);
+      document.getElementById('dCartSuppliers').textContent = supIds.length;
+    }
+  }
   if(supIds.length === 0){
-    body.innerHTML = '<div class="op-empty">Заказ пуст — добавьте товары из каталога слева</div>';
+    body.innerHTML = '<div class="op-empty">Заказ пуст — добавьте товары из каталога</div>';
     return;
   }
   let totalQty = 0;
@@ -1107,7 +1213,7 @@ function renderOrderPanel(){
   const grandSum = sumIfComplete(cartItemsWithData());
   body.innerHTML = groupsHtml + `
     <div class="op-total"><div class="lbl">${totalQty} поз. · ${supIds.length} пост.</div>${grandSum!=null ? `<div class="val">${money(grandSum)}</div>` : ''}</div>
-    <button class="btn btn-primary btn-block" onclick="switchPage('review')">Перейти к проверке заказа →</button>
+    <button class="btn btn-primary btn-block" onclick="closeModal('modalOrderSummary');switchPage('review')">Перейти к проверке заказа →</button>
   `;
 }
 
@@ -1219,8 +1325,47 @@ async function sendOrderDesktop(){
 /* ---------------------------------------------------------------------
    DESKTOP: catalog management page
    --------------------------------------------------------------------- */
+function renderCategoryChipsEditable(){
+  const el = document.getElementById('categoryChipsEditable');
+  if(!el) return;
+  if(CATEGORIES.length === 0){ el.innerHTML = '<div class="d" style="margin:0;">Категорий пока нет</div>'; return; }
+  el.innerHTML = CATEGORIES.map((c, idx) => `
+    <span class="chip" style="display:inline-flex;align-items:center;gap:6px;padding:5px 6px 5px 12px;">
+      <span style="cursor:pointer;" onclick="renameCategory(${idx})" title="Переименовать">${c}</span>
+      <button onclick="deleteCategory(${idx})" style="border:none;background:none;color:var(--cp-text-hint);cursor:pointer;font-size:13px;line-height:1;padding:0;">✕</button>
+    </span>`).join('');
+}
+async function addCategory(){
+  const input = document.getElementById('newCategoryInput');
+  const name = input.value.trim();
+  if(!name){ showToast('Введите название категории'); return; }
+  const res = await fetch('/api/catalog/categories', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name})});
+  if(!res.ok){ showToast('Не удалось добавить: ' + await res.text()); return; }
+  input.value = '';
+  await reloadAndRerenderAll();
+  showToast('Категория добавлена');
+}
+async function renameCategory(idx){
+  const current = CATEGORIES[idx];
+  const name = prompt('Новое название категории:', current);
+  if(!name || !name.trim() || name.trim() === current) return;
+  const res = await fetch(`/api/catalog/categories/${idx}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: name.trim()})});
+  if(!res.ok){ showToast('Не удалось переименовать: ' + await res.text()); return; }
+  await reloadAndRerenderAll();
+  showToast('Категория переименована');
+}
+async function deleteCategory(idx){
+  const name = CATEGORIES[idx];
+  if(!confirm(`Удалить категорию «${name}»? Товары этой категории останутся без категории.`)) return;
+  const res = await fetch(`/api/catalog/categories/${idx}`, {method:'DELETE'});
+  if(!res.ok){ showToast('Не удалось удалить: ' + await res.text()); return; }
+  await reloadAndRerenderAll();
+  showToast('Категория удалена');
+}
+
 function renderCatalogMgmt(){
   const tbody = document.getElementById('catalogMgmtBody');
+  renderCategoryChipsEditable();
   tbody.innerHTML = catalog.map(p => {
     const sup = supplierById(p.supplierId);
     return `<tr>
@@ -1662,13 +1807,14 @@ function pickChat(id){
 }
 
 /* ---------------------------------------------------------------------
-   AUTORESPONDER — реальный /api/autoresponder* (см. autoresponder.py).
-   Один "рабочий" шаблон вместо полноценного multi-template редактора
-   старой формы (order.html) — так проще, и это ровно то, что описано в
-   задаче: фиксированная фраза "занят", без ИИ и без сценариев. Полный
-   мульти-шаблонный редактор остался в order.html (ссылка — см. README).
+   AUTORESPONDER — полноценный список сценариев поверх реального
+   /api/autoresponder* (см. autoresponder.py). Активен максимум один
+   шаблон одновременно; какой именно — решается на сервере/в Избранном
+   (/busy, /free), эта форма лишь показывает и редактирует список.
    --------------------------------------------------------------------- */
 let autoresponderState = {templates: [], active_template_id: null};
+let editingAutoresponderTemplateId = null;
+
 async function loadAutoresponderUI(){
   try{
     const res = await fetch('/api/autoresponder');
@@ -1676,39 +1822,95 @@ async function loadAutoresponderUI(){
   } catch(err){
     autoresponderState = {templates: [], active_template_id: null};
   }
-  const t = autoresponderState.templates[0];
-  const text = t ? t.text : 'Алишер сейчас занят, ответит как освободится 🙏';
-  const on = !!(t && autoresponderState.active_template_id === t.id);
-  [['autoreplyToggle','autoreplyText'], ['autoreplyToggleM','autoreplyTextM']].forEach(([tid, xid]) => {
-    const toggle = document.getElementById(tid), textEl = document.getElementById(xid);
-    if(!toggle) return;
-    toggle.classList.toggle('on', on);
-    textEl.value = text;
-  });
+  renderAutoresponderTable();
+  renderAutoresponderListMobile();
 }
-async function ensureAutoresponderTemplate(){
-  if(autoresponderState.templates[0]) return autoresponderState.templates[0];
-  const res = await fetch('/api/autoresponder/templates', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name:'Занят', text:'Алишер сейчас занят, ответит как освободится 🙏'})});
-  const t = await res.json();
-  autoresponderState.templates.push(t);
-  return t;
+
+function renderAutoresponderTable(){
+  const tbody = document.getElementById('autoresponderTableBody');
+  if(!tbody) return;
+  if(autoresponderState.templates.length === 0){
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">Сценариев пока нет — добавьте первый</td></tr>';
+    return;
+  }
+  tbody.innerHTML = autoresponderState.templates.map(t => {
+    const active = autoresponderState.active_template_id === t.id;
+    const preview = t.text.length > 60 ? t.text.slice(0,60) + '…' : t.text;
+    return `<tr>
+      <td><b>${t.name}</b></td>
+      <td style="max-width:340px;color:var(--cp-text-secondary);">${preview}</td>
+      <td>${active ? '<span class="badge ok"><span class="dot"></span>Активен</span>' : '<span class="badge neutral"><span class="dot"></span>Выключен</span>'}</td>
+      <td>
+        ${active
+          ? `<button class="btn btn-secondary" style="padding:6px 10px;font-size:12.5px;" onclick="activateAutoresponderTemplate(null)">Выключить</button>`
+          : `<button class="btn btn-primary" style="padding:6px 10px;font-size:12.5px;" onclick="activateAutoresponderTemplate('${t.id}')">Включить</button>`}
+        <button class="icon-btn" onclick="openAutoresponderModal('${t.id}')" title="Редактировать">✎</button>
+        <button class="icon-btn" onclick="deleteAutoresponderTemplate('${t.id}')" title="Удалить">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
 }
-async function saveAutoresponderText(){
-  const text = (document.getElementById('autoreplyText')?.value || document.getElementById('autoreplyTextM')?.value || '').trim();
-  if(!text){ showToast('Укажите текст ответа'); return; }
-  const t = await ensureAutoresponderTemplate();
-  const res = await fetch(`/api/autoresponder/templates/${t.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name:t.name, text})});
+
+function renderAutoresponderListMobile(){
+  const el = document.getElementById('autoresponderListMobile');
+  if(!el) return;
+  if(autoresponderState.templates.length === 0){ el.innerHTML = '<div class="d" style="margin:0;">Сценариев пока нет</div>'; return; }
+  el.innerHTML = autoresponderState.templates.map(t => {
+    const active = autoresponderState.active_template_id === t.id;
+    const preview = t.text.length > 40 ? t.text.slice(0,40) + '…' : t.text;
+    return `<div class="m-item" style="padding:9px 0;">
+      <div class="m-item-left" style="cursor:pointer;" onclick="activateAutoresponderTemplate(${active ? 'null' : `'${t.id}'`})">
+        <div class="m-item-thumb">${active ? '✅' : '⭕'}</div>
+        <div><div class="m-item-name">${t.name}</div><div class="m-item-sub">${preview}</div></div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="icon-btn" style="width:26px;height:26px;" onclick="openAutoresponderModal('${t.id}')">✎</button>
+        <button class="icon-btn" style="width:26px;height:26px;" onclick="deleteAutoresponderTemplate('${t.id}')">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openAutoresponderListMobile(){
+  renderAutoresponderListMobile();
+  openModal('modalAutoresponderList');
+}
+
+function openAutoresponderModal(id){
+  editingAutoresponderTemplateId = id;
+  const t = id ? autoresponderState.templates.find(x => x.id === id) : null;
+  document.getElementById('artModalTitle').textContent = t ? 'Редактировать сценарий' : 'Новый сценарий';
+  document.getElementById('art_name').value = t ? t.name : '';
+  document.getElementById('art_text').value = t ? t.text : '';
+  updateFmtPreview('art_text','art_preview');
+  openModal('modalAutoresponderTemplate');
+}
+
+async function saveAutoresponderTemplateModal(){
+  const name = document.getElementById('art_name').value.trim();
+  const text = document.getElementById('art_text').value.trim();
+  if(!name || !text){ showToast('Заполните название и текст'); return; }
+  const url = editingAutoresponderTemplateId ? `/api/autoresponder/templates/${editingAutoresponderTemplateId}` : '/api/autoresponder/templates';
+  const res = await fetch(url, {method: editingAutoresponderTemplateId ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, text})});
   if(!res.ok){ showToast('Не удалось сохранить: ' + await res.text()); return; }
+  closeModal('modalAutoresponderTemplate');
   await loadAutoresponderUI();
-  showToast('Текст автоответчика сохранён');
+  showToast('Сценарий сохранён');
 }
-async function toggleAutoresponder(){
-  const t = await ensureAutoresponderTemplate();
-  const willTurnOn = autoresponderState.active_template_id !== t.id;
-  const res = await fetch('/api/autoresponder/activate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: willTurnOn ? t.id : null})});
+
+async function deleteAutoresponderTemplate(id){
+  if(!confirm('Удалить этот сценарий автоответчика?')) return;
+  const res = await fetch(`/api/autoresponder/templates/${id}`, {method:'DELETE'});
+  if(!res.ok){ showToast('Не удалось удалить: ' + await res.text()); return; }
+  await loadAutoresponderUI();
+  showToast('Сценарий удалён');
+}
+
+async function activateAutoresponderTemplate(id){
+  const res = await fetch('/api/autoresponder/activate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id})});
   if(!res.ok){ showToast('Не удалось переключить: ' + await res.text()); return; }
   await loadAutoresponderUI();
-  showToast(willTurnOn ? 'Автоответчик включён' : 'Автоответчик выключен');
+  showToast(id ? 'Сценарий включён' : 'Автоответчик выключен');
 }
 
 /* ---------------------------------------------------------------------
@@ -1741,6 +1943,7 @@ function renderBroadcastSuppliers(){
 function openBroadcastMobile(){
   renderBroadcastSuppliersInto('broadcastSuppliersListM');
   document.getElementById('broadcastResultsM').innerHTML = '';
+  updateFmtPreview('broadcastTextM','broadcastTextPreviewM');
   openModal('modalBroadcastMobile');
 }
 async function sendBroadcastFrom(textElId, cbClass, resultsElId, btnElId){
@@ -1776,7 +1979,41 @@ async function sendBroadcastFrom(textElId, cbClass, resultsElId, btnElId){
   }
   if(btn){ btn.disabled = false; btn.textContent = 'Отправить рассылку'; }
   textEl.value = '';
+  textEl.dispatchEvent(new Event('input'));
   showToast('Рассылка завершена');
+}
+
+/* ---------------------------------------------------------------------
+   ШАБЛОН ЗАКАЗА — реальный /api/order-template (см. order_template_store.py
+   и message.py). {дата}/{товары}/{комментарий} подставляются на сервере
+   при реальной отправке; здесь — тот же принцип, но с примерными данными.
+   --------------------------------------------------------------------- */
+async function loadOrderTemplate(){
+  let text;
+  try{
+    const res = await fetch('/api/order-template');
+    text = (await res.json()).text;
+  } catch(err){
+    text = 'Заказ на {дата}:\n{товары}\n\n{комментарий}\n\nСпасибо!';
+  }
+  const el = document.getElementById('orderTemplateText');
+  if(el){ el.value = text; updateOrderTemplatePreview(); }
+}
+function updateOrderTemplatePreview(){
+  const el = document.getElementById('orderTemplateText');
+  const prev = document.getElementById('orderTemplatePreview');
+  if(!el || !prev) return;
+  prev.innerHTML = el.value
+    .replaceAll('{дата}', '22.09.2026')
+    .replaceAll('{товары}', 'Романо — 3 кг\nШпинат — 1 кг')
+    .replaceAll('{комментарий}', 'Привезти на час раньше');
+}
+async function saveOrderTemplate(){
+  const text = document.getElementById('orderTemplateText').value.trim();
+  if(!text){ showToast('Текст шаблона не может быть пустым'); return; }
+  const res = await fetch('/api/order-template', {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text})});
+  if(!res.ok){ showToast('Не удалось сохранить: ' + await res.text()); return; }
+  showToast('Шаблон сохранён');
 }
 
 /* ---------------------------------------------------------------------
@@ -1822,6 +2059,7 @@ async function init(){
   renderMobileOrder();
   updateHomeStats();
   loadAutoresponderUI();
+  loadOrderTemplate();
   checkTelegramStatus();
 }
 init();

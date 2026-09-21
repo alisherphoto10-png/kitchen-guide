@@ -77,7 +77,7 @@ async def main() -> None:
         if chat_id in already_replied:
             return
         already_replied.add(chat_id)
-        sent = await event.reply(reply_text)
+        sent = await event.reply(reply_text, parse_mode="html")
         autoreply_message_ids[chat_id] = sent.id
 
     @client.on(events.MessageRead(inbox=True))
