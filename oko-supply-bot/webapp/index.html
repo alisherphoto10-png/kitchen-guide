@@ -562,6 +562,18 @@ table.datatable tbody tr:hover{background:#fafbfa;}
           <div class="msg-preview" id="orderTemplatePreview"></div>
           <button class="btn btn-primary" style="margin-top:10px;" onclick="saveOrderTemplate()">Сохранить шаблон</button>
         </div>
+        <div class="card settings-card" style="max-width:640px;margin-top:16px;">
+          <h4>Комментарий по умолчанию</h4>
+          <div class="d">Автоматически подставляется в поле «Комментарий» на экране проверки заказа — можно стереть или поменять под конкретный заказ, это не часть шаблона сообщения</div>
+          <div class="fmt-toolbar">
+            <button type="button" class="icon-btn" style="font-weight:700;" onclick="fmtBold('defaultCommentText')">B</button>
+            <button type="button" class="icon-btn" style="font-style:italic;" onclick="fmtItalic('defaultCommentText')">I</button>
+            <button type="button" class="icon-btn" onclick="fmtQuote('defaultCommentText')">❝</button>
+          </div>
+          <textarea id="defaultCommentText" rows="3" oninput="updateFmtPreview('defaultCommentText','defaultCommentPreview')"></textarea>
+          <div class="msg-preview" id="defaultCommentPreview"></div>
+          <button class="btn btn-primary" style="margin-top:10px;" onclick="saveDefaultComment()">Сохранить комментарий</button>
+        </div>
       </section>
 
       <!-- PAGE: autoreply -->
@@ -971,6 +983,7 @@ async function loadRealCatalog(){
 let cart = {};
 let commentsBySupplier = {};
 let dateBySupplier = {};
+let defaultOrderComment = '';
 let activeCategory = 'all';
 let editingProductId = null;
 let editingSupplierId = null;
@@ -1182,6 +1195,10 @@ function groupCartBySupplier(){
     if(!groups[item.supplierId]) groups[item.supplierId] = [];
     groups[item.supplierId].push(item);
     if(!dateBySupplier[item.supplierId]) dateBySupplier[item.supplierId] = tomorrowISO();
+    // Предзаполняем комментарий значением по умолчанию только один раз —
+    // "in" (а не falsy-проверка), чтобы явно очищенный пользователем
+    // комментарий ("") не переписывался заново дефолтом при перерендере.
+    if(!(item.supplierId in commentsBySupplier)) commentsBySupplier[item.supplierId] = defaultOrderComment;
   });
   return groups;
 }
@@ -2090,6 +2107,28 @@ async function saveOrderTemplate(){
 }
 
 /* ---------------------------------------------------------------------
+   КОММЕНТАРИЙ ПО УМОЛЧАНИЮ — предзаполняет поле "Комментарий" на экране
+   проверки заказа (см. groupCartBySupplier), но остаётся редактируемым/
+   стираемым под конкретный заказ — это только стартовое значение, не
+   часть шаблона сообщения (см. /api/default-comment).
+   --------------------------------------------------------------------- */
+async function loadDefaultComment(){
+  try{
+    const res = await fetch('/api/default-comment');
+    defaultOrderComment = (await res.json()).text || '';
+  } catch(err){ defaultOrderComment = ''; }
+  const el = document.getElementById('defaultCommentText');
+  if(el){ el.value = defaultOrderComment; updateFmtPreview('defaultCommentText','defaultCommentPreview'); }
+}
+async function saveDefaultComment(){
+  const text = document.getElementById('defaultCommentText').value.trim();
+  const res = await fetch('/api/default-comment', {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text})});
+  if(!res.ok){ showToast('Не удалось сохранить: ' + await res.text()); return; }
+  defaultOrderComment = text;
+  showToast('Комментарий по умолчанию сохранён');
+}
+
+/* ---------------------------------------------------------------------
    ПОДКЛЮЧЕНИЕ TELEGRAM (userbot) — статус реального соединения, не демо.
    --------------------------------------------------------------------- */
 async function checkTelegramStatus(){
@@ -2133,6 +2172,7 @@ async function init(){
   updateHomeStats();
   loadAutoresponderUI();
   loadOrderTemplate();
+  loadDefaultComment();
   checkTelegramStatus();
 }
 init();

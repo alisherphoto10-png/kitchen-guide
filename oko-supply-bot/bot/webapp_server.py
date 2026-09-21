@@ -40,6 +40,12 @@
   PUT    /api/order-template         — {"text": "..."} сохранить новый
                                         шаблон (переменные {дата}/{товары}/
                                         {комментарий}, см. message.py)
+  GET    /api/default-comment        — комментарий по умолчанию, которым
+                                        предзаполняется поле "Комментарий"
+                                        на экране проверки заказа (можно
+                                        стереть/поменять под конкретный
+                                        заказ — это только стартовое значение)
+  PUT    /api/default-comment        — {"text": "..."} сохранить
 
 Один процесс держит один долгоживущий авторизованный TelegramClient —
 логиниться заново не нужно, session уже создана (см. README).
@@ -57,6 +63,7 @@ from dotenv import load_dotenv
 from telethon.errors import FloodWaitError
 
 import autoresponder_store
+import default_comment_store
 import order_template_store
 import orders_store
 from catalog import get_product, get_supplier, load_catalog, save_catalog
@@ -513,6 +520,18 @@ async def api_order_template_put(request: web.Request) -> web.Response:
     if not text:
         raise web.HTTPBadRequest(text="Текст шаблона не может быть пустым")
     order_template_store.save_template(text)
+    return web.json_response({"ok": True})
+
+
+@routes.get("/api/default-comment")
+async def api_default_comment_get(request: web.Request) -> web.Response:
+    return web.json_response({"text": default_comment_store.load_comment()})
+
+
+@routes.put("/api/default-comment")
+async def api_default_comment_put(request: web.Request) -> web.Response:
+    body = await request.json()
+    default_comment_store.save_comment((body.get("text") or "").strip())
     return web.json_response({"ok": True})
 
 
