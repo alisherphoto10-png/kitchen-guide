@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Заказ поставщикам — прототип</title>
+<style>
+  :root{
+    --tg-bg:#ffffff;
+    --tg-secondary-bg:#f4f4f5;
+    --tg-text:#1c1c1e;
+    --tg-hint:#8e8e93;
+    --tg-link:#2aabee;
+    --tg-accent:#229ed9;
+    --tg-accent-dark:#1b7fb0;
+    --tg-green:#31b545;
+    --tg-border:#e5e5ea;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--tg-secondary-bg);
+    color:var(--tg-text);
+    display:flex;
+    justify-content:center;
+  }
+  #phone{
+    width:100%;
+    max-width:420px;
+    min-height:100vh;
+    background:var(--tg-bg);
+    position:relative;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:14px 16px 10px;
+    border-bottom:1px solid var(--tg-border);
+    position:sticky;
+    top:0;
+    background:var(--tg-bg);
+    z-index:10;
+  }
+  header h1{
+    font-size:17px;
+    font-weight:600;
+    margin:0 0 2px;
+  }
+  header .sub{
+    font-size:13px;
+    color:var(--tg-hint);
+  }
+  .search-wrap{
+    padding:10px 16px;
+    position:sticky;
+    top:56px;
+    background:var(--tg-bg);
+    z-index:9;
+    border-bottom:1px solid var(--tg-border);
+  }
+  .search-box{
+    background:var(--tg-secondary-bg);
+    border-radius:10px;
+    padding:9px 12px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .search-box input{
+    border:none;
+    background:transparent;
+    outline:none;
+    font-size:15px;
+    width:100%;
+    color:var(--tg-text);
+  }
+  .search-box svg{flex:none;color:var(--tg-hint);}
+  main{flex:1;overflow-y:auto;padding-bottom:96px;}
+  .group-label{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+    color:var(--tg-hint);
+    padding:14px 16px 6px;
+  }
+  .item{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:11px 16px;
+    border-bottom:1px solid var(--tg-border);
+  }
+  .item-left{display:flex;flex-direction:column;min-width:0;}
+  .item-name{font-size:15px;font-weight:500;}
+  .item-supplier{font-size:12.5px;color:var(--tg-hint);margin-top:1px;}
+  .stepper{display:flex;align-items:center;gap:10px;flex:none;}
+  .stepper button{
+    width:28px;height:28px;border-radius:50%;
+    border:none;background:var(--tg-secondary-bg);
+    font-size:16px;color:var(--tg-accent);
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+  }
+  .stepper button.add{
+    background:var(--tg-accent);color:#fff;
+    width:auto;height:28px;border-radius:14px;padding:0 14px;font-size:14px;font-weight:600;
+  }
+  .stepper .qty{min-width:18px;text-align:center;font-size:15px;font-weight:600;}
+  .empty-hint{padding:24px 16px;color:var(--tg-hint);font-size:14px;text-align:center;}
+
+  .cart-bar{
+    position:fixed;
+    bottom:0;left:0;right:0;
+    max-width:420px;
+    margin:0 auto;
+    background:var(--tg-accent);
+    color:#fff;
+    padding:13px 18px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    border-radius:16px 16px 0 0;
+    cursor:pointer;
+    box-shadow:0 -4px 16px rgba(0,0,0,0.12);
+  }
+  .cart-bar.hidden{display:none;}
+  .cart-bar .txt{font-size:14px;}
+  .cart-bar .txt b{font-size:15px;}
+  .cart-bar .go{font-weight:600;font-size:15px;display:flex;align-items:center;gap:4px;}
+
+  /* Screen 2: review */
+  .screen{display:none;flex-direction:column;flex:1;}
+  .screen.active{display:flex;}
+  .back-row{
+    display:flex;align-items:center;gap:6px;
+    padding:14px 16px 4px;font-size:15px;color:var(--tg-accent);cursor:pointer;
+  }
+  .supplier-card{
+    margin:12px 16px;
+    border:1px solid var(--tg-border);
+    border-radius:var(--radius);
+    overflow:hidden;
+  }
+  .supplier-card .head{
+    padding:12px 14px;
+    display:flex;justify-content:space-between;align-items:center;
+    background:var(--tg-secondary-bg);
+  }
+  .supplier-card .head .name{font-weight:600;font-size:15px;}
+  .supplier-card .head .contact{font-size:12.5px;color:var(--tg-hint);}
+  .supplier-card .lines{padding:10px 14px;font-size:14px;line-height:1.7;color:var(--tg-text);}
+  .supplier-card .lines .row{display:flex;justify-content:space-between;}
+  .supplier-card .lines .row .n{color:var(--tg-hint);}
+  .preview-box{
+    margin:0 14px 12px;
+    background:#f0f9ff;
+    border:1px dashed #b6e0ff;
+    border-radius:10px;
+    padding:10px 12px;
+    font-size:13px;
+    color:#1c1c1e;
+    white-space:pre-wrap;
+  }
+  .preview-label{font-size:11px;color:var(--tg-hint);padding:0 14px;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.03em;}
+  .send-all{
+    margin:8px 16px 20px;
+    background:var(--tg-green);
+    color:#fff;border:none;border-radius:12px;
+    padding:14px;font-size:16px;font-weight:600;
+    cursor:pointer;
+  }
+  .note{
+    margin:0 16px 16px;
+    font-size:12.5px;
+    color:var(--tg-hint);
+    background:var(--tg-secondary-bg);
+    border-radius:10px;
+    padding:10px 12px;
+  }
+
+  /* Screen 3: sent confirmation */
+  .sent-item{
+    display:flex;align-items:center;gap:10px;
+    padding:12px 16px;border-bottom:1px solid var(--tg-border);
+  }
+  .sent-item .check{
+    width:22px;height:22px;border-radius:50%;background:var(--tg-green);
+    display:flex;align-items:center;justify-content:center;flex:none;
+  }
+  .sent-item .info .n{font-size:15px;font-weight:500;}
+  .sent-item .info .s{font-size:12.5px;color:var(--tg-hint);}
+  .done-header{padding:24px 16px 8px;text-align:center;}
+  .done-header .circle{
+    width:56px;height:56px;border-radius:50%;background:var(--tg-green);
+    display:flex;align-items:center;justify-content:center;margin:0 auto 12px;
+  }
+  .done-header h2{font-size:17px;margin:0 0 4px;}
+  .done-header p{font-size:13.5px;color:var(--tg-hint);margin:0;}
+  .restart{
+    margin:20px 16px;background:transparent;border:1px solid var(--tg-border);
+    border-radius:12px;padding:12px;font-size:15px;color:var(--tg-text);cursor:pointer;
+  }
+
+  /* Editable review rows */
+  .lines .erow{
+    display:flex;align-items:center;justify-content:space-between;padding:4px 0;
+  }
+  .lines .erow .n{flex:1;font-size:14px;}
+  .lines .estep{display:flex;align-items:center;gap:8px;}
+  .lines .estep button{
+    width:24px;height:24px;border-radius:50%;border:none;background:var(--tg-secondary-bg);
+    color:var(--tg-accent);font-size:14px;cursor:pointer;
+  }
+  .lines .estep .q{min-width:44px;text-align:center;font-size:13.5px;}
+  .comment-box{
+    margin:0 14px 12px;
+  }
+  .comment-box label{font-size:11px;color:var(--tg-hint);text-transform:uppercase;letter-spacing:.03em;}
+  .comment-box textarea{
+    width:100%;margin-top:4px;border:1px solid var(--tg-border);border-radius:10px;
+    padding:8px 10px;font-size:14px;font-family:inherit;resize:none;color:var(--tg-text);
+  }
+  .date-row{
+    margin:4px 16px 4px;
+    display:flex;align-items:center;justify-content:space-between;
+    background:var(--tg-secondary-bg);border-radius:10px;padding:10px 12px;
+  }
+  .date-row label{font-size:14px;font-weight:500;}
+  .date-row input[type="date"]{
+    border:none;background:transparent;font-size:14px;font-family:inherit;color:var(--tg-accent);font-weight:600;
+  }
+  .photo-row{margin:0 14px 12px;}
+  .photo-row label{font-size:11px;color:var(--tg-hint);text-transform:uppercase;letter-spacing:.03em;display:block;margin-bottom:4px;}
+  .photo-attach{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  }
+  .photo-thumb{
+    position:relative;width:56px;height:56px;border-radius:8px;overflow:hidden;flex:none;
+  }
+  .photo-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .photo-thumb .rm{
+    position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;
+    background:rgba(0,0,0,0.6);color:#fff;display:flex;align-items:center;justify-content:center;
+    font-size:12px;line-height:1;cursor:pointer;
+  }
+  .photo-add-btn{
+    width:56px;height:56px;border-radius:8px;border:1px dashed var(--tg-border);
+    display:flex;align-items:center;justify-content:center;color:var(--tg-hint);cursor:pointer;flex:none;
+    font-size:20px;
+  }
+  .photo-add-btn input{display:none;}
+
+  /* Catalog management screen */
+  .tabs{display:flex;padding:0 16px;gap:6px;border-bottom:1px solid var(--tg-border);}
+  .tab{
+    padding:9px 4px;font-size:14px;color:var(--tg-hint);cursor:pointer;
+    border-bottom:2px solid transparent;font-weight:500;margin-right:14px;
+  }
+  .tab.active{color:var(--tg-accent);border-bottom-color:var(--tg-accent);}
+  .cat-row{
+    display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--tg-border);
+  }
+  .cat-row input, .cat-row select{
+    border:1px solid var(--tg-border);border-radius:8px;padding:6px 8px;font-size:13.5px;
+    font-family:inherit;color:var(--tg-text);background:var(--tg-bg);
+  }
+  .cat-row .f-name{flex:1.4;min-width:0;}
+  .cat-row .f-unit{width:52px;}
+  .cat-row .f-supplier{flex:1.2;min-width:0;}
+  .cat-row .del{
+    background:none;border:none;color:#ff3b30;font-size:18px;cursor:pointer;flex:none;padding:0 2px;
+  }
+  .add-row-btn{
+    margin:12px 16px;padding:11px;border:1px dashed var(--tg-border);border-radius:10px;
+    text-align:center;color:var(--tg-accent);font-size:14px;cursor:pointer;background:none;width:calc(100% - 32px);
+  }
+
+  /* Tappable product row with thumbnail */
+  .product-row{cursor:pointer;}
+  .cat-thumb{
+    width:44px;height:44px;border-radius:8px;object-fit:cover;flex:none;background:var(--tg-secondary-bg);
+  }
+  .cat-thumb.placeholder{
+    display:flex;align-items:center;justify-content:center;font-size:18px;
+  }
+  .cat-row-text{flex:1;min-width:0;}
+  .cat-row-name{font-size:15px;font-weight:500;}
+  .cat-row-sub{font-size:12.5px;color:var(--tg-hint);margin-top:1px;}
+  .chev{color:var(--tg-hint);font-size:20px;flex:none;}
+
+  /* Product card screen */
+  .card-photo-wrap{padding:16px;display:flex;justify-content:center;}
+  .card-photo{
+    width:140px;height:140px;border-radius:16px;background:var(--tg-secondary-bg);
+    display:flex;align-items:center;justify-content:center;color:var(--tg-hint);font-size:13px;
+    cursor:pointer;overflow:hidden;text-align:center;border:1px dashed var(--tg-border);
+  }
+  .card-photo img{width:100%;height:100%;object-fit:cover;}
+  .card-field{padding:0 16px 14px;}
+  .card-field label{font-size:12px;color:var(--tg-hint);text-transform:uppercase;letter-spacing:.03em;display:block;margin-bottom:5px;}
+  .card-field input, .card-field select{
+    width:100%;border:1px solid var(--tg-border);border-radius:10px;padding:10px 12px;
+    font-size:15px;font-family:inherit;color:var(--tg-text);background:var(--tg-bg);
+  }
+  .save-card{
+    margin:8px 16px;width:calc(100% - 32px);background:var(--tg-accent);color:#fff;border:none;
+    border-radius:12px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;
+  }
+  .delete-card{
+    margin:8px 16px 24px;width:calc(100% - 32px);background:none;color:#ff3b30;border:1px solid var(--tg-border);
+    border-radius:12px;padding:13px;font-size:15px;cursor:pointer;
+  }
+
+  /* Per-supplier date field on review screen */
+  .supplier-date{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:9px 14px;background:var(--tg-secondary-bg);border-radius:10px;margin:8px 14px 10px;
+  }
+  .supplier-date label{font-size:13px;color:var(--tg-hint);}
+  .supplier-date input[type="date"]{
+    border:none;background:transparent;font-size:14px;font-family:inherit;color:var(--tg-accent);font-weight:600;
+  }
+  .item-thumb{
+    width:26px;height:26px;border-radius:6px;object-fit:cover;margin-right:6px;flex:none;
+  }
+  .item-list-thumb{
+    width:38px;height:38px;border-radius:8px;object-fit:cover;flex:none;
+  }
+</style>
+</head>
+<body>
+<div id="phone">
+
+  <!-- SCREEN 1: product list -->
+  <div class="screen active" id="screen-list">
+    <header style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <h1>Заказ поставщикам</h1>
+        <div class="sub">Тапни товар — система сама найдёт поставщика</div>
+      </div>
+      <div id="editBtn" onclick="showCatalogEdit()" style="cursor:pointer;color:var(--tg-accent);flex:none;padding-left:10px;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </div>
+    </header>
+    <div class="search-wrap">
+      <div class="search-box">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="search" type="text" placeholder="Найти товар...">
+      </div>
+    </div>
+    <main id="list"></main>
+    <div class="cart-bar hidden" id="cartBar" onclick="showReview()">
+      <div class="txt"><b id="cartCount">0</b> товаров · <span id="cartSuppliers">0</span> поставщика</div>
+      <div class="go">Сформировать заказ →</div>
+    </div>
+  </div>
+
+  <!-- SCREEN 2: review grouped by supplier -->
+  <div class="screen" id="screen-review">
+    <header>
+      <div class="back-row" onclick="showList()">← Назад к списку</div>
+      <h1>Проверка заказа</h1>
+      <div class="sub">Сгруппировано по поставщикам — так уйдёт сообщение</div>
+    </header>
+    <main id="reviewList"></main>
+    <button class="send-all" onclick="showSent()">Отправить всем поставщикам</button>
+    <div class="note">В реальной версии сообщение уйдёт от твоего личного Telegram-аккаунта каждому поставщику в его чат — не через бота.</div>
+  </div>
+
+  <!-- SCREEN 3: sent confirmation -->
+
+  <div class="screen" id="screen-sent">
+    <div class="done-header">
+      <div class="circle">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <h2>Заказ отправлен</h2>
+      <p>Каждый поставщик получил своё сообщение отдельно</p>
+    </div>
+    <main id="sentList"></main>
+    <button class="restart" onclick="resetAll()">Сделать новый заказ</button>
+  </div>
+
+  <!-- SCREEN 4: catalog management -->
+  <div class="screen" id="screen-catalog">
+    <header>
+      <div class="back-row" onclick="showList()">← К заказу</div>
+      <h1>Товары и поставщики</h1>
+      <div class="sub">Здесь редактируется список, а не сам заказ</div>
+    </header>
+    <div class="tabs">
+      <div class="tab active" id="tab-products" onclick="switchCatalogTab('products')">Товары</div>
+      <div class="tab" id="tab-suppliers" onclick="switchCatalogTab('suppliers')">Поставщики</div>
+    </div>
+    <main id="catalogList"></main>
+    <button class="add-row-btn" id="addRowBtn" onclick="addCatalogRow()">+ Добавить</button>
+  </div>
+
+  <!-- SCREEN 5: product card -->
+  <div class="screen" id="screen-product-card">
+    <header>
+      <div class="back-row" onclick="showCatalogEdit()">← К списку</div>
+      <h1>Карточка товара</h1>
+    </header>
+    <main>
+      <div class="card-photo-wrap">
+        <label for="cardPhotoInput" class="card-photo" id="cardPhotoPreview">Добавить фото</label>
+        <input id="cardPhotoInput" type="file" accept="image/*" style="display:none" onchange="cardPhotoSelected(this.files)">
+      </div>
+      <div class="card-field">
+        <label>Название товара</label>
+        <input id="cardName" type="text">
+      </div>
+      <div class="card-field">
+        <label>Единица измерения</label>
+        <input id="cardUnit" type="text" placeholder="кг / шт / л">
+      </div>
+      <div class="card-field">
+        <label>Поставщик</label>
+        <select id="cardSupplier"></select>
+      </div>
+      <button class="save-card" onclick="saveProductCard()">Сохранить</button>
+      <button class="delete-card" onclick="deleteProductCard()">Удалить товар</button>
+    </main>
+  </div>
+
+  <!-- SCREEN 6: supplier card -->
+  <div class="screen" id="screen-supplier-card">
+    <header>
+      <div class="back-row" onclick="showCatalogEdit()">← К списку</div>
+      <h1>Карточка поставщика</h1>
+    </header>
+    <main>
+      <div class="card-field" style="margin-top:16px;">
+        <label>Название поставщика</label>
+        <input id="supName" type="text">
+      </div>
+      <div class="card-field">
+        <label>Номер телефона</label>
+        <input id="supPhone" type="text" placeholder="+998 90 000 00 00">
+      </div>
+      <div class="card-field">
+        <label>Telegram (если есть)</label>
+        <input id="supTelegram" type="text" placeholder="@username">
+      </div>
+      <div class="card-field">
+        <label>Товары поставщика</label>
+        <div id="supProductsList"></div>
+        <button class="add-row-btn" style="width:100%;margin:8px 0 0;" onclick="addProductFromSupplierCard()">+ Добавить товар этому поставщику</button>
+      </div>
+      <button class="save-card" onclick="saveSupplierCard()">Сохранить</button>
+      <button class="delete-card" onclick="deleteSupplierCard()">Удалить поставщика</button>
+    </main>
+  </div>
+
+</div>
+
+<script>
+let catalog = [
+  {name:"Романо", supplier:"Новагрин", contact:"—", unit:"кг"},
+  {name:"Шпинат", supplier:"Новагрин", contact:"—", unit:"кг"},
+  {name:"Греческий йогурт", supplier:"New Team", contact:"+998 97 115 15 13", unit:"кг"},
+  {name:"Моцарелла для пиццы", supplier:"New Team", contact:"+998 97 115 15 13", unit:"кг"},
+  {name:"Сметана", supplier:"New Team", contact:"+998 97 115 15 13", unit:"кг"},
+  {name:"Сыр лабне", supplier:"New Team", contact:"+998 97 115 15 13", unit:"кг"},
+  {name:"Картофель фри с кожурой", supplier:"Allmakon", contact:"+998 90 927 15 68", unit:"кг"},
+  {name:"Картофель фри решетки", supplier:"Allmakon", contact:"+998 90 927 15 68", unit:"кг"},
+  {name:"Кетчуп Heinz", supplier:"Allmakon", contact:"+998 90 927 15 68", unit:"шт"},
+  {name:"Рибай Мираторг", supplier:"Barra group pro", contact:"+998 91 003 09 00", unit:"кг"},
+  {name:"Фарш Рибай Мираторг", supplier:"Barra group pro", contact:"+998 91 003 09 00", unit:"кг"},
+  {name:"Стейк мачете (скёрт)", supplier:"Казбиф", contact:"+998 91 785 03 00", unit:"кг"},
+  {name:"Куриные яйца", supplier:"Parkent gold chicken", contact:"+998 97 134 00 43", unit:"шт"},
+  {name:"Сливки President", supplier:"Afsona makon", contact:"+998 94 777 09 41", unit:"л"},
+  {name:"Молоко Nestle 3,2%", supplier:"Afsona makon", contact:"+998 94 777 09 41", unit:"л"},
+  {name:"Сыр страчателла", supplier:"Simoff", contact:"+998 94 711 91 11", unit:"кг"},
+  {name:"Форель филе местная", supplier:"Golden fish group", contact:"+998 95 151 68 00", unit:"кг"},
+  {name:"Сибас охлаждённый", supplier:"La maree", contact:"+998 90 949 00 49", unit:"кг"},
+  {name:"Тунец свежезамороженный", supplier:"La maree", contact:"+998 90 949 00 49", unit:"кг"},
+  {name:"Креветки", supplier:"Рыбное местечко", contact:"Группа", unit:"кг"},
+  {name:"Мидии", supplier:"Рыбное местечко", contact:"Группа", unit:"кг"},
+  {name:"Кольца кальмара", supplier:"Рыбное местечко", contact:"Группа", unit:"кг"},
+  {name:"Угорь с соусом", supplier:"Рыбное местечко", contact:"Группа", unit:"кг"},
+  {name:"Бон филе", supplier:"Инвентис", contact:"Группа", unit:"кг"},
+  {name:"Куриные бёдра чищенные", supplier:"Инвентис", contact:"Группа", unit:"кг"},
+  {name:"Говяжьи рёбра", supplier:"Инвентис", contact:"Группа", unit:"кг"},
+  {name:"Авокадо", supplier:"Juicy garden", contact:"Группа", unit:"шт"},
+  {name:"Ягоды", supplier:"Juicy garden", contact:"Группа", unit:"кг"},
+  {name:"Уголь брикет", supplier:"Ecocoal energy", contact:"+998 97 759 71 88", unit:"кг"},
+  {name:"Шоколад тёмный 54%", supplier:"—", contact:"@katy_g7", unit:"кг"},
+  {name:"Зефир", supplier:"—", contact:"+998 99 188 99 00", unit:"кг"},
+];
+
+let cart = {}; // name -> {qty, ...item}
+let commentsBySupplier = {}; // supplier name -> comment text
+let dateBySupplier = {}; // supplier name -> ISO date string
+let catalogTab = "products";
+let editingProductIdx = null;
+let cardPhotoData = null;
+
+function formatDateHuman(iso){
+  if(!iso) return "";
+  const [y,m,d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
+
+function onSupplierDateChange(supplier, value){
+  dateBySupplier[supplier] = value;
+  const box = document.getElementById(`preview-${cssSafe(supplier)}`);
+  if(box) box.textContent = buildPreviewText(supplier, commentsBySupplier[supplier] || "");
+}
+
+function tomorrowISO(){
+  const d = new Date();
+  d.setDate(d.getDate()+1);
+  return d.toISOString().slice(0,10);
+}
+
+function classifyContact(raw){
+  if(!raw || raw === "—") return {phone:"", telegram:"", note:""};
+  if(raw.startsWith("@")) return {phone:"", telegram:raw, note:""};
+  if(raw.startsWith("+")) return {phone:raw, telegram:"", note:""};
+  return {phone:"", telegram:"", note:raw}; // e.g. "Группа"
+}
+
+function contactOf(s){
+  return s.telegram || s.phone || s.note || "—";
+}
+
+function rebuildSuppliers(){
+  const map = {};
+  catalog.forEach(p => { if(!(p.supplier in map)) map[p.supplier] = p.contact; });
+  return Object.entries(map).map(([name, contact]) => ({name, ...classifyContact(contact)}));
+}
+let suppliers = rebuildSuppliers();
+
+function renderList(filter=""){
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  const f = filter.trim().toLowerCase();
+  const filtered = catalog.filter(p => p.name.toLowerCase().includes(f) || p.supplier.toLowerCase().includes(f));
+  if(filtered.length === 0){
+    list.innerHTML = '<div class="empty-hint">Ничего не найдено</div>';
+    return;
+  }
+  filtered.forEach(p => {
+    const row = document.createElement("div");
+    row.className = "item";
+    const qty = cart[p.name] ? cart[p.name].qty : 0;
+    const thumb = p.photo ? `<img class="item-list-thumb" src="${p.photo}">` : "";
+    row.innerHTML = `
+      <div class="item-left" style="flex-direction:row;align-items:center;gap:10px;">
+        ${thumb}
+        <div>
+          <div class="item-name">${p.name}</div>
+          <div class="item-supplier">${p.supplier}</div>
+        </div>
+      </div>
+      <div class="stepper" id="stepper-${cssSafe(p.name)}"></div>
+    `;
+    list.appendChild(row);
+    renderStepper(p, qty);
+  });
+}
+
+function cssSafe(s){ return s.replace(/[^a-zA-Zа-яА-Я0-9]/g,"_"); }
+
+function renderStepper(p, qty){
+  const el = document.getElementById(`stepper-${cssSafe(p.name)}`);
+  if(qty > 0){
+    el.innerHTML = `
+      <button onclick="changeQty('${p.name.replace(/'/g,"\\'")}', -1)">−</button>
+      <div class="qty">${qty}</div>
+      <button onclick="changeQty('${p.name.replace(/'/g,"\\'")}', 1)">+</button>
+    `;
+  } else {
+    el.innerHTML = `<button class="add" onclick="changeQty('${p.name.replace(/'/g,"\\'")}', 1)">Добавить</button>`;
+  }
+}
+
+function changeQty(name, delta){
+  const p = catalog.find(x => x.name === name);
+  if(!cart[name]) cart[name] = {...p, qty:0};
+  cart[name].qty += delta;
+  if(cart[name].qty <= 0) delete cart[name];
+  renderList(document.getElementById("search").value);
+  updateCartBar();
+}
+
+function updateCartBar(){
+  const items = Object.values(cart);
+  const bar = document.getElementById("cartBar");
+  if(items.length === 0){ bar.classList.add("hidden"); return; }
+  bar.classList.remove("hidden");
+  const totalQty = items.reduce((a,b)=>a+b.qty,0);
+  const suppliers = new Set(items.map(i=>i.supplier));
+  document.getElementById("cartCount").textContent = totalQty;
+  document.getElementById("cartSuppliers").textContent = suppliers.size;
+}
+
+document.getElementById("search").addEventListener("input", e => renderList(e.target.value));
+
+function showScreen(id){
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+function showList(){ showScreen("screen-list"); }
+
+function changeQtyReview(name, delta){
+  if(!cart[name]) return;
+  cart[name].qty += delta;
+  if(cart[name].qty <= 0) delete cart[name];
+  showReview();
+  updateCartBar();
+}
+
+function updateComment(supplier, text){
+  commentsBySupplier[supplier] = text;
+  // live-update just this preview box without a full re-render (keeps textarea focus)
+  const box = document.getElementById(`preview-${cssSafe(supplier)}`);
+  if(box) box.textContent = buildPreviewText(supplier, text);
+}
+
+function buildPreviewText(supplier, comment){
+  const items = Object.values(cart).filter(i => i.supplier === supplier);
+  const msgLines = items.map(i => `${i.name} — ${i.qty} ${i.unit}`).join("\n");
+  const commentLine = comment && comment.trim() ? `\n\n${comment.trim()}` : "";
+  const d = dateBySupplier[supplier];
+  const dateLine = d ? `Заказ на ${formatDateHuman(d)}:` : "Заказ на сегодня:";
+  return `${dateLine}\n${msgLines}${commentLine}\n\nСпасибо!`;
+}
+
+function showReview(){
+  const bySupplier = {};
+  Object.values(cart).forEach(item => {
+    if(!bySupplier[item.supplier]) bySupplier[item.supplier] = {contact:item.contact, items:[]};
+    bySupplier[item.supplier].items.push(item);
+    if(!dateBySupplier[item.supplier]) dateBySupplier[item.supplier] = tomorrowISO();
+  });
+  const container = document.getElementById("reviewList");
+  container.innerHTML = "";
+  Object.entries(bySupplier).forEach(([supplier, data]) => {
+    const card = document.createElement("div");
+    const lines = data.items.map(i => {
+      const thumb = i.photo ? `<img class="item-thumb" src="${i.photo}">` : "";
+      return `
+      <div class="erow">
+        <div class="n" style="display:flex;align-items:center;">${thumb}${i.name}</div>
+        <div class="estep">
+          <button onclick="changeQtyReview('${i.name.replace(/'/g,"\\'")}', -1)">−</button>
+          <div class="q">${i.qty} ${i.unit}</div>
+          <button onclick="changeQtyReview('${i.name.replace(/'/g,"\\'")}', 1)">+</button>
+        </div>
+      </div>`;
+    }).join("");
+    const comment = commentsBySupplier[supplier] || "";
+    const supDate = dateBySupplier[supplier];
+    card.innerHTML = `
+      <div class="preview-label">Поставщику: ${supplier}</div>
+      <div class="supplier-card">
+        <div class="head">
+          <div class="name">${supplier}</div>
+          <div class="contact">${data.contact}</div>
+        </div>
+        <div class="lines">${lines}</div>
+      </div>
+      <div class="supplier-date">
+        <label>Дата поставки</label>
+        <input type="date" value="${supDate}" onchange="onSupplierDateChange('${supplier.replace(/'/g,"\\'")}', this.value)">
+      </div>
+      <div class="comment-box">
+        <label>Комментарий к заказу (необязательно)</label>
+        <textarea rows="2" placeholder="Например: привезти на час раньше" onblur="updateComment('${supplier.replace(/'/g,"\\'")}', this.value)">${comment}</textarea>
+      </div>
+      <div class="preview-box" id="preview-${cssSafe(supplier)}">${buildPreviewText(supplier, comment)}</div>
+    `;
+    container.appendChild(card);
+  });
+  if(Object.keys(bySupplier).length === 0){
+    container.innerHTML = '<div class="empty-hint">Корзина пуста — добавь товары на первом экране</div>';
+  }
+  showScreen("screen-review");
+}
+
+function showSent(){
+  const bySupplier = {};
+  Object.values(cart).forEach(item => {
+    if(!bySupplier[item.supplier]) bySupplier[item.supplier] = {contact:item.contact, count:0};
+    bySupplier[item.supplier].count += 1;
+  });
+  const container = document.getElementById("sentList");
+  container.innerHTML = "";
+  Object.entries(bySupplier).forEach(([supplier, data]) => {
+    const row = document.createElement("div");
+    row.className = "sent-item";
+    row.innerHTML = `
+      <div class="check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div class="info">
+        <div class="n">${supplier}</div>
+        <div class="s">${data.count} позиций · ${data.contact}</div>
+      </div>
+    `;
+    container.appendChild(row);
+  });
+  showScreen("screen-sent");
+}
+
+function resetAll(){
+  cart = {};
+  commentsBySupplier = {};
+  dateBySupplier = {};
+  document.getElementById("search").value = "";
+  renderList();
+  updateCartBar();
+  showList();
+}
+
+function showCatalogEdit(){
+  switchCatalogTab(catalogTab);
+  showScreen("screen-catalog");
+}
+
+function switchCatalogTab(tab){
+  catalogTab = tab;
+  document.getElementById("tab-products").classList.toggle("active", tab === "products");
+  document.getElementById("tab-suppliers").classList.toggle("active", tab === "suppliers");
+  document.getElementById("addRowBtn").textContent = tab === "products" ? "+ Добавить товар" : "+ Добавить поставщика";
+  renderCatalogList();
+}
+
+function supplierOptionsHtml(selected){
+  return suppliers.map(s => `<option value="${s.name}" ${s.name===selected?"selected":""}>${s.name}</option>`).join("");
+}
+
+function renderCatalogList(){
+  const container = document.getElementById("catalogList");
+  container.innerHTML = "";
+  if(catalogTab === "products"){
+    catalog.forEach((p, idx) => {
+      const row = document.createElement("div");
+      row.className = "cat-row product-row";
+      row.onclick = () => openProductCard(idx);
+      const thumb = p.photo
+        ? `<img class="cat-thumb" src="${p.photo}">`
+        : `<div class="cat-thumb placeholder">📦</div>`;
+      row.innerHTML = `
+        ${thumb}
+        <div class="cat-row-text">
+          <div class="cat-row-name">${p.name}</div>
+          <div class="cat-row-sub">${p.supplier} · ${p.unit}</div>
+        </div>
+        <div class="chev">›</div>
+      `;
+      container.appendChild(row);
+    });
+  } else {
+    suppliers.forEach((s, idx) => {
+      const row = document.createElement("div");
+      row.className = "cat-row product-row";
+      row.onclick = () => openSupplierCard(idx);
+      const productCount = catalog.filter(p => p.supplier === s.name).length;
+      row.innerHTML = `
+        <div class="cat-thumb placeholder">🏪</div>
+        <div class="cat-row-text">
+          <div class="cat-row-name">${s.name}</div>
+          <div class="cat-row-sub">${contactOf(s)} · ${productCount} товар(ов)</div>
+        </div>
+        <div class="chev">›</div>
+      `;
+      container.appendChild(row);
+    });
+  }
+}
+
+function editProduct(idx, field, value){
+  catalog[idx][field] = value;
+  if(field === "supplier"){
+    const sup = suppliers.find(s => s.name === value);
+    if(sup) catalog[idx].contact = sup.contact;
+  }
+  renderList(document.getElementById("search").value);
+}
+
+function deleteProduct(idx){
+  catalog.splice(idx, 1);
+  renderCatalogList();
+  renderList(document.getElementById("search").value);
+}
+
+function addCatalogRow(){
+  if(catalogTab === "products"){
+    const defaultSupplier = suppliers[0] ? suppliers[0].name : "—";
+    catalog.push({name:"Новый товар", supplier:defaultSupplier, contact: suppliers[0] ? contactOf(suppliers[0]) : "—", unit:"кг", photo:null});
+    renderCatalogList();
+    openProductCard(catalog.length - 1);
+  } else {
+    suppliers.push({name:"Новый поставщик", phone:"", telegram:"", note:""});
+    renderCatalogList();
+    openSupplierCard(suppliers.length - 1);
+  }
+}
+
+function deleteSupplier(idx){
+  const name = suppliers[idx].name;
+  suppliers.splice(idx, 1);
+  catalog = catalog.filter(p => p.supplier !== name);
+  Object.keys(cart).forEach(k => { if(cart[k].supplier === name) delete cart[k]; });
+  renderCatalogList();
+  renderList(document.getElementById("search").value);
+  updateCartBar();
+}
+
+let editingSupplierIdx = null;
+
+function openSupplierCard(idx){
+  editingSupplierIdx = idx;
+  const s = suppliers[idx];
+  document.getElementById("supName").value = s.name;
+  document.getElementById("supPhone").value = s.phone || "";
+  document.getElementById("supTelegram").value = s.telegram || "";
+  renderSupplierProducts();
+  showScreen("screen-supplier-card");
+}
+
+function renderSupplierProducts(){
+  const s = suppliers[editingSupplierIdx];
+  const list = document.getElementById("supProductsList");
+  const products = catalog
+    .map((p, idx) => ({p, idx}))
+    .filter(x => x.p.supplier === s.name);
+  if(products.length === 0){
+    list.innerHTML = '<div class="empty-hint">У этого поставщика пока нет товаров</div>';
+  } else {
+    list.innerHTML = products.map(({p, idx}) => {
+      const thumb = p.photo ? `<img class="cat-thumb" src="${p.photo}">` : `<div class="cat-thumb placeholder">📦</div>`;
+      return `
+        <div class="cat-row product-row" onclick="openProductCardFromSupplier(${idx})">
+          ${thumb}
+          <div class="cat-row-text">
+            <div class="cat-row-name">${p.name}</div>
+            <div class="cat-row-sub">${p.unit}</div>
+          </div>
+          <div class="chev">›</div>
+        </div>`;
+    }).join("");
+  }
+}
+
+function openProductCardFromSupplier(idx){
+  openProductCard(idx);
+  // when saved, product card returns to catalog list — fine, user can go back to supplier via tabs
+}
+
+function addProductFromSupplierCard(){
+  const s = suppliers[editingSupplierIdx];
+  catalog.push({name:"Новый товар", supplier:s.name, contact:contactOf(s), unit:"кг", photo:null});
+  openProductCard(catalog.length - 1);
+}
+
+function saveSupplierCard(){
+  if(editingSupplierIdx === null) return;
+  const s = suppliers[editingSupplierIdx];
+  const oldName = s.name;
+  const newName = document.getElementById("supName").value.trim() || s.name;
+  s.name = newName;
+  s.phone = document.getElementById("supPhone").value.trim();
+  s.telegram = document.getElementById("supTelegram").value.trim();
+  const display = contactOf(s);
+  catalog.forEach(p => { if(p.supplier === oldName){ p.supplier = newName; p.contact = display; } });
+  showCatalogEdit();
+}
+
+function deleteSupplierCard(){
+  if(editingSupplierIdx === null) return;
+  deleteSupplier(editingSupplierIdx);
+  editingSupplierIdx = null;
+  showCatalogEdit();
+}
+
+function openProductCard(idx){
+  editingProductIdx = idx;
+  const p = catalog[idx];
+  cardPhotoData = p.photo || null;
+  document.getElementById("cardName").value = p.name;
+  document.getElementById("cardUnit").value = p.unit;
+  document.getElementById("cardSupplier").innerHTML = supplierOptionsHtml(p.supplier);
+  renderCardPhotoPreview();
+  showScreen("screen-product-card");
+}
+
+function renderCardPhotoPreview(){
+  const el = document.getElementById("cardPhotoPreview");
+  el.innerHTML = cardPhotoData ? `<img src="${cardPhotoData}">` : "Добавить фото";
+}
+
+function cardPhotoSelected(files){
+  if(!files || !files.length) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    cardPhotoData = e.target.result;
+    renderCardPhotoPreview();
+  };
+  reader.readAsDataURL(files[0]);
+}
+
+function saveProductCard(){
+  if(editingProductIdx === null) return;
+  const p = catalog[editingProductIdx];
+  p.name = document.getElementById("cardName").value.trim() || p.name;
+  p.unit = document.getElementById("cardUnit").value.trim() || p.unit;
+  const newSupplier = document.getElementById("cardSupplier").value;
+  p.supplier = newSupplier;
+  const sup = suppliers.find(s => s.name === newSupplier);
+  if(sup) p.contact = contactOf(sup);
+  p.photo = cardPhotoData;
+  showCatalogEdit();
+}
+
+function deleteProductCard(){
+  if(editingProductIdx === null) return;
+  catalog.splice(editingProductIdx, 1);
+  editingProductIdx = null;
+  showCatalogEdit();
+  renderList(document.getElementById("search").value);
+}
+
+renderList();
+</script>
+</body>
+</html>
