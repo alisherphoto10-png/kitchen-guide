@@ -276,19 +276,27 @@ def _product_from_body(body: dict) -> dict:
         "supplier": body["supplier"].strip(),
         "category": (body.get("category") or "").strip() or None,
         "price": _parse_price(body.get("price")),
+        "comment": (body.get("comment") or "").strip() or None,
         "photo": body.get("photo") or None,
     }
 
 
-def _supplier_from_body(body: dict, note: str = "") -> dict:
+def _supplier_from_body(body: dict) -> dict:
     if not body.get("name", "").strip():
         raise web.HTTPBadRequest(text="Название поставщика обязательно")
     return {
         "name": body["name"].strip(),
         "phone": body.get("phone", "").strip(),
         "telegram": body.get("telegram", "").strip(),
-        "note": note,
+        # "note" исторически хранит и то, что руками ввёл пользователь, и то,
+        # что пришло при переносе из xlsx (например "Группа") — раньше это
+        # поле молча отбрасывалось при create/update (см. update_supplier
+        # ниже), из-за чего комментарий в форме никогда фактически не
+        # сохранялся. Теперь читаем его прямо из тела запроса, как и всё
+        # остальное.
+        "note": (body.get("note") or "").strip(),
         "chat_id": _parse_chat_id(body.get("chat_id")),
+        "photo": body.get("photo") or None,
     }
 
 
@@ -350,7 +358,7 @@ async def update_supplier(request: web.Request) -> web.Response:
         if not (0 <= idx < len(catalog["suppliers"])):
             raise web.HTTPNotFound()
         old = catalog["suppliers"][idx]
-        updated = _supplier_from_body(body, note=old.get("note", ""))
+        updated = _supplier_from_body(body)
         catalog["suppliers"][idx] = updated
         if updated["name"] != old["name"]:
             for p in catalog["products"]:
@@ -517,7 +525,12 @@ async def on_cleanup(app: web.Application) -> None:
 
 
 def create_app() -> web.Application:
-    app = web.Application()
+    # Фото товара/логотип поставщика приходят как base64 в JSON-теле запроса —
+    # аиohttp по умолчанию режет тело запроса на 1 МБ, чего не хватит даже на
+    # одну не пережатую фотографию с телефона. Фронтенд уже сжимает картинку
+    # перед отправкой (см. compressImageFile в index.html), но лимит всё равно
+    # поднимаем — как страховку, а не как единственную защиту.
+    app = web.Application(client_max_size=8 * 1024 * 1024)
     app.add_routes(routes)
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
