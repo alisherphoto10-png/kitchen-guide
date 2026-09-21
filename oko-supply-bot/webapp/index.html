@@ -341,6 +341,7 @@ table.datatable tbody tr:hover{background:#fafbfa;}
 .m-send-row .st{width:20px;height:20px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;}
 .m-send-row .st.done{background:var(--cp-accent);}
 .m-send-row .st.pending{border:2px solid var(--cp-border);}
+.m-send-row .st.error{background:var(--cp-danger);color:#fff;font-size:12px;}
 
 .m-done-hero{text-align:center;padding:30px 18px 10px;}
 .m-done-hero .circle{width:60px;height:60px;border-radius:50%;background:var(--cp-accent);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
@@ -447,14 +448,13 @@ table.datatable tbody tr:hover{background:#fafbfa;}
               </select>
               <select id="catSort" onchange="renderCatalogTable()">
                 <option value="name">Сортировка: по названию</option>
-                <option value="price">Сортировка: по цене</option>
                 <option value="supplier">Сортировка: по поставщику</option>
               </select>
             </div>
             <div class="card">
               <table class="datatable">
                 <thead><tr>
-                  <th>Товар</th><th>Поставщик</th><th>Ед. изм.</th><th>Цена</th><th>Статус</th><th style="width:120px;">В заказе</th>
+                  <th>Товар</th><th>Поставщик</th><th>Ед. изм.</th><th>Статус</th><th style="width:120px;">В заказе</th>
                 </tr></thead>
                 <tbody id="catalogTableBody"></tbody>
               </table>
@@ -482,7 +482,7 @@ table.datatable tbody tr:hover{background:#fafbfa;}
         </div>
         <div class="card">
           <table class="datatable">
-            <thead><tr><th>Товар</th><th>Категория</th><th>Поставщик</th><th>Ед. изм.</th><th>Цена</th><th style="width:90px;">Действия</th></tr></thead>
+            <thead><tr><th>Товар</th><th>Поставщик</th><th>Ед. изм.</th><th style="width:90px;">Действия</th></tr></thead>
             <tbody id="catalogMgmtBody"></tbody>
           </table>
         </div>
@@ -549,13 +549,14 @@ table.datatable tbody tr:hover{background:#fafbfa;}
         <div class="card settings-card" style="max-width:560px;">
           <div class="kv-row">
             <div class="k">Автоответчик</div>
-            <button class="toggle on" id="autoreplyToggle" onclick="this.classList.toggle('on')"><span class="knob"></span></button>
+            <button class="toggle" id="autoreplyToggle" onclick="toggleAutoresponder()"><span class="knob"></span></button>
           </div>
           <div class="field" style="margin-top:14px;">
             <label>Текст ответа</label>
-            <textarea rows="3">Алишер сейчас занят, ответит как освободится 🙏</textarea>
+            <textarea id="autoreplyText" rows="3"></textarea>
           </div>
-          <div class="d" style="margin:0;">Без ИИ-подстановки — просто фиксированный текст. Как только вы заходите в сеть и отвечаете сами, автоответчик для этого диалога отключается.</div>
+          <div class="d" style="margin:8px 0 12px;">Без ИИ-подстановки — просто фиксированный текст. Как только вы заходите в сеть и отвечаете сами, автоответчик для этого диалога отключается.</div>
+          <button class="btn btn-primary" onclick="saveAutoresponderText()">Сохранить текст</button>
         </div>
       </section>
 
@@ -573,9 +574,9 @@ table.datatable tbody tr:hover{background:#fafbfa;}
           <div class="card settings-card">
             <h4>Telegram-аккаунт (userbot)</h4>
             <div class="d">Заказы уходят с личного аккаунта, а не от бота</div>
-            <div class="kv-row"><div class="k">Статус сессии</div><div class="v"><span class="badge bad"><span class="dot"></span>Не авторизован</span></div></div>
-            <div class="kv-row"><div class="k">Номер телефона</div><div class="v">+998 •• ••• •• ••</div></div>
-            <button class="btn btn-secondary btn-block" style="margin-top:10px;" onclick="showToast('Демо: здесь будет запрос кода подтверждения Telegram')">Войти в Telegram</button>
+            <div class="kv-row"><div class="k">Статус сессии</div><div class="v" id="tgStatusBadge"><span class="badge neutral"><span class="dot"></span>Проверяю…</span></div></div>
+            <div class="kv-row"><div class="k">Аккаунт</div><div class="v" id="tgStatusName">—</div></div>
+            <button class="btn btn-secondary btn-block" style="margin-top:10px;" onclick="checkTelegramStatus()">Проверить соединение заново</button>
           </div>
           <div class="card settings-card">
             <h4>Ссылка WebApp</h4>
@@ -618,7 +619,7 @@ table.datatable tbody tr:hover{background:#fafbfa;}
       <div class="nums">
         <div><div class="n" id="mStatCount">0</div><div class="l">позиций</div></div>
         <div><div class="n" id="mStatSuppliers">0</div><div class="l">поставщика</div></div>
-        <div><div class="n" id="mStatSum">0 сум</div><div class="l">сумма (пример)</div></div>
+        <div><div class="n" id="mStatSum">0</div><div class="l">без chat_id</div></div>
       </div>
       <button class="btn" onclick="goToOrderFromHome()">Перейти к заказу</button>
     </div>
@@ -628,12 +629,6 @@ table.datatable tbody tr:hover{background:#fafbfa;}
       <div class="m-quick-btn" onclick="openProductModal(null)"><div class="ic">➕</div>Добавить товар</div>
       <div class="m-quick-btn" onclick="openSupplierModal(null)"><div class="ic">🏪</div>Добавить поставщика</div>
       <div class="m-quick-btn" onclick="showMscreen('m-more')"><div class="ic">⚙️</div>Настройки Telegram</div>
-    </div>
-    <div class="m-section-label">Последний заказ</div>
-    <div class="m-last-order">
-      <div class="row1"><div class="num">№1247</div><span class="badge ok"><span class="dot"></span>Отправлен</span></div>
-      <div class="meta">15 сентября, 14:32 · 3 поставщика · 18 позиций</div>
-      <a onclick="showMscreen2('m-suppliers')">Открыть историю →</a>
     </div>
   </div>
 
@@ -713,12 +708,10 @@ table.datatable tbody tr:hover{background:#fafbfa;}
     </div>
     <div class="m-more-row" onclick="showMscreen2('m-catalog')">📦 Каталог товаров</div>
     <div class="m-more-row" onclick="showMscreen2('m-suppliers')">🏪 Поставщики</div>
-    <div class="m-more-row">🕒 История заказов</div>
-    <div class="m-more-row">📝 Шаблоны сообщений</div>
-    <div class="m-more-row">🤖 Автоответчик</div>
-    <div class="m-more-row">🔌 Настройки Telegram</div>
-    <div class="m-more-row">⚙️ Настройки</div>
-    <div class="m-more-row danger">↩ Выйти</div>
+    <div class="m-more-row" onclick="showToast('История заказов пока не сохраняется на сервере')">🕒 История заказов</div>
+    <div class="m-more-row" onclick="showToast('Заказ на {дата}: {товары} {комментарий} Спасибо!')">📝 Шаблоны сообщений</div>
+    <div class="m-more-row" onclick="openModal('modalAutoreplyMobile')">🤖 Автоответчик</div>
+    <div class="m-more-row" onclick="checkTelegramStatus()">🔌 Настройки Telegram</div>
   </div>
 
   <nav class="m-tabbar">
@@ -750,14 +743,9 @@ table.datatable tbody tr:hover{background:#fafbfa;}
       <div class="photo-upload" id="productPhotoPreview">Добавить фото</div>
       <div class="field"><label>Название товара *</label><input id="pf_name" placeholder="Например: Молоко 3,2%"></div>
       <div class="field-row">
-        <div class="field"><label>Категория *</label><select id="pf_category"></select></div>
         <div class="field"><label>Поставщик *</label><select id="pf_supplier"></select></div>
-      </div>
-      <div class="field-row">
         <div class="field"><label>Единица измерения *</label><select id="pf_unit"><option>кг</option><option>шт</option><option>л</option></select></div>
-        <div class="field"><label>Цена (пример, сум)</label><input id="pf_price" type="number" placeholder="0"></div>
       </div>
-      <div class="field"><label>Комментарий</label><textarea id="pf_comment" placeholder="Например: только охлаждённое"></textarea></div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-secondary" onclick="closeModal('modalProduct')">Отмена</button>
@@ -775,13 +763,52 @@ table.datatable tbody tr:hover{background:#fafbfa;}
       <div class="field"><label>Контактное лицо</label><input id="sf_contact" placeholder="Иван Петров"></div>
       <div class="field-row">
         <div class="field"><label>Телефон</label><input id="sf_phone" placeholder="+998 90 000 00 00"></div>
-        <div class="field"><label>Telegram</label><input id="sf_telegram" placeholder="@username или chat_id"></div>
+        <div class="field"><label>Telegram (@username)</label><input id="sf_telegram" placeholder="@username"></div>
+      </div>
+      <div class="field">
+        <label>Chat ID (нужен для реальной отправки заказов)</label>
+        <div style="display:flex;gap:8px;">
+          <input id="sf_chatid" placeholder="Например: 515899256" style="flex:1;">
+          <button type="button" class="btn btn-secondary" style="white-space:nowrap;" onclick="openChatPickerModal()">Выбрать из чатов</button>
+        </div>
+        <div class="d" style="margin:4px 0 0;">Пока chat_id не задан — заказы этому поставщику не уходят, задание просто ждёт в очереди.</div>
       </div>
       <div class="field"><label>Комментарий</label><textarea id="sf_comment" placeholder="Дополнительная информация о поставщике..."></textarea></div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-secondary" onclick="closeModal('modalSupplier')">Отмена</button>
       <button class="btn btn-primary" onclick="saveSupplierModal()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalChatPicker">
+  <div class="modal-box">
+    <div class="modal-head"><h3>Выбрать чат</h3><span class="x" onclick="closeModal('modalChatPicker')">✕</span></div>
+    <div class="modal-body">
+      <div class="field"><input id="chatPickerSearch" placeholder="Поиск по названию чата..." oninput="renderChatPickerList(this.value)"></div>
+      <div id="chatPickerList" style="max-height:340px;overflow:auto;"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalAutoreplyMobile">
+  <div class="modal-box">
+    <div class="modal-head"><h3>Автоответчик</h3><span class="x" onclick="closeModal('modalAutoreplyMobile')">✕</span></div>
+    <div class="modal-body">
+      <div class="kv-row">
+        <div class="k">Автоответчик</div>
+        <button class="toggle" id="autoreplyToggleM" onclick="toggleAutoresponder()"><span class="knob"></span></button>
+      </div>
+      <div class="field" style="margin-top:14px;">
+        <label>Текст ответа</label>
+        <textarea id="autoreplyTextM" rows="3"></textarea>
+      </div>
+      <div class="d" style="margin:8px 0 0;">Без ИИ-подстановки — просто фиксированный текст. Как только вы заходите в сеть и отвечаете сами, автоответчик для этого диалога отключается.</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="closeModal('modalAutoreplyMobile')">Закрыть</button>
+      <button class="btn btn-primary" onclick="saveAutoresponderText()">Сохранить текст</button>
     </div>
   </div>
 </div>
@@ -796,64 +823,36 @@ const AVATAR_COLORS = ['#F59E0B','#3B82F6','#EF4444','#10B981','#8B5CF6','#EC489
 const CATEGORIES = ['Молочная продукция','Мясо','Рыба и морепродукты','Овощи и фрукты','Бакалея','Соусы','Прочее'];
 const CATEGORY_ICON = {'Молочная продукция':'🥛','Мясо':'🥩','Рыба и морепродукты':'🐟','Овощи и фрукты':'🥬','Бакалея':'🌾','Соусы':'🧂','Прочее':'📦'};
 
-let suppliers = [
-  {id:'novagrin', name:'Новагрин', phone:'', telegram:'', comment:'', connected:false},
-  {id:'newteam', name:'New Team', phone:'+998 97 115 15 13', telegram:'', comment:'', connected:true},
-  {id:'allmakon', name:'Allmakon', phone:'+998 90 927 15 68', telegram:'', comment:'', connected:false},
-  {id:'barra', name:'Barra group pro', phone:'+998 91 003 09 00', telegram:'', comment:'', connected:false},
-  {id:'kazbif', name:'Казбиф', phone:'+998 91 785 03 00', telegram:'', comment:'', connected:false},
-  {id:'parkent', name:'Parkent gold chicken', phone:'+998 97 134 00 43', telegram:'', comment:'', connected:false},
-  {id:'afsona', name:'Afsona makon', phone:'+998 94 777 09 41', telegram:'', comment:'', connected:true},
-  {id:'simoff', name:'Simoff', phone:'+998 94 711 91 11', telegram:'', comment:'', connected:false},
-  {id:'golden', name:'Golden fish group', phone:'+998 95 151 68 00', telegram:'', comment:'', connected:false},
-  {id:'lamaree', name:'La maree', phone:'+998 90 949 00 49', telegram:'', comment:'', connected:true},
-  {id:'ribnoe', name:'Рыбное местечко', phone:'', telegram:'Группа', comment:'', connected:true},
-  {id:'inventis', name:'Инвентис', phone:'', telegram:'Группа', comment:'', connected:false},
-  {id:'juicy', name:'Juicy garden', phone:'', telegram:'Группа', comment:'', connected:false},
-  {id:'ecocoal', name:'Ecocoal energy', phone:'+998 97 759 71 88', telegram:'', comment:'', connected:false},
-  {id:'tbd', name:'Уточняется', phone:'', telegram:'', comment:'Поставщик не указан в исходном списке', connected:false},
-];
+/* Реальных цен и категорий в бэкенде нет (см. data/catalog.json — только
+   name/unit/supplier/photo у товара, name/phone/telegram/note/chat_id у
+   поставщика) — это НЕ демо-заглушки, каталог грузится с сервера ниже
+   (loadRealCatalog). CATEGORIES очищается после первой загрузки (см. init) —
+   чипы категорий сворачиваются к одному "Все", чтобы не показывать нерабочий
+   фильтр по категориям, которых в реальных данных не существует. */
+let suppliers = [];
+let catalog = [];
+const ORDER_HISTORY = [];
 
-let catalog = [
-  {id:1,name:'Романо',category:'Овощи и фрукты',supplierId:'novagrin',unit:'кг',price:28000},
-  {id:2,name:'Шпинат',category:'Овощи и фрукты',supplierId:'novagrin',unit:'кг',price:32000},
-  {id:3,name:'Греческий йогурт',category:'Молочная продукция',supplierId:'newteam',unit:'кг',price:45000},
-  {id:4,name:'Моцарелла для пиццы',category:'Молочная продукция',supplierId:'newteam',unit:'кг',price:68000},
-  {id:5,name:'Сметана',category:'Молочная продукция',supplierId:'newteam',unit:'кг',price:30000},
-  {id:6,name:'Сыр лабне',category:'Молочная продукция',supplierId:'newteam',unit:'кг',price:75000},
-  {id:7,name:'Картофель фри с кожурой',category:'Бакалея',supplierId:'allmakon',unit:'кг',price:22000},
-  {id:8,name:'Картофель фри решётки',category:'Бакалея',supplierId:'allmakon',unit:'кг',price:22000},
-  {id:9,name:'Кетчуп Heinz',category:'Соусы',supplierId:'allmakon',unit:'шт',price:35000},
-  {id:10,name:'Рибай Мираторг',category:'Мясо',supplierId:'barra',unit:'кг',price:320000},
-  {id:11,name:'Фарш Рибай Мираторг',category:'Мясо',supplierId:'barra',unit:'кг',price:210000},
-  {id:12,name:'Стейк мачете (скёрт)',category:'Мясо',supplierId:'kazbif',unit:'кг',price:180000},
-  {id:13,name:'Куриные яйца',category:'Прочее',supplierId:'parkent',unit:'шт',price:1300},
-  {id:14,name:'Сливки President',category:'Молочная продукция',supplierId:'afsona',unit:'л',price:42000},
-  {id:15,name:'Молоко Nestle 3,2%',category:'Молочная продукция',supplierId:'afsona',unit:'л',price:18000},
-  {id:16,name:'Сыр страчателла',category:'Молочная продукция',supplierId:'simoff',unit:'кг',price:95000},
-  {id:17,name:'Форель филе местная',category:'Рыба и морепродукты',supplierId:'golden',unit:'кг',price:85000},
-  {id:18,name:'Сибас охлаждённый',category:'Рыба и морепродукты',supplierId:'lamaree',unit:'кг',price:130000},
-  {id:19,name:'Тунец свежезамороженный',category:'Рыба и морепродукты',supplierId:'lamaree',unit:'кг',price:145000},
-  {id:20,name:'Креветки',category:'Рыба и морепродукты',supplierId:'ribnoe',unit:'кг',price:160000},
-  {id:21,name:'Мидии',category:'Рыба и морепродукты',supplierId:'ribnoe',unit:'кг',price:90000},
-  {id:22,name:'Кольца кальмара',category:'Рыба и морепродукты',supplierId:'ribnoe',unit:'кг',price:110000},
-  {id:23,name:'Угорь с соусом',category:'Рыба и морепродукты',supplierId:'ribnoe',unit:'кг',price:175000},
-  {id:24,name:'Бон филе',category:'Мясо',supplierId:'inventis',unit:'кг',price:95000},
-  {id:25,name:'Куриные бёдра чищенные',category:'Мясо',supplierId:'inventis',unit:'кг',price:55000},
-  {id:26,name:'Говяжьи рёбра',category:'Мясо',supplierId:'inventis',unit:'кг',price:120000},
-  {id:27,name:'Авокадо',category:'Овощи и фрукты',supplierId:'juicy',unit:'шт',price:15000},
-  {id:28,name:'Ягоды',category:'Овощи и фрукты',supplierId:'juicy',unit:'кг',price:60000},
-  {id:29,name:'Уголь брикет',category:'Прочее',supplierId:'ecocoal',unit:'кг',price:8000},
-  {id:30,name:'Шоколад тёмный 54%',category:'Бакалея',supplierId:'tbd',unit:'кг',price:65000},
-  {id:31,name:'Зефир',category:'Бакалея',supplierId:'tbd',unit:'кг',price:40000},
-];
-
-const ORDER_HISTORY = [
-  {num:1247,date:'15.09.2024, 14:32',suppliers:3,items:18,sum:1780000,status:'ok'},
-  {num:1246,date:'12.09.2024, 10:21',suppliers:4,items:22,sum:2450000,status:'ok'},
-  {num:1245,date:'08.09.2024, 16:18',suppliers:2,items:9,sum:940000,status:'error'},
-  {num:1244,date:'01.09.2024, 11:07',suppliers:3,items:15,sum:1310000,status:'ok'},
-];
+async function loadRealCatalog(){
+  const res = await fetch('/api/catalog');
+  if(!res.ok) throw new Error('Не удалось загрузить каталог: ' + await res.text());
+  const data = await res.json();
+  suppliers = data.suppliers.map((s, idx) => ({
+    id: 's'+idx, _idx: idx,
+    name: s.name, phone: s.phone||'', telegram: s.telegram||'',
+    comment: s.note||'', chat_id: s.chat_id!=null?s.chat_id:null,
+    connected: s.chat_id!=null,
+  }));
+  catalog = data.products.map((p, idx) => {
+    const sup = suppliers.find(s => s.name === p.supplier);
+    return {
+      id: idx, _idx: idx,
+      name: p.name, category:'', unit: p.unit||'', price:0,
+      supplierId: sup ? sup.id : null, _supplierName: p.supplier,
+      photo: p.photo || null,
+    };
+  });
+}
 
 let cart = {};
 let commentsBySupplier = {};
@@ -865,7 +864,14 @@ let editingSupplierId = null;
 /* ---------------------------------------------------------------------
    HELPERS
    --------------------------------------------------------------------- */
-function money(n){ return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ") + ' сум'; }
+// Реальных цен в каталоге нет (см. loadRealCatalog) — money(0/null) отдаёт
+// пустую строку вместо "0 сум" по всему интерфейсу, а не переписывает каждое
+// место, где цена показывается.
+function money(n){ if(!n) return ''; return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ") + ' сум'; }
+// "5 кг" (без цены) или "5 кг · 320 000 сум" (когда цена известна) — без
+// висящего " · " в конце, когда её нет.
+function qtyUnitLine(qty, unit, price){ const m = money(qty*(price||0)); return m ? `${qty} ${unit} · ${m}` : `${qty} ${unit}`; }
+function countSumLine(count, sum){ const m = money(sum); return m ? `${count} позиций · ${m}` : `${count} позиций`; }
 function supplierById(id){ return suppliers.find(s => s.id === id); }
 function supplierName(id){ const s = supplierById(id); return s ? s.name : '—'; }
 function hashColor(str){ let h=0; for(let i=0;i<str.length;i++) h = str.charCodeAt(i) + ((h<<5)-h); return AVATAR_COLORS[Math.abs(h)%AVATAR_COLORS.length]; }
@@ -953,17 +959,13 @@ function populateSupplierSelects(){
   filterSel.innerHTML = '<option value="">Все поставщики</option>' + opts;
   document.getElementById('pf_supplier').innerHTML = opts;
 }
-function populateCategorySelect(){
-  document.getElementById('pf_category').innerHTML = CATEGORIES.map(c => `<option>${c}</option>`).join('');
-}
 
 function renderCatalogTable(){
   const tbody = document.getElementById('catalogTableBody');
   const rows = filteredCatalog();
-  if(rows.length === 0){ tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Ничего не найдено</td></tr>'; return; }
+  if(rows.length === 0){ tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Ничего не найдено</td></tr>'; return; }
   let sortKey = document.getElementById('catSort').value;
   const sorted = [...rows].sort((a,b) => {
-    if(sortKey === 'price') return a.price - b.price;
     if(sortKey === 'supplier') return supplierName(a.supplierId).localeCompare(supplierName(b.supplierId));
     return a.name.localeCompare(b.name);
   });
@@ -974,10 +976,9 @@ function renderCatalogTable(){
       ? `<div class="stepper-inline"><button onclick="changeQty(${p.id},-1)">−</button><div class="q">${qty}</div><button onclick="changeQty(${p.id},1)">+</button></div>`
       : `<button class="add-cell-btn" onclick="changeQty(${p.id},1)">+</button>`;
     return `<tr>
-      <td><div class="prod-cell"><div class="prod-thumb">${CATEGORY_ICON[p.category]||'📦'}</div><div><div class="prod-name">${p.name}</div><div class="prod-sub">${p.category}</div></div></div></td>
+      <td><div class="prod-cell"><div class="prod-thumb">📦</div><div><div class="prod-name">${p.name}</div></div></div></td>
       <td><div class="sup-cell">${avatarHtml(sup?sup.name:'?',24)}${sup?sup.name:'—'}</div></td>
       <td>${p.unit}</td>
-      <td>${money(p.price)}</td>
       <td>${supplierStatusBadge(sup||{})}</td>
       <td>${stepper}</td>
     </tr>`;
@@ -1027,21 +1028,20 @@ function renderOrderPanel(){
     totalSum += supSum; totalQty += items.reduce((a,i)=>a+i.qty,0);
     const lines = items.map(i => `
       <div class="sup-line">
-        <div class="ln">${i.name}<div class="lp">${i.qty} ${i.unit} · ${money(i.qty*i.price)}</div></div>
+        <div class="ln">${i.name}<div class="lp">${qtyUnitLine(i.qty, i.unit, i.price)}</div></div>
         <div class="actions-mini">
           <button onclick="changeQty(${i.id},-1)">−</button>
           <button onclick="changeQty(${i.id},1)">+</button>
         </div>
       </div>`).join('');
     return `<div class="sup-group">
-      <div class="sgh">${avatarHtml(sup.name,26)}<div class="sgi"><div class="n">${sup.name}</div><div class="c">${items.length} позиций · ${money(supSum)}</div></div></div>
+      <div class="sgh">${avatarHtml(sup.name,26)}<div class="sgi"><div class="n">${sup.name}</div><div class="c">${countSumLine(items.length, supSum)}</div></div></div>
       ${lines}
     </div>`;
   }).join('');
   body.innerHTML = groupsHtml + `
-    <div class="op-total"><div><div class="lbl">Итого к заказу (пример)</div><div class="val">${money(totalSum)}</div></div><div class="lbl">${totalQty} поз. · ${supIds.length} пост.</div></div>
+    <div class="op-total"><div class="lbl">${totalQty} поз. · ${supIds.length} пост.</div></div>
     <button class="btn btn-primary btn-block" onclick="switchPage('review')">Перейти к проверке заказа →</button>
-    <button class="btn btn-secondary btn-block" onclick="showToast('Черновик сохранён (демо)')">Сохранить черновик</button>
   `;
 }
 
@@ -1080,12 +1080,11 @@ function renderReviewPage(){
   cont.innerHTML = supIds.map(sid => {
     const sup = supplierById(sid);
     const items = groups[sid];
-    const supSum = items.reduce((a,i)=>a+i.qty*i.price,0);
-    const lines = items.map(i => `<div class="review-line"><div>${i.name}</div><div>${i.qty} ${i.unit} · ${money(i.qty*i.price)}</div></div>`).join('');
+    const lines = items.map(i => `<div class="review-line"><div>${i.name}</div><div>${i.qty} ${i.unit}</div></div>`).join('');
     const comment = commentsBySupplier[sid] || '';
     const d = dateBySupplier[sid];
     return `<div class="card review-sup-card">
-      <div class="rsh"><div class="n">${sup.name}</div><div class="chip">${money(supSum)}</div></div>
+      <div class="rsh"><div class="n">${sup.name}</div>${supplierStatusBadge(sup)}</div>
       ${lines}
       <div class="review-foot-row">
         <div class="field"><label>Дата поставки</label><input type="date" value="${d}" onchange="dateBySupplier['${sid}']=this.value;renderReviewPage()"></div>
@@ -1100,12 +1099,54 @@ document.addEventListener('click', function(e){}, false);
 const origSwitchPage = switchPage;
 switchPage = function(id){ origSwitchPage(id); if(id==='review') renderReviewPage(); };
 
-function sendOrderDesktop(){
-  showToast('Заказ отправлен всем поставщикам (демо)');
+// Собирает { items, supplierMeta } в том виде, который реально ждёт
+// POST /api/order (webapp_server.py): items — [{product: <имя товара>, qty}],
+// supplierMeta — по НАЗВАНИЮ поставщика (не по внутреннему id этой страницы).
+function buildOrderPayload(){
   const groups = groupCartBySupplier();
-  ORDER_HISTORY.unshift({num:1248+Math.floor(Math.random()*10),date:'сегодня',suppliers:Object.keys(groups).length,items:cartItemsWithData().reduce((a,i)=>a+i.qty,0),sum:cartItemsWithData().reduce((a,i)=>a+i.qty*i.price,0),status:'ok'});
-  clearOrder();
-  switchPage('history');
+  const items = cartItemsWithData().map(i => ({product: i.name, qty: i.qty}));
+  const supplierMeta = {};
+  Object.keys(groups).forEach(sid => {
+    const sup = supplierById(sid);
+    supplierMeta[sup.name] = {delivery_date: dateBySupplier[sid], comment: commentsBySupplier[sid] || ''};
+  });
+  return {items, supplierMeta};
+}
+
+const SEND_STATUS_LABEL = {sent: '✅ Отправлено', skipped: '⏳ Не отправлено', error: '❌ Ошибка отправки'};
+
+function renderSendResults(results, containerId){
+  const cont = document.getElementById(containerId);
+  cont.innerHTML = results.map(r => `
+    <div class="card review-sup-card">
+      <div class="rsh"><div class="n">${r.supplier}</div><span class="chip">${SEND_STATUS_LABEL[r.status] || r.status}</span></div>
+      ${r.reason ? `<div class="d" style="color:var(--cp-danger);margin:0;">${r.reason}</div>` : ''}
+    </div>`).join('') + '<button class="btn btn-primary" style="margin-top:6px;" onclick="switchPage(\'order\')">Новый заказ →</button>';
+}
+
+async function sendOrderDesktop(){
+  const payload = buildOrderPayload();
+  if(Object.keys(payload.supplierMeta).length === 0) return;
+  const btn = document.activeElement;
+  if(btn && btn.tagName === 'BUTTON'){ btn.disabled = true; btn.textContent = 'Отправляю…'; }
+  let res;
+  try{
+    res = await fetch('/api/order', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+  } catch(err){
+    showToast('Не удалось отправить: ' + err.message);
+    if(btn){ btn.disabled = false; btn.textContent = 'Отправить заказ поставщикам →'; }
+    return;
+  }
+  if(!res.ok){
+    showToast('Не удалось отправить: ' + await res.text());
+    if(btn){ btn.disabled = false; btn.textContent = 'Отправить заказ поставщикам →'; }
+    return;
+  }
+  const data = await res.json();
+  cart = {}; commentsBySupplier = {}; dateBySupplier = {};
+  renderCatalogTable(); renderOrderPanel(); renderMobileList(); renderMobileOrder(); updateHomeStats();
+  renderSendResults(data.results, 'reviewCols');
+  if(btn){ btn.disabled = false; btn.textContent = 'Отправить заказ поставщикам →'; }
 }
 
 /* ---------------------------------------------------------------------
@@ -1116,11 +1157,9 @@ function renderCatalogMgmt(){
   tbody.innerHTML = catalog.map(p => {
     const sup = supplierById(p.supplierId);
     return `<tr>
-      <td><div class="prod-cell"><div class="prod-thumb">${CATEGORY_ICON[p.category]||'📦'}</div><div class="prod-name">${p.name}</div></div></td>
-      <td><span class="chip">${p.category}</span></td>
+      <td><div class="prod-cell"><div class="prod-thumb">📦</div><div class="prod-name">${p.name}</div></div></td>
       <td><div class="sup-cell">${avatarHtml(sup?sup.name:'?',22)}${sup?sup.name:'—'}</div></td>
       <td>${p.unit}</td>
-      <td>${money(p.price)}</td>
       <td>
         <button class="icon-btn" onclick="openProductModal(${p.id})" title="Редактировать">✎</button>
         <button class="icon-btn" onclick="deleteProduct(${p.id})" title="Удалить">🗑</button>
@@ -1128,10 +1167,15 @@ function renderCatalogMgmt(){
     </tr>`;
   }).join('');
 }
-function deleteProduct(id){
-  catalog = catalog.filter(p => p.id !== id);
+async function deleteProduct(id){
+  const p = catalog.find(x => x.id === id);
+  if(!p) return;
+  if(!confirm(`Удалить товар «${p.name}»?`)) return;
+  const res = await fetch(`/api/catalog/products/${p._idx}`, {method:'DELETE'});
+  if(!res.ok){ showToast('Не удалось удалить: ' + await res.text()); return; }
   delete cart[id];
-  renderCatalogMgmt(); renderCatalogTable(); renderOrderPanel(); renderMobileList();
+  await reloadAndRerenderAll();
+  showToast('Товар удалён');
 }
 
 /* ---------------------------------------------------------------------
@@ -1155,21 +1199,24 @@ function renderSuppliersTable(){
   }).join('');
   renderMobileSuppliers();
 }
-function deleteSupplier(id){
-  suppliers = suppliers.filter(s => s.id !== id);
-  catalog = catalog.filter(p => p.supplierId !== id);
-  renderSuppliersTable(); renderCatalogTable(); renderCatalogMgmt(); renderOrderPanel(); renderMobileList();
+async function deleteSupplier(id){
+  const s = supplierById(id);
+  if(!s) return;
+  if(!confirm(`Удалить поставщика «${s.name}» вместе со всеми его товарами?`)) return;
+  const res = await fetch(`/api/catalog/suppliers/${s._idx}`, {method:'DELETE'});
+  if(!res.ok){ showToast('Не удалось удалить: ' + await res.text()); return; }
+  await reloadAndRerenderAll();
+  showToast('Поставщик удалён');
 }
 
 /* ---------------------------------------------------------------------
-   DESKTOP: history page
+   DESKTOP: history page — бэкенд пока не хранит историю отправленных
+   заказов (нет соответствующего API/файла), поэтому здесь честно пусто,
+   а не выдуманные цифры.
    --------------------------------------------------------------------- */
 function renderHistoryTable(){
   const tbody = document.getElementById('historyTableBody');
-  tbody.innerHTML = ORDER_HISTORY.map(o => {
-    const badge = o.status === 'ok' ? '<span class="badge ok"><span class="dot"></span>Отправлен</span>' : '<span class="badge bad"><span class="dot"></span>Ошибка</span>';
-    return `<tr><td>№${o.num}</td><td>${o.date}</td><td>${o.suppliers}</td><td>${o.items}</td><td>${money(o.sum)}</td><td>${badge}</td></tr>`;
-  }).join('');
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="6">История заказов пока не сохраняется на сервере</td></tr>';
 }
 
 function renderSettingsStats(){
@@ -1183,36 +1230,44 @@ function renderSettingsStats(){
 function openModal(id){ document.getElementById(id).classList.add('active'); }
 function closeModal(id){ document.getElementById(id).classList.remove('active'); }
 
+async function reloadAndRerenderAll(){
+  await loadRealCatalog();
+  renderOrderPage(); renderCatalogMgmt(); renderSuppliersTable();
+  renderMobileList(); renderMobileOrder(); renderMobileSuppliers();
+  updateHomeStats(); renderSettingsStats();
+}
+
 function openProductModal(id){
-  populateCategorySelect(); populateSupplierSelects();
+  populateSupplierSelects();
   editingProductId = id;
-  const p = id ? catalog.find(x => x.id === id) : null;
+  // ВАЖНО: id — числовой индекс в каталоге, 0 (первый товар) — валидный id,
+  // но falsy — "id ? ... : null" ошибочно принял бы его за "новый товар" и
+  // открыл бы пустую форму поверх реального товара (при сохранении молча
+  // затёр бы его данными формы). Проверяем именно на null/undefined.
+  const p = (id !== null && id !== undefined) ? catalog.find(x => x.id === id) : null;
   document.getElementById('productModalTitle').textContent = p ? 'Редактировать товар' : 'Добавить товар';
   document.getElementById('pf_name').value = p ? p.name : '';
-  document.getElementById('pf_category').value = p ? p.category : CATEGORIES[0];
   document.getElementById('pf_supplier').value = p ? p.supplierId : (suppliers[0]?suppliers[0].id:'');
   document.getElementById('pf_unit').value = p ? p.unit : 'кг';
-  document.getElementById('pf_price').value = p ? p.price : '';
-  document.getElementById('pf_comment').value = '';
   openModal('modalProduct');
 }
-function saveProductModal(){
+async function saveProductModal(){
   const name = document.getElementById('pf_name').value.trim();
   if(!name){ showToast('Укажите название товара'); return; }
-  const data = {
-    name,
-    category: document.getElementById('pf_category').value,
-    supplierId: document.getElementById('pf_supplier').value,
-    unit: document.getElementById('pf_unit').value,
-    price: Number(document.getElementById('pf_price').value) || 0,
+  const supplierId = document.getElementById('pf_supplier').value;
+  const sup = supplierById(supplierId);
+  if(!sup){ showToast('Выберите поставщика'); return; }
+  const existing = editingProductId!=null ? catalog.find(p => p.id === editingProductId) : null;
+  const body = {
+    name, unit: document.getElementById('pf_unit').value,
+    supplier: sup.name,
+    photo: existing ? existing.photo : null,
   };
-  if(editingProductId){
-    Object.assign(catalog.find(p => p.id === editingProductId), data);
-  } else {
-    catalog.push({id: Date.now(), ...data});
-  }
+  const url = existing ? `/api/catalog/products/${existing._idx}` : '/api/catalog/products';
+  const res = await fetch(url, {method: existing?'PUT':'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  if(!res.ok){ showToast('Не удалось сохранить товар: ' + await res.text()); return; }
   closeModal('modalProduct');
-  renderCatalogTable(); renderCatalogMgmt(); renderOrderPanel(); renderMobileList();
+  await reloadAndRerenderAll();
   showToast('Товар сохранён');
 }
 
@@ -1224,25 +1279,27 @@ function openSupplierModal(id){
   document.getElementById('sf_contact').value = '';
   document.getElementById('sf_phone').value = s ? s.phone : '';
   document.getElementById('sf_telegram').value = s ? s.telegram : '';
+  document.getElementById('sf_chatid').value = s && s.chat_id!=null ? s.chat_id : '';
   document.getElementById('sf_comment').value = s ? (s.comment||'') : '';
   openModal('modalSupplier');
 }
-function saveSupplierModal(){
+async function saveSupplierModal(){
   const name = document.getElementById('sf_name').value.trim();
   if(!name){ showToast('Укажите название поставщика'); return; }
-  const data = {
+  const chatIdRaw = document.getElementById('sf_chatid').value.trim();
+  const body = {
     name,
     phone: document.getElementById('sf_phone').value.trim(),
     telegram: document.getElementById('sf_telegram').value.trim(),
-    comment: document.getElementById('sf_comment').value.trim(),
+    note: document.getElementById('sf_comment').value.trim(),
+    chat_id: chatIdRaw === '' ? null : chatIdRaw,
   };
-  if(editingSupplierId){
-    Object.assign(supplierById(editingSupplierId), data);
-  } else {
-    suppliers.push({id:'s'+Date.now(), connected:false, ...data});
-  }
+  const existing = editingSupplierId!=null ? supplierById(editingSupplierId) : null;
+  const url = existing ? `/api/catalog/suppliers/${existing._idx}` : '/api/catalog/suppliers';
+  const res = await fetch(url, {method: existing?'PUT':'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  if(!res.ok){ showToast('Не удалось сохранить поставщика: ' + await res.text()); return; }
   closeModal('modalSupplier');
-  renderSuppliersTable(); populateSupplierSelects();
+  await reloadAndRerenderAll();
   showToast('Поставщик сохранён');
 }
 
@@ -1285,7 +1342,7 @@ function renderMobileList(){
       : `<button class="m-stepper addbtn" onclick="changeQty(${p.id},1)">Добавить</button>`;
     return `<div class="m-item">
       <div class="m-item-left"><div class="m-item-thumb">${CATEGORY_ICON[p.category]||'📦'}</div>
-        <div><div class="m-item-name">${p.name}</div><div class="m-item-sub">${supplierName(p.supplierId)}</div><div class="m-item-price">${money(p.price)} / ${p.unit}</div></div>
+        <div><div class="m-item-name">${p.name}</div><div class="m-item-sub">${supplierName(p.supplierId)}</div><div class="m-item-price">${p.unit}</div></div>
       </div>
       ${stepper}
     </div>`;
@@ -1326,7 +1383,7 @@ function renderMobileOrder(){
     const supSum = items.reduce((a,i)=>a+i.qty*i.price,0);
     totalSum += supSum; totalQty += items.reduce((a,i)=>a+i.qty,0);
     const lines = items.map(i => `<div class="m-gline"><div>${i.name}<div class="m-item-sub">${i.qty} ${i.unit}</div></div><div class="m-stepper"><button onclick="changeQty(${i.id},-1)">−</button><div class="q">${i.qty}</div><button onclick="changeQty(${i.id},1)">+</button></div></div>`).join('');
-    return `<div class="m-group-card"><div class="m-group-head"><div class="n">${sup.name}</div><div class="c">${items.length} позиций · ${money(supSum)}</div></div>${lines}</div>`;
+    return `<div class="m-group-card"><div class="m-group-head"><div class="n">${sup.name}</div><div class="c">${countSumLine(items.length, supSum)}</div></div>${lines}</div>`;
   }).join('');
   totalEl.innerHTML = `<div class="l">Итого к заказу (пример)</div><div class="v">${money(totalSum)}</div>`;
   updateMobileCartBar();
@@ -1338,46 +1395,74 @@ function showReviewMobile(){
   wrap.innerHTML = Object.keys(groups).map(sid => {
     const sup = supplierById(sid);
     const items = groups[sid];
-    const supSum = items.reduce((a,i)=>a+i.qty*i.price,0);
     const d = dateBySupplier[sid];
-    const lines = items.map(i => `<div class="m-gline"><div>${i.name}</div><div>${i.qty} ${i.unit} · ${money(i.qty*i.price)}</div></div>`).join('');
-    return `<div class="m-group-card"><div class="m-group-head"><div class="n">${sup.name}</div><div class="c">${money(supSum)}</div></div>${lines}
+    const lines = items.map(i => `<div class="m-gline"><div>${i.name}</div><div>${i.qty} ${i.unit}</div></div>`).join('');
+    return `<div class="m-group-card"><div class="m-group-head"><div class="n">${sup.name}</div>${supplierStatusBadge(sup)}</div>${lines}
       <div class="m-date-row"><span>Дата поставки</span><input type="date" value="${d}" onchange="dateBySupplier['${sid}']=this.value"></div>
     </div>`;
   }).join('');
   showMscreen2('m-review');
 }
 
-function sendOrderMobile(){
-  showMscreen('m-sending');
+async function sendOrderMobile(){
+  const payload = buildOrderPayload();
   const groups = groupCartBySupplier();
   const supIds = Object.keys(groups);
+  if(supIds.length === 0) return;
+  showMscreen('m-sending');
   const listEl = document.getElementById('mSendList');
   listEl.innerHTML = supIds.map(sid => `<div class="m-send-row" id="send-${cssSafe(sid)}"><div class="st pending"></div><div>${supplierById(sid).name}</div></div>`).join('');
   document.getElementById('mSendingTitle').textContent = 'Заказ отправляется';
+
+  let res, data;
+  try{
+    res = await fetch('/api/order', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    if(!res.ok) throw new Error(await res.text());
+    data = await res.json();
+  } catch(err){
+    document.getElementById('mSendingTitle').textContent = 'Не удалось отправить';
+    listEl.innerHTML = `<div class="m-send-row"><div class="st"></div><div>${err.message}</div></div>`;
+    return;
+  }
+
+  // Реальные статусы уже известны — анимация просто раскрывает их по очереди
+  // (те же 500мс паузы, что и раньше), а не изображает мгновенный успех.
+  const byName = {};
+  data.results.forEach(r => byName[r.supplier] = r);
   let i = 0;
   const step = () => {
     if(i >= supIds.length){
-      setTimeout(() => finishSendMobile(groups), 400);
+      setTimeout(() => finishSendMobile(data.results), 400);
       return;
     }
-    const row = document.getElementById('send-'+cssSafe(supIds[i]));
-    row.querySelector('.st').className = 'st done';
-    row.querySelector('.st').innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="4"><path d="M20 6 9 17l-5-5"/></svg>';
+    const sid = supIds[i];
+    const sup = supplierById(sid);
+    const r = byName[sup.name] || {status:'error'};
+    const row = document.getElementById('send-'+cssSafe(sid));
+    const ok = r.status === 'sent';
+    row.querySelector('.st').className = 'st ' + (ok ? 'done' : 'error');
+    row.querySelector('.st').innerHTML = ok
+      ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="4"><path d="M20 6 9 17l-5-5"/></svg>'
+      : '✕';
     i++;
     setTimeout(step, 500);
   };
   setTimeout(step, 500);
 }
 
-function finishSendMobile(groups){
+function finishSendMobile(results){
   const sentList = document.getElementById('mSentList');
-  sentList.innerHTML = Object.keys(groups).map(sid => {
-    const sup = supplierById(sid);
-    const items = groups[sid];
-    return `<div class="m-item"><div class="m-item-left"><div class="m-item-thumb" style="background:var(--cp-accent-light);color:var(--cp-accent-dark);">✓</div><div><div class="m-item-name">${sup.name}</div><div class="m-item-sub">${items.length} позиций</div></div></div></div>`;
+  sentList.innerHTML = results.map(r => {
+    const ok = r.status === 'sent';
+    const icon = ok ? '✓' : '!';
+    const sub = ok ? 'отправлено' : (SEND_STATUS_LABEL[r.status]||r.status) + (r.reason ? ': ' + r.reason : '');
+    return `<div class="m-item"><div class="m-item-left"><div class="m-item-thumb" style="background:${ok?'var(--cp-accent-light)':'var(--cp-danger-light)'};color:${ok?'var(--cp-accent-dark)':'var(--cp-danger)'};">${icon}</div><div><div class="m-item-name">${r.supplier}</div><div class="m-item-sub">${sub}</div></div></div></div>`;
   }).join('');
-  ORDER_HISTORY.unshift({num:1248+Math.floor(Math.random()*10),date:'сегодня',suppliers:Object.keys(groups).length,items:cartItemsWithData().reduce((a,i)=>a+i.qty,0),sum:cartItemsWithData().reduce((a,i)=>a+i.qty*i.price,0),status:'ok'});
+  const allOk = results.every(r => r.status === 'sent');
+  document.querySelector('#m-sent .m-done-hero h2').textContent = allOk ? 'Заказ отправлен!' : 'Заказ отправлен частично';
+  document.querySelector('#m-sent .m-done-hero p').textContent = allOk
+    ? 'Все заказы успешно отправлены поставщикам.'
+    : 'Часть заказов не ушла — подробности ниже.';
   showMscreen('m-sent');
   cart = {}; commentsBySupplier = {}; dateBySupplier = {};
   updateHomeStats(); updateMobileCartBar();
@@ -1406,22 +1491,146 @@ function updateHomeStats(){
   const items = cartItemsWithData();
   const el1 = document.getElementById('mStatCount'), el2 = document.getElementById('mStatSuppliers'), el3 = document.getElementById('mStatSum');
   if(!el1) return;
+  const supIds = new Set(items.map(i=>i.supplierId));
   el1.textContent = items.reduce((a,i)=>a+i.qty,0);
-  el2.textContent = new Set(items.map(i=>i.supplierId)).size;
-  el3.textContent = money(items.reduce((a,i)=>a+i.qty*i.price,0));
+  el2.textContent = supIds.size;
+  el3.textContent = [...supIds].filter(sid => !supplierById(sid)?.connected).length;
+}
+
+/* ---------------------------------------------------------------------
+   CHAT PICKER — берёт живые диалоги Telethon-клиента (GET /api/chats,
+   тот же клиент, что и отправка заказов) и подставляет id в поле chat_id
+   карточки поставщика, без ручного копирования. Если соединение с Telegram
+   сейчас разорвано (см. checkTelegramStatus) — список не загрузится, об
+   этом честно написано в самом списке, а не тихая пустота.
+   --------------------------------------------------------------------- */
+let chatPickerData = [];
+async function openChatPickerModal(){
+  openModal('modalChatPicker');
+  document.getElementById('chatPickerSearch').value = '';
+  document.getElementById('chatPickerList').innerHTML = '<div class="d">Загрузка чатов…</div>';
+  try{
+    const res = await fetch('/api/chats');
+    if(!res.ok) throw new Error(await res.text());
+    chatPickerData = await res.json();
+    renderChatPickerList();
+  } catch(err){
+    document.getElementById('chatPickerList').innerHTML = `<div class="d" style="color:var(--cp-danger);">Не удалось загрузить чаты: ${err.message}. Соединение userbot с Telegram сейчас разорвано — впишите chat_id вручную (см. list_chats.py на сервере) или перезапустите webapp_server.</div>`;
+  }
+}
+function renderChatPickerList(filter){
+  const f = (filter !== undefined ? filter : document.getElementById('chatPickerSearch').value).trim().toLowerCase();
+  const list = document.getElementById('chatPickerList');
+  const filtered = chatPickerData.filter(c => c.name.toLowerCase().includes(f));
+  if(filtered.length === 0){ list.innerHTML = '<div class="d">Ничего не найдено</div>'; return; }
+  const icon = {'группа':'👥','канал':'📢','личный чат':'👤'};
+  list.innerHTML = filtered.map(c => `
+    <div class="sup-line" style="cursor:pointer;" onclick="pickChat(${c.id})">
+      <div class="ln">${icon[c.type]||'💬'} ${c.name}<div class="lp">${c.type} · ${c.id}</div></div>
+    </div>`).join('');
+}
+function pickChat(id){
+  document.getElementById('sf_chatid').value = id;
+  closeModal('modalChatPicker');
+}
+
+/* ---------------------------------------------------------------------
+   AUTORESPONDER — реальный /api/autoresponder* (см. autoresponder.py).
+   Один "рабочий" шаблон вместо полноценного multi-template редактора
+   старой формы (order.html) — так проще, и это ровно то, что описано в
+   задаче: фиксированная фраза "занят", без ИИ и без сценариев. Полный
+   мульти-шаблонный редактор остался в order.html (ссылка — см. README).
+   --------------------------------------------------------------------- */
+let autoresponderState = {templates: [], active_template_id: null};
+async function loadAutoresponderUI(){
+  try{
+    const res = await fetch('/api/autoresponder');
+    autoresponderState = await res.json();
+  } catch(err){
+    autoresponderState = {templates: [], active_template_id: null};
+  }
+  const t = autoresponderState.templates[0];
+  const text = t ? t.text : 'Алишер сейчас занят, ответит как освободится 🙏';
+  const on = !!(t && autoresponderState.active_template_id === t.id);
+  [['autoreplyToggle','autoreplyText'], ['autoreplyToggleM','autoreplyTextM']].forEach(([tid, xid]) => {
+    const toggle = document.getElementById(tid), textEl = document.getElementById(xid);
+    if(!toggle) return;
+    toggle.classList.toggle('on', on);
+    textEl.value = text;
+  });
+}
+async function ensureAutoresponderTemplate(){
+  if(autoresponderState.templates[0]) return autoresponderState.templates[0];
+  const res = await fetch('/api/autoresponder/templates', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name:'Занят', text:'Алишер сейчас занят, ответит как освободится 🙏'})});
+  const t = await res.json();
+  autoresponderState.templates.push(t);
+  return t;
+}
+async function saveAutoresponderText(){
+  const text = (document.getElementById('autoreplyText')?.value || document.getElementById('autoreplyTextM')?.value || '').trim();
+  if(!text){ showToast('Укажите текст ответа'); return; }
+  const t = await ensureAutoresponderTemplate();
+  const res = await fetch(`/api/autoresponder/templates/${t.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name:t.name, text})});
+  if(!res.ok){ showToast('Не удалось сохранить: ' + await res.text()); return; }
+  await loadAutoresponderUI();
+  showToast('Текст автоответчика сохранён');
+}
+async function toggleAutoresponder(){
+  const t = await ensureAutoresponderTemplate();
+  const willTurnOn = autoresponderState.active_template_id !== t.id;
+  const res = await fetch('/api/autoresponder/activate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: willTurnOn ? t.id : null})});
+  if(!res.ok){ showToast('Не удалось переключить: ' + await res.text()); return; }
+  await loadAutoresponderUI();
+  showToast(willTurnOn ? 'Автоответчик включён' : 'Автоответчик выключен');
+}
+
+/* ---------------------------------------------------------------------
+   ПОДКЛЮЧЕНИЕ TELEGRAM (userbot) — статус реального соединения, не демо.
+   --------------------------------------------------------------------- */
+async function checkTelegramStatus(){
+  const badgeEl = document.getElementById('tgStatusBadge');
+  const nameEl = document.getElementById('tgStatusName');
+  if(badgeEl) badgeEl.innerHTML = '<span class="badge neutral"><span class="dot"></span>Проверяю…</span>';
+  try{
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    if(data.connected){
+      if(badgeEl) badgeEl.innerHTML = '<span class="badge ok"><span class="dot"></span>Подключён</span>';
+      if(nameEl) nameEl.textContent = data.me || '—';
+      showToast('Соединение с Telegram активно');
+    } else {
+      if(badgeEl) badgeEl.innerHTML = '<span class="badge bad"><span class="dot"></span>Нет соединения</span>';
+      if(nameEl) nameEl.textContent = '—';
+      showToast('Нет соединения с Telegram — нужен перезапуск webapp_server');
+    }
+  } catch(err){
+    if(badgeEl) badgeEl.innerHTML = '<span class="badge bad"><span class="dot"></span>Ошибка проверки</span>';
+    showToast('Не удалось проверить статус: ' + err.message);
+  }
 }
 
 /* ---------------------------------------------------------------------
    INIT
    --------------------------------------------------------------------- */
-renderOrderPage();
-renderCatalogMgmt();
-renderSuppliersTable();
-renderHistoryTable();
-renderSettingsStats();
-renderMobileList();
-renderMobileOrder();
-updateHomeStats();
+async function init(){
+  try{
+    await loadRealCatalog();
+  } catch(err){
+    showToast('Не удалось загрузить каталог: ' + err.message);
+  }
+  CATEGORIES.length = 0; // категорий в реальных данных нет — сворачиваем чипы к одному "Все"
+  renderOrderPage();
+  renderCatalogMgmt();
+  renderSuppliersTable();
+  renderHistoryTable();
+  renderSettingsStats();
+  renderMobileList();
+  renderMobileOrder();
+  updateHomeStats();
+  loadAutoresponderUI();
+  checkTelegramStatus();
+}
+init();
 </script>
 </body>
 </html>
