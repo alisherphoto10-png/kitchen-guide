@@ -23,7 +23,7 @@ const { spawn, exec } = require("child_process");
 // с тем, что отдаёт сервер (см. checkForUpdate ниже), чтобы понять, есть ли
 // более новая версия. Никак не связана с версией KitchenDesk в целом, просто
 // метка для самообновления агента.
-const AGENT_VERSION = "2026-09-22.1";
+const AGENT_VERSION = "2026-09-22.2";
 
 // ---------------- НАСТРОЙКИ ----------------
 // Значения по умолчанию — реальные, "местные" настройки (токен, IP принтера
@@ -510,11 +510,15 @@ function buildUsbLabelTestPayload() {
   return Buffer.from(lines.join("\r\n"), "ascii");
 }
 
+// Возвращает не только имя (если нашли), но и весь список принтеров/сырую
+// ошибку PowerShell — чтобы в случае "не нашли" было что отправить в отчёт
+// на сервер для удалённой диагностики, а не только показать фразу на
+// экране моноблока.
 async function findXprinterName() {
-  const { ok, printers } = await listWindowsPrinters();
-  if (!ok || !Array.isArray(printers)) return null;
-  const match = printers.find((p) => p && typeof p.DriverName === "string" && /xprinter/i.test(p.DriverName));
-  return match ? match.Name : null;
+  const listing = await listWindowsPrinters();
+  const match =
+    listing.ok && Array.isArray(listing.printers) ? listing.printers.find((p) => p && typeof p.DriverName === "string" && /xprinter/i.test(p.DriverName)) : null;
+  return { name: match ? match.Name : null, listing };
 }
 
 // Инлайн C# — намеренно ЧИСТЫЙ ASCII (см. комментарий у runPowerShellScript
@@ -526,10 +530,28 @@ function psStringLiteral(value) {
   return `"${String(value).replace(/"/g, '""')}"`;
 }
 
+// Отчёт уходит на сервер тем же путём, что и разведка (agent-report) —
+// чтобы результат теста (успешный ИЛИ провалившийся) можно было посмотреть
+// удалённо, не только на экране самого моноблока. Особенно важно для
+// случая "не нашли принтер" — раньше эта ветка вообще ничего не отправляла,
+// и удалённая диагностика была невозможна без пересказа человеком на месте.
+async function sendUsbLabelTestReport(extra) {
+  try {
+    await httpJson(`${CONFIG.BACKEND_URL}/api/oko-shelf-life-print/agent-report`, {
+      method: "POST",
+      headers: { "X-Agent-Token": CONFIG.AGENT_TOKEN },
+      body: { hostname: os.hostname(), platform: process.platform, at: new Date().toISOString(), type: "usb-label-test", ...extra },
+    });
+  } catch (err) {
+    console.error("[тест этикеточного принтера] не удалось отправить отчёт на сервер (не критично):", err.message);
+  }
+}
+
 async function runUsbLabelTest() {
-  const printerName = await findXprinterName();
+  const { name: printerName, listing } = await findXprinterName();
   if (!printerName) {
-    return { ok: false, text: "Этикеточный принтер (Xprinter) не найден в списке принтеров Windows — проверьте, подключён ли он и включён ли." };
+    await sendUsbLabelTestReport({ ok: false, step: "find-printer", listing });
+    return { ok: false, text: "Этикеточный принтер (Xprinter) не найден в списке принтеров Windows — проверьте, подключён ли он и включён ли. Подробности отправлены на сервер." };
   }
 
   const payload = buildUsbLabelTestPayload();
@@ -639,30 +661,16 @@ $json = $out | ConvertTo-Json -Compress -Depth 4
   }
 
   const success = parsed && parsed.result === "OK";
-  const summary = {
+  await sendUsbLabelTestReport({
     ok: success,
+    step: "write-printer",
     printerName,
     powershellOk: run.ok,
     powershellError: run.error,
     powershellStderr: run.stderr,
     result: parsed,
     parseError,
-  };
-
-  // Отчёт уходит на сервер тем же путём, что и разведка (agent-report) —
-  // чтобы результат можно было посмотреть удалённо, не только на экране
-  // самого моноблока (полезно, когда на месте не технический человек,
-  // который может описать результат словами, но не разберёт, что значит
-  // "StartDocPrinter failed, error 1801").
-  try {
-    await httpJson(`${CONFIG.BACKEND_URL}/api/oko-shelf-life-print/agent-report`, {
-      method: "POST",
-      headers: { "X-Agent-Token": CONFIG.AGENT_TOKEN },
-      body: { hostname: os.hostname(), platform: process.platform, at: new Date().toISOString(), type: "usb-label-test", ...summary },
-    });
-  } catch (err) {
-    console.error("[тест этикеточного принтера] не удалось отправить отчёт на сервер (не критично):", err.message);
-  }
+  });
 
   const text = success
     ? "Байты успешно ушли на этикеточный принтер (проверьте, вышла ли этикетка — даже кривая или неоткалиброванная означает, что канал работает)."
@@ -843,6 +851,22 @@ function startSettingsServer() {
     console.log(`[настройки] страница настроек: http://localhost:${CONFIG.SETTINGS_PORT}`);
   });
   server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      // Порт уже занят — самый надёжный признак, что где-то в фоне уже
+      // работает другая копия агента (порт только для него и только на
+      // 127.0.0.1, случайно занять его нечему). Реально случилось на
+      // живом моноблоке (2026-09-22): start-agent.bat кликнули второй раз,
+      // не заметив, что первая копия уже тихо работает в фоне (окна ведь
+      // не видно) — получили два node.exe одновременно, оба опрашивали
+      // сервер, а страницу настроек отдавала только первая (старая
+      // версия) — новая (уже обновлённая) молча работала рядом, ничем не
+      // выдавая себя. Раньше это просто логировалось и agent продолжал
+      // жить дальше как невидимый дубль. Теперь — считаем это явным
+      // признаком дубля и завершаемся сами, не оставляя вторую копию
+      // вечно опрашивать сервер и печатать задания параллельно с первой.
+      console.error(`[настройки] порт ${CONFIG.SETTINGS_PORT} уже занят — похоже, другая копия агента уже работает. Завершаюсь, чтобы не дублировать печать.`);
+      process.exit(1);
+    }
     console.error("[настройки] не удалось запустить страницу настроек:", err.message);
   });
 }
