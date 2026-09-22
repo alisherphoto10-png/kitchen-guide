@@ -23,7 +23,7 @@ const { spawn, exec } = require("child_process");
 // с тем, что отдаёт сервер (см. checkForUpdate ниже), чтобы понять, есть ли
 // более новая версия. Никак не связана с версией KitchenDesk в целом, просто
 // метка для самообновления агента.
-const AGENT_VERSION = "2026-09-20.7";
+const AGENT_VERSION = "2026-09-22.1";
 
 // ---------------- НАСТРОЙКИ ----------------
 // Значения по умолчанию — реальные, "местные" настройки (токен, IP принтера
@@ -380,17 +380,85 @@ function runShellCommand(cmd, timeoutMs = 15000) {
   });
 }
 
+// Запускает PowerShell-скрипт из временного .ps1-файла (а не через
+// `-Command "..."`) — так не приходится экранировать кавычки несколько
+// слоёв подряд (cmd -> powershell -> встроенный C#), это реальный источник
+// трудноуловимых багов. Сам текст скрипта — ЧИСТЫЙ ASCII (без кириллицы) —
+// так не важно, в какой кодировке PowerShell прочитает файл без BOM (это
+// отдельная головная боль Windows PowerShell 5.1). Если скрипту нужно
+// вернуть текст, где может быть кириллица (имя принтера и т.п.) — скрипт
+// сам пишет результат в отдельный файл через
+// [System.IO.File]::WriteAllText(path, text, [System.Text.Encoding]::UTF8) —
+// значит кодировка результата гарантированно UTF-8 независимо от того, в
+// какой кодовой странице вообще работает консоль на этом Windows. Раньше
+// (`wmic ... /format:csv`, читалось через exec() как обычная UTF-8-строка)
+// именно на этом ловили кракозябры вместо кириллического имени принтера.
+function runPowerShellScript(scriptBody, timeoutMs = 20000) {
+  return new Promise((resolve) => {
+    const tmpScript = path.join(os.tmpdir(), `kitchendesk-ps-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.ps1`);
+    try {
+      fs.writeFileSync(tmpScript, scriptBody, "utf8");
+    } catch (err) {
+      resolve({ ok: false, error: `Не удалось создать временный .ps1: ${err.message}` });
+      return;
+    }
+    exec(`powershell -NoProfile -ExecutionPolicy Bypass -File "${tmpScript}"`, { timeout: timeoutMs, windowsHide: true }, (err, stdout, stderr) => {
+      try {
+        fs.unlinkSync(tmpScript);
+      } catch {
+        // не критично — временный файл, не секрет
+      }
+      resolve({ ok: !err, error: err ? err.message : null, stdout: stdout || "", stderr: stderr || "" });
+    });
+  });
+}
+
+// Список принтеров, которые Windows видит установленными — через
+// Get-CimInstance (современная замена устаревшему wmic), результат сам
+// пишет в UTF-8 файл (см. комментарий у runPowerShellScript выше), Node
+// читает готовый JSON обратно. Используется и разведкой (одноразовый
+// отчёт), и поиском этикеточного принтера для теста (см. ниже).
+async function listWindowsPrinters() {
+  const resultPath = path.join(os.tmpdir(), `kitchendesk-printers-${Date.now()}.json`);
+  const script = `
+$ErrorActionPreference = "Stop"
+try {
+  $printers = Get-CimInstance Win32_Printer | Select-Object Name, DriverName, PortName, Default
+  $json = $printers | ConvertTo-Json -Compress -Depth 3
+  if ($null -eq $json) { $json = "[]" }
+} catch {
+  $json = (@{ error = $_.Exception.Message } | ConvertTo-Json -Compress)
+}
+[System.IO.File]::WriteAllText("${resultPath.replace(/\\/g, "\\\\")}", $json, [System.Text.Encoding]::UTF8)
+`;
+  const run = await runPowerShellScript(script);
+  let printers = null;
+  let parseError = null;
+  try {
+    const raw = fs.readFileSync(resultPath, "utf8");
+    const parsed = JSON.parse(raw);
+    printers = Array.isArray(parsed) ? parsed : [parsed];
+  } catch (err) {
+    parseError = err.message;
+  }
+  try {
+    fs.unlinkSync(resultPath);
+  } catch {
+    // не было — и хорошо
+  }
+  return { ok: run.ok && !parseError, printers, run, parseError };
+}
+
 async function runPrinterRecon() {
   if (CONFIG.reconReported) return;
   console.log("[разведка] собираю список установленных в Windows принтеров...");
-  const printers = await runShellCommand("wmic printer get name,portname,drivername,default /format:csv");
+  const printers = await listWindowsPrinters();
   const report = {
     hostname: os.hostname(),
     platform: process.platform,
     at: new Date().toISOString(),
-    commands: {
-      "wmic printer get name,portname,drivername,default /format:csv": printers,
-    },
+    printers: printers.printers,
+    printersOk: printers.ok,
   };
   try {
     await httpJson(`${CONFIG.BACKEND_URL}/api/oko-shelf-life-print/agent-report`, {
@@ -412,6 +480,194 @@ async function runPrinterRecon() {
   } catch (err) {
     console.error("[разведка] не удалось отправить отчёт, попробую при следующем запуске:", err.message);
   }
+}
+
+// ---------------- ТЕСТ ЭТИКЕТОЧНОГО ПРИНТЕРА (USB, диагностика) ----------------
+// Разведка (см. выше) нашла Xprinter XP-235B, установленный в Windows как
+// обычный принтер (порт USB001) — НЕ так, как чековый (тот вообще не
+// принтер Windows, агент просто открывает сокет на его IP напрямую).
+// Значит слать байты сразу в порт (как для чекового) не получится — нужно
+// пройти через очередь печати Windows, с типом задания RAW (то есть без
+// обработки драйвером — байты долетают до принтера как есть, ровно то,
+// что нужно для TSPL-команд). Стандартный, документированный способ на
+// Windows — три системных функции из winspool.drv (OpenPrinter,
+// StartDocPrinter, WritePrinter) через P/Invoke; здесь — из PowerShell
+// (Add-Type с инлайн C#), без единого стороннего npm-пакета.
+//
+// ВАЖНО: это не готовая печать реальных этикеток (для этого сначала нужно
+// понять реальные размеры/зазоры этикетки и откалибровать TSPL) — это
+// ДИАГНОСТИКА, отвечает только на вопрос "долетают ли вообще байты до
+// этого принтера через Windows". Если голова принтера хоть как-то
+// шевельнётся/подаст бумагу — канал живой, дальше можно калибровать
+// TSPL-команды. Если нет — result/lastJob ниже подскажут, на каком шаге
+// сломалось (не нашли принтер / не открылся / спулер прямо отказал).
+function buildUsbLabelTestPayload() {
+  // Минимальный TSPL-тест на 40x30мм — самый частый размер для такого
+  // класса принтеров; если реальная этикетка другого размера, PRINT всё
+  // равно должен физически что-то вывести (пусть не по центру/криво), а
+  // это и есть цель диагностики, не идеальная калибровка.
+  const lines = ["SIZE 40 mm,30 mm", "GAP 2 mm,0 mm", "CLS", 'TEXT 20,20,"3",0,1,1,"KitchenDesk TEST"', "PRINT 1", ""];
+  return Buffer.from(lines.join("\r\n"), "ascii");
+}
+
+async function findXprinterName() {
+  const { ok, printers } = await listWindowsPrinters();
+  if (!ok || !Array.isArray(printers)) return null;
+  const match = printers.find((p) => p && typeof p.DriverName === "string" && /xprinter/i.test(p.DriverName));
+  return match ? match.Name : null;
+}
+
+// Инлайн C# — намеренно ЧИСТЫЙ ASCII (см. комментарий у runPowerShellScript
+// про кодировку .ps1-файлов без BOM). Имя принтера и путь к файлу с
+// данными подставляются в сам текст скрипта — оборачиваем в двойные
+// кавычки и экранируем те, что могут встретиться внутри (маловероятно в
+// пути/имени принтера, но на всякий случай).
+function psStringLiteral(value) {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+async function runUsbLabelTest() {
+  const printerName = await findXprinterName();
+  if (!printerName) {
+    return { ok: false, text: "Этикеточный принтер (Xprinter) не найден в списке принтеров Windows — проверьте, подключён ли он и включён ли." };
+  }
+
+  const payload = buildUsbLabelTestPayload();
+  const dataPath = path.join(os.tmpdir(), `kitchendesk-label-test-${Date.now()}.bin`);
+  const resultPath = path.join(os.tmpdir(), `kitchendesk-label-result-${Date.now()}.json`);
+  fs.writeFileSync(dataPath, payload);
+
+  const script = `
+$ErrorActionPreference = "Stop"
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class KitchenDeskRawPrint {
+    [StructLayout(LayoutKind.Sequential)]
+    public class DOCINFOA {
+        [MarshalAs(UnmanagedType.LPStr)] public string pDocName;
+        [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile;
+        [MarshalAs(UnmanagedType.LPStr)] public string pDataType;
+    }
+    [DllImport("winspool.drv", EntryPoint="OpenPrinterA", SetLastError=true, CharSet=CharSet.Ansi)]
+    public static extern bool OpenPrinter(string szPrinter, out IntPtr hPrinter, IntPtr pd);
+    [DllImport("winspool.drv", EntryPoint="ClosePrinter")]
+    public static extern bool ClosePrinter(IntPtr hPrinter);
+    [DllImport("winspool.drv", EntryPoint="StartDocPrinterA", SetLastError=true, CharSet=CharSet.Ansi)]
+    public static extern bool StartDocPrinter(IntPtr hPrinter, int level, DOCINFOA di);
+    [DllImport("winspool.drv", EntryPoint="EndDocPrinter")]
+    public static extern bool EndDocPrinter(IntPtr hPrinter);
+    [DllImport("winspool.drv", EntryPoint="StartPagePrinter")]
+    public static extern bool StartPagePrinter(IntPtr hPrinter);
+    [DllImport("winspool.drv", EntryPoint="EndPagePrinter")]
+    public static extern bool EndPagePrinter(IntPtr hPrinter);
+    [DllImport("winspool.drv", EntryPoint="WritePrinter")]
+    public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, Int32 dwCount, out Int32 dwWritten);
+
+    public static string SendBytesToPrinter(string szPrinterName, byte[] data) {
+        IntPtr hPrinter = IntPtr.Zero;
+        DOCINFOA di = new DOCINFOA();
+        di.pDocName = "KitchenDesk label test";
+        di.pDataType = "RAW";
+        if (!OpenPrinter(szPrinterName, out hPrinter, IntPtr.Zero)) {
+            return "OpenPrinter failed, error " + Marshal.GetLastWin32Error();
+        }
+        try {
+            if (!StartDocPrinter(hPrinter, 1, di)) {
+                return "StartDocPrinter failed, error " + Marshal.GetLastWin32Error();
+            }
+            try {
+                if (!StartPagePrinter(hPrinter)) {
+                    return "StartPagePrinter failed, error " + Marshal.GetLastWin32Error();
+                }
+                IntPtr pUnmanagedBytes = Marshal.AllocCoTaskMem(data.Length);
+                Marshal.Copy(data, 0, pUnmanagedBytes, data.Length);
+                int written;
+                bool wrote = WritePrinter(hPrinter, pUnmanagedBytes, data.Length, out written);
+                Marshal.FreeCoTaskMem(pUnmanagedBytes);
+                EndPagePrinter(hPrinter);
+                if (!wrote) return "WritePrinter failed, error " + Marshal.GetLastWin32Error();
+                if (written != data.Length) return "WritePrinter partial: " + written + "/" + data.Length;
+            } finally {
+                EndDocPrinter(hPrinter);
+            }
+        } finally {
+            ClosePrinter(hPrinter);
+        }
+        return "OK";
+    }
+}
+'@
+
+$out = @{}
+try {
+  $bytes = [System.IO.File]::ReadAllBytes(${psStringLiteral(dataPath)})
+  $printerName = ${psStringLiteral(printerName)}
+  $out.result = [KitchenDeskRawPrint]::SendBytesToPrinter($printerName, $bytes)
+  $out.byteCount = $bytes.Length
+  $out.printerName = $printerName
+  try {
+    $job = Get-PrintJob -PrinterName $printerName -ErrorAction Stop | Select-Object -First 1
+    $out.lastJob = $job
+  } catch {
+    $out.lastJobError = $_.Exception.Message
+  }
+} catch {
+  $out.result = "EXCEPTION: " + $_.Exception.Message
+}
+$json = $out | ConvertTo-Json -Compress -Depth 4
+[System.IO.File]::WriteAllText(${psStringLiteral(resultPath)}, $json, [System.Text.Encoding]::UTF8)
+`;
+
+  const run = await runPowerShellScript(script, 25000);
+  let parsed = null;
+  let parseError = null;
+  try {
+    parsed = JSON.parse(fs.readFileSync(resultPath, "utf8"));
+  } catch (err) {
+    parseError = err.message;
+  }
+  try {
+    fs.unlinkSync(dataPath);
+  } catch {
+    // не критично
+  }
+  try {
+    fs.unlinkSync(resultPath);
+  } catch {
+    // не критично
+  }
+
+  const success = parsed && parsed.result === "OK";
+  const summary = {
+    ok: success,
+    printerName,
+    powershellOk: run.ok,
+    powershellError: run.error,
+    powershellStderr: run.stderr,
+    result: parsed,
+    parseError,
+  };
+
+  // Отчёт уходит на сервер тем же путём, что и разведка (agent-report) —
+  // чтобы результат можно было посмотреть удалённо, не только на экране
+  // самого моноблока (полезно, когда на месте не технический человек,
+  // который может описать результат словами, но не разберёт, что значит
+  // "StartDocPrinter failed, error 1801").
+  try {
+    await httpJson(`${CONFIG.BACKEND_URL}/api/oko-shelf-life-print/agent-report`, {
+      method: "POST",
+      headers: { "X-Agent-Token": CONFIG.AGENT_TOKEN },
+      body: { hostname: os.hostname(), platform: process.platform, at: new Date().toISOString(), type: "usb-label-test", ...summary },
+    });
+  } catch (err) {
+    console.error("[тест этикеточного принтера] не удалось отправить отчёт на сервер (не критично):", err.message);
+  }
+
+  const text = success
+    ? "Байты успешно ушли на этикеточный принтер (проверьте, вышла ли этикетка — даже кривая или неоткалиброванная означает, что канал работает)."
+    : `Не удалось: ${parsed ? parsed.result : run.error || "неизвестная ошибка"}. Подробности отправлены на сервер.`;
+  return { ok: success, text };
 }
 
 // ---------------- СТРАНИЦА НАСТРОЕК (чековый принтер) ----------------
@@ -490,6 +746,12 @@ function renderSettingsPage(message) {
     <form method="POST" action="/test-print"><button type="submit">Тестовая печать</button></form>
     <form method="POST" action="/codepage-test"><button type="submit">Тест кодовых страниц</button></form>
   </div>
+
+  <div class="card" style="margin-top: 24px;">
+    <h2>Этикеточный принтер (USB, диагностика)</h2>
+    <p style="font-size: 12px; color: #8a8272; margin: -4px 0 12px;">Проверяет только сам канал связи с принтером (Windows → USB) — не полноценную печать этикетки. Если после нажатия принтер хоть как-то отреагирует (подаст бумагу, попытается напечатать, пусть криво) — канал работает. Результат также уходит на сервер, чтобы посмотреть его можно было и удалённо.</p>
+    <form method="POST" action="/usb-label-test"><button type="submit">Тест этикеточного принтера</button></form>
+  </div>
 </div>
 </body>
 </html>`;
@@ -554,6 +816,18 @@ function startSettingsServer() {
         } catch (err) {
           res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
           res.end(renderSettingsPage({ ok: false, text: `Не удалось напечатать: ${err.message}` }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && req.url === "/usb-label-test") {
+        try {
+          const result = await runUsbLabelTest();
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderSettingsPage(result));
+        } catch (err) {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderSettingsPage({ ok: false, text: `Не удалось выполнить тест: ${err.message}` }));
         }
         return;
       }
@@ -633,6 +907,12 @@ if (process.argv.includes("--codepage-test")) {
   codepageTest().catch((err) => console.error("Ошибка теста:", err.message));
 } else if (process.argv.includes("--install-autostart")) {
   installAutostart();
+} else if (process.argv.includes("--usb-label-test")) {
+  // То же самое, что кнопка "Тест этикеточного принтера" на localhost:3500,
+  // но из командной строки — удобно для диагностики без браузера.
+  runUsbLabelTest()
+    .then((result) => console.log(result.text))
+    .catch((err) => console.error("Ошибка теста:", err.message));
 } else {
   const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // раз в 6 часов
   checkForUpdate().then(() => {
