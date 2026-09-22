@@ -23,7 +23,7 @@ const { spawn, exec } = require("child_process");
 // с тем, что отдаёт сервер (см. checkForUpdate ниже), чтобы понять, есть ли
 // более новая версия. Никак не связана с версией KitchenDesk в целом, просто
 // метка для самообновления агента.
-const AGENT_VERSION = "2026-09-22.2";
+const AGENT_VERSION = "2026-09-22.3";
 
 // ---------------- НАСТРОЙКИ ----------------
 // Значения по умолчанию — реальные, "местные" настройки (токен, IP принтера
@@ -388,11 +388,16 @@ function runShellCommand(cmd, timeoutMs = 15000) {
 // отдельная головная боль Windows PowerShell 5.1). Если скрипту нужно
 // вернуть текст, где может быть кириллица (имя принтера и т.п.) — скрипт
 // сам пишет результат в отдельный файл через
-// [System.IO.File]::WriteAllText(path, text, [System.Text.Encoding]::UTF8) —
-// значит кодировка результата гарантированно UTF-8 независимо от того, в
-// какой кодовой странице вообще работает консоль на этом Windows. Раньше
+// [System.IO.File]::WriteAllText(path, text, <кодировка>) — значит
+// кодировка результата гарантированно UTF-8 независимо от того, в какой
+// кодовой странице вообще работает консоль на этом Windows. Раньше
 // (`wmic ... /format:csv`, читалось через exec() как обычная UTF-8-строка)
 // именно на этом ловили кракозябры вместо кириллического имени принтера.
+// ВАЖНО: кодировка при записи должна быть БЕЗ BOM (`New-Object
+// System.Text.UTF8Encoding $false`, не готовый `[System.Text.Encoding]::
+// UTF8` — тот всегда добавляет BOM) — иначе Node при чтении наткнётся на
+// невидимый символ ﻿ в начале файла и JSON.parse упадёт, см.
+// readJsonFileNoBom и найденный на реальном железе баг рядом с ней.
 function runPowerShellScript(scriptBody, timeoutMs = 20000) {
   return new Promise((resolve) => {
     const tmpScript = path.join(os.tmpdir(), `kitchendesk-ps-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.ps1`);
@@ -418,6 +423,28 @@ function runPowerShellScript(scriptBody, timeoutMs = 20000) {
 // пишет в UTF-8 файл (см. комментарий у runPowerShellScript выше), Node
 // читает готовый JSON обратно. Используется и разведкой (одноразовый
 // отчёт), и поиском этикеточного принтера для теста (см. ниже).
+// НАЙДЕННЫЙ БАГ (2026-09-22, первый реальный прогон на моноблоке ОКО):
+// `[System.Text.Encoding]::UTF8` в .NET/PowerShell — это готовый объект
+// кодировки, который при записи ВСЕГДА добавляет BOM (метку порядка
+// байтов, три байта EF BB BF, при чтении текстом превращается в невидимый
+// символ U+FEFF в начале строки) — это его задокументированное поведение,
+// не баг PowerShell. Node же `fs.readFileSync(path, "utf8")` этот BOM САМ
+// не срезает — символ так и остаётся первым в строке, и `JSON.parse` на
+// нём падает с "Unexpected token '﻿'", хотя весь остальной JSON
+// абсолютно валиден (сам список принтеров реально дошёл до диска). Из-за
+// этого `runUsbLabelTest()` в первом реальном прогоне писал "принтер не
+// найден", хотя на самом деле даже не смог ПРОЧИТАТЬ список принтеров, а
+// не то что не нашёл в нём Xprinter. Чинится в двух местах разом
+// (защита с обеих сторон, не только одной): PowerShell пишет БЕЗ BOM
+// (`New-Object System.Text.UTF8Encoding $false` — `false` здесь как раз
+// "без преамбулы"), а Node на всякий случай ещё и срезает BOM сам, если
+// он всё же встретится (см. readJsonFileNoBom ниже) — так тот же баг не
+// повторится, даже если где-то ещё останется `[System.Text.Encoding]::UTF8`.
+function readJsonFileNoBom(filePath) {
+  const raw = fs.readFileSync(filePath, "utf8").replace(/^﻿/, "");
+  return JSON.parse(raw);
+}
+
 async function listWindowsPrinters() {
   const resultPath = path.join(os.tmpdir(), `kitchendesk-printers-${Date.now()}.json`);
   const script = `
@@ -429,14 +456,14 @@ try {
 } catch {
   $json = (@{ error = $_.Exception.Message } | ConvertTo-Json -Compress)
 }
-[System.IO.File]::WriteAllText("${resultPath.replace(/\\/g, "\\\\")}", $json, [System.Text.Encoding]::UTF8)
+$noBomUtf8 = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText("${resultPath.replace(/\\/g, "\\\\")}", $json, $noBomUtf8)
 `;
   const run = await runPowerShellScript(script);
   let printers = null;
   let parseError = null;
   try {
-    const raw = fs.readFileSync(resultPath, "utf8");
-    const parsed = JSON.parse(raw);
+    const parsed = readJsonFileNoBom(resultPath);
     printers = Array.isArray(parsed) ? parsed : [parsed];
   } catch (err) {
     parseError = err.message;
@@ -638,14 +665,15 @@ try {
   $out.result = "EXCEPTION: " + $_.Exception.Message
 }
 $json = $out | ConvertTo-Json -Compress -Depth 4
-[System.IO.File]::WriteAllText(${psStringLiteral(resultPath)}, $json, [System.Text.Encoding]::UTF8)
+$noBomUtf8 = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText(${psStringLiteral(resultPath)}, $json, $noBomUtf8)
 `;
 
   const run = await runPowerShellScript(script, 25000);
   let parsed = null;
   let parseError = null;
   try {
-    parsed = JSON.parse(fs.readFileSync(resultPath, "utf8"));
+    parsed = readJsonFileNoBom(resultPath);
   } catch (err) {
     parseError = err.message;
   }
