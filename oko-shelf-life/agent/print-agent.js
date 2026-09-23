@@ -23,7 +23,7 @@ const { spawn, exec } = require("child_process");
 // с тем, что отдаёт сервер (см. checkForUpdate ниже), чтобы понять, есть ли
 // более новая версия. Никак не связана с версией KitchenDesk в целом, просто
 // метка для самообновления агента.
-const AGENT_VERSION = "2026-09-23.3";
+const AGENT_VERSION = "2026-09-23.4";
 
 // ---------------- НАСТРОЙКИ ----------------
 // Значения по умолчанию — реальные, "местные" настройки (токен, IP принтера
@@ -543,13 +543,16 @@ async function runPrinterRecon() {
 function buildUsbLabelTestPayload() {
   // Реальный размер этикетки (измерено пользователем): 58x30мм, зазор 3мм.
   // Ориентация и размещение уже подтверждены верными реальным тестом.
-  // Множитель x2,y2 у шрифта "3" на этом принтере печатался блёклыми
-  // точками почти нечитаемо (сам шрифт без множителя — чётко), поэтому
-  // вместо увеличения через множитель берём готовый крупный шрифт "4"
-  // без масштабирования.
+  // Смена шрифта "3"x2,y2 → "4"x1,y1 НЕ изменила результат — первая
+  // строка ("KitchenDesk") при любом шрифте выходит блёклыми точками в
+  // одном и том же месте, а вторая строка ("TEST 58x30mm", код не
+  // менялся между версиями) стабильно печатается чётко. Значит дело не
+  // в шрифте, а в прожиге/плотности — явно задаём максимальную DENSITY
+  // (0-15, по умолчанию 8 согласно TSPL-мануалу).
   const lines = [
     "SIZE 58 mm,30 mm",
     "GAP 3 mm,0 mm",
+    "DENSITY 15",
     "CLS",
     'TEXT 30,50,"4",0,1,1,"KitchenDesk"',
     'TEXT 30,110,"2",0,1,1,"TEST 58x30mm"',
@@ -596,16 +599,18 @@ async function sendUsbLabelTestReport(extra) {
   }
 }
 
-async function runUsbLabelTest() {
+// Общая часть для любой "сырой" TSPL-команды на этикеточный принтер —
+// и тестовой этикетки, и самотеста. Раньше это было только внутри
+// runUsbLabelTest(), теперь вынесено, чтобы не дублировать PowerShell/C#
+// код (P/Invoke на winspool.drv) для второго вида job'ов.
+async function sendRawBytesToXprinter(payload, jobLabel) {
   const { name: printerName, listing } = await findXprinterName();
   if (!printerName) {
-    await sendUsbLabelTestReport({ ok: false, step: "find-printer", listing });
-    return { ok: false, text: "Этикеточный принтер (Xprinter) не найден в списке принтеров Windows — проверьте, подключён ли он и включён ли. Подробности отправлены на сервер." };
+    return { success: false, printerName: null, listing, parsed: null, run: null, parseError: null };
   }
 
-  const payload = buildUsbLabelTestPayload();
-  const dataPath = path.join(os.tmpdir(), `kitchendesk-label-test-${Date.now()}.bin`);
-  const resultPath = path.join(os.tmpdir(), `kitchendesk-label-result-${Date.now()}.json`);
+  const dataPath = path.join(os.tmpdir(), `kitchendesk-${jobLabel}-${Date.now()}.bin`);
+  const resultPath = path.join(os.tmpdir(), `kitchendesk-${jobLabel}-result-${Date.now()}.json`);
   fs.writeFileSync(dataPath, payload);
 
   const script = `
@@ -711,21 +716,71 @@ $noBomUtf8 = New-Object System.Text.UTF8Encoding $false
   }
 
   const success = parsed && parsed.result === "OK";
+  return { success, printerName, listing, parsed, run, parseError };
+}
+
+async function runUsbLabelTest() {
+  const outcome = await sendRawBytesToXprinter(buildUsbLabelTestPayload(), "label-test");
+  if (!outcome.printerName) {
+    await sendUsbLabelTestReport({ ok: false, step: "find-printer", listing: outcome.listing });
+    return { ok: false, text: "Этикеточный принтер (Xprinter) не найден в списке принтеров Windows — проверьте, подключён ли он и включён ли. Подробности отправлены на сервер." };
+  }
+
   await sendUsbLabelTestReport({
-    ok: success,
+    ok: outcome.success,
     step: "write-printer",
-    printerName,
-    powershellOk: run.ok,
-    powershellError: run.error,
-    powershellStderr: run.stderr,
-    result: parsed,
-    parseError,
+    printerName: outcome.printerName,
+    powershellOk: outcome.run.ok,
+    powershellError: outcome.run.error,
+    powershellStderr: outcome.run.stderr,
+    result: outcome.parsed,
+    parseError: outcome.parseError,
   });
 
-  const text = success
+  const text = outcome.success
     ? "Байты успешно ушли на этикеточный принтер (проверьте, вышла ли этикетка — даже кривая или неоткалиброванная означает, что канал работает)."
-    : `Не удалось: ${parsed ? parsed.result : run.error || "неизвестная ошибка"}. Подробности отправлены на сервер.`;
-  return { ok: success, text };
+    : `Не удалось: ${outcome.parsed ? outcome.parsed.result : outcome.run.error || "неизвестная ошибка"}. Подробности отправлены на сервер.`;
+  return { ok: outcome.success, text };
+}
+
+// SELFTEST — печатает этикетку с настройками принтера (модель, DPI,
+// текущая плотность и т.п.) прямо из прошивки, без ручного зажатия
+// кнопки FEED при включении. SELFTEST PATTERN — отдельный узор для
+// проверки нагревательной линии головки: если где-то на узоре есть
+// ПОСТОЯННЫЙ белый пропуск на одном и том же месте на каждой этикетке —
+// это повреждённый нагревательный элемент (значит голова требует
+// ремонта/замены). Если узор сплошной без пропусков — голова исправна,
+// и дело было в настройках (как и оказалось — см. п.27-28 в README).
+// Не гарантия, что дешёвый клон поддерживает оба варианта SELFTEST —
+// на то и тест, чтобы проверить фактом, а не документацией.
+function buildPrinterSelfTestPayload() {
+  const lines = ["SELFTEST", "SELFTEST PATTERN", ""];
+  return Buffer.from(lines.join("\r\n"), "ascii");
+}
+
+async function runPrinterSelfTest() {
+  const outcome = await sendRawBytesToXprinter(buildPrinterSelfTestPayload(), "selftest");
+  if (!outcome.printerName) {
+    await sendUsbLabelTestReport({ ok: false, step: "find-printer", type: "usb-printer-selftest", listing: outcome.listing });
+    return { ok: false, text: "Этикеточный принтер (Xprinter) не найден в списке принтеров Windows — проверьте, подключён ли он и включён ли." };
+  }
+
+  await sendUsbLabelTestReport({
+    ok: outcome.success,
+    step: "write-printer",
+    type: "usb-printer-selftest",
+    printerName: outcome.printerName,
+    powershellOk: outcome.run.ok,
+    powershellError: outcome.run.error,
+    powershellStderr: outcome.run.stderr,
+    result: outcome.parsed,
+    parseError: outcome.parseError,
+  });
+
+  const text = outcome.success
+    ? "Команда самотеста отправлена. Должна выйти этикетка (или несколько) с настройками принтера и узором для проверки головки. Смотрите на узор: сплошные линии без пропусков — голова исправна; если в одном и том же месте на каждой этикетке видна белая полоса — это повреждённый элемент головки, нужен ремонт/замена. Если принтер вообще никак не отреагировал — этот клон, скорее всего, не поддерживает команду SELFTEST (не все дешёвые клоны её реализуют)."
+    : `Не удалось отправить самотест: ${outcome.parsed ? outcome.parsed.result : outcome.run.error || "неизвестная ошибка"}.`;
+  return { ok: outcome.success, text };
 }
 
 // ---------------- СТРАНИЦА НАСТРОЕК (чековый принтер) ----------------
@@ -809,6 +864,8 @@ function renderSettingsPage(message) {
     <h2>Этикеточный принтер (USB, диагностика)</h2>
     <p style="font-size: 12px; color: #8a8272; margin: -4px 0 12px;">Проверяет только сам канал связи с принтером (Windows → USB) — не полноценную печать этикетки. Если после нажатия принтер хоть как-то отреагирует (подаст бумагу, попытается напечатать, пусть криво) — канал работает. Результат также уходит на сервер, чтобы посмотреть его можно было и удалённо.</p>
     <form method="POST" action="/usb-label-test"><button type="submit">Тест этикеточного принтера</button></form>
+    <form method="POST" action="/usb-printer-selftest" style="margin-top: 10px;"><button type="submit">Самотест принтера (проверка головки)</button></form>
+    <p style="font-size: 12px; color: #8a8272; margin: 8px 0 0;">Печатает служебную этикетку самого принтера (из прошивки) — настройки и узор для проверки нагревательной линии головки. Смотрите на результат: сплошной узор без пропусков — голова исправна. Постоянный пропуск на одном месте — голова требует ремонта.</p>
   </div>
 </div>
 </body>
@@ -886,6 +943,18 @@ function startSettingsServer() {
         } catch (err) {
           res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
           res.end(renderSettingsPage({ ok: false, text: `Не удалось выполнить тест: ${err.message}` }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && req.url === "/usb-printer-selftest") {
+        try {
+          const result = await runPrinterSelfTest();
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderSettingsPage(result));
+        } catch (err) {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderSettingsPage({ ok: false, text: `Не удалось выполнить самотест: ${err.message}` }));
         }
         return;
       }
@@ -987,6 +1056,11 @@ if (process.argv.includes("--codepage-test")) {
   runUsbLabelTest()
     .then((result) => console.log(result.text))
     .catch((err) => console.error("Ошибка теста:", err.message));
+} else if (process.argv.includes("--usb-printer-selftest")) {
+  // То же самое, что кнопка "Самотест принтера (проверка головки)".
+  runPrinterSelfTest()
+    .then((result) => console.log(result.text))
+    .catch((err) => console.error("Ошибка самотеста:", err.message));
 } else {
   const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // раз в 6 часов
   checkForUpdate().then(() => {
