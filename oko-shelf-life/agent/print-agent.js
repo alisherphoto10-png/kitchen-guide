@@ -23,7 +23,7 @@ const { spawn, exec } = require("child_process");
 // с тем, что отдаёт сервер (см. checkForUpdate ниже), чтобы понять, есть ли
 // более новая версия. Никак не связана с версией KitchenDesk в целом, просто
 // метка для самообновления агента.
-const AGENT_VERSION = "2026-09-22.3";
+const AGENT_VERSION = "2026-09-23.1";
 
 // ---------------- НАСТРОЙКИ ----------------
 // Значения по умолчанию — реальные, "местные" настройки (токен, IP принтера
@@ -393,16 +393,28 @@ function runShellCommand(cmd, timeoutMs = 15000) {
 // кодовой странице вообще работает консоль на этом Windows. Раньше
 // (`wmic ... /format:csv`, читалось через exec() как обычная UTF-8-строка)
 // именно на этом ловили кракозябры вместо кириллического имени принтера.
-// ВАЖНО: кодировка при записи должна быть БЕЗ BOM (`New-Object
-// System.Text.UTF8Encoding $false`, не готовый `[System.Text.Encoding]::
-// UTF8` — тот всегда добавляет BOM) — иначе Node при чтении наткнётся на
-// невидимый символ ﻿ в начале файла и JSON.parse упадёт, см.
-// readJsonFileNoBom и найденный на реальном железе баг рядом с ней.
+// НАЙДЕННЫЙ БАГ #2 (2026-09-23, тот же класс, что и BOM-баг в
+// readJsonFileNoBom, только с обратной стороны): пока скрипт был ЧИСТЫЙ
+// ASCII (как в listWindowsPrinters), было не важно, в какой кодировке
+// Windows PowerShell 5.1 прочитает .ps1-файл без BOM — ASCII-байты
+// одинаковы в любой кодовой странице. Но как только в скрипт стали
+// подставлять НАСТОЯЩЕЕ ИМЯ ПРИНТЕРА (см. runUsbLabelTest ниже,
+// psStringLiteral(printerName)) — а оно вполне может быть не ASCII —
+// сработало то же правило, что и раньше, только на запись: PowerShell
+// 5.1 без BOM в файле читает его в системной кодовой странице (не UTF-8),
+// имя принтера внутри скрипта превращалось в мусор, и OpenPrinter() на
+// живом железе честно отвечал "ERROR_INVALID_PRINTER_NAME" (код 1801) —
+// принтер-то он теперь находил (см. баг #1 выше), но передавал в
+// Win32-вызов уже испорченную строку. Фикс — писать .ps1 файл ВСЕГДА с
+// BOM в начале (`﻿` перед текстом), тогда PowerShell 5.1 сам
+// определяет UTF-8 и читает правильно любые символы, не только ASCII.
+// Для чисто ASCII-скриптов (recon) BOM ничего не меняет, а для скриптов
+// с живыми данными внутри (имя принтера и т.п.) — обязателен.
 function runPowerShellScript(scriptBody, timeoutMs = 20000) {
   return new Promise((resolve) => {
     const tmpScript = path.join(os.tmpdir(), `kitchendesk-ps-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.ps1`);
     try {
-      fs.writeFileSync(tmpScript, scriptBody, "utf8");
+      fs.writeFileSync(tmpScript, "﻿" + scriptBody, "utf8");
     } catch (err) {
       resolve({ ok: false, error: `Не удалось создать временный .ps1: ${err.message}` });
       return;
