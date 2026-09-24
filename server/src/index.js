@@ -4,8 +4,10 @@ const express = require('express');
 const multer = require('multer');
 const config = require('./config');
 const { migrate } = require('./db/migrate');
-const { HttpError } = require('./utils/http');
+const { HttpError, ah } = require('./utils/http');
 const { authenticate, requireTenant } = require('./middleware/auth');
+const guide = require('./services/guide');
+const bots = require('./services/bots');
 
 const app = express();
 app.disable('x-powered-by');
@@ -17,6 +19,8 @@ fs.mkdirSync(config.uploadsDir, { recursive: true });
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', require('./routes/auth'));
+// Ссылка на гид — публично: нужна и на странице входа.
+app.get('/api/guide', ah(async (req, res) => res.json({ url: await guide.getUrl() })));
 app.use('/api/platform/support', authenticate, require('./routes/support').admin);
 app.use('/api/platform', authenticate, require('./routes/platform'));
 app.use('/api/support', authenticate, require('./routes/support').mine);
@@ -54,5 +58,11 @@ app.use((err, req, res, next) => {
 });
 
 migrate()
-  .then(() => app.listen(config.port, '127.0.0.1', () => console.log(`zhiguli: http://127.0.0.1:${config.port}`)))
+  .then(() => app.listen(config.port, '127.0.0.1', () => {
+    console.log(`zhiguli: http://127.0.0.1:${config.port}`);
+    // Уже подключённые боты получают /guide в меню (setMyCommands — только если меню отличается).
+    bots.syncAllCommands()
+      .then(r => r.total && console.log(`Меню команд ботов: ${r.total} всего, обновлено ${r.changed}, ошибок ${r.failed}`))
+      .catch(e => console.error('Меню команд ботов не обновилось:', e.message));
+  }))
   .catch(e => { console.error('Миграции не применились:', e.message); process.exit(1); });

@@ -5,6 +5,7 @@ const { requirePlatformAdmin } = require('../middleware/auth');
 const tenants = require('../services/tenants');
 const bots = require('../services/bots');
 const modules = require('../services/modules');
+const guide = require('../services/guide');
 
 router.use(requirePlatformAdmin);
 
@@ -67,6 +68,17 @@ router.delete('/tenants/:id/bot', ah(async (req, res) => {
 
 router.put('/tenants/:id', ah(async (req, res) => {
   res.json(await tenants.update(toId(req.params.id), req.body || {}));
+}));
+
+// Ссылка на гид для владельцев. После смены — меню команд ботов (/guide есть/нет).
+router.get('/guide', ah(async (req, res) => {
+  res.json({ url: await guide.getUrl(), default_url: guide.DEFAULT_URL });
+}));
+
+router.put('/guide', ah(async (req, res) => {
+  const url = await guide.setUrl((req.body || {}).url);
+  const bots_sync = await bots.syncAllCommands();
+  res.json({ url, default_url: guide.DEFAULT_URL, bots_sync });
 }));
 
 module.exports = router;

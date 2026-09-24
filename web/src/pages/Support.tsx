@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Bell, BellOff, LifeBuoy, Send, CheckCircle2, RotateCcw, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Bell, BellOff, LifeBuoy, Send, CheckCircle2, RotateCcw, AlertTriangle, BookMarked } from 'lucide-react'
 import { api } from '../lib/api'
 import type { SupportMessage, SupportNotifySettings, SupportTicket } from '../lib/types'
 import { Empty, ErrorBox, PageLoader, errText, toast, useConfirm } from '../components/ui'
 import { StatusTag, SupportThread, ticketTime } from '../components/SupportThread'
 import { SupportNotifyModal } from '../components/SupportNotifyModal'
+import { GuideModal } from '../components/GuideModal'
 import { ROLE_LABEL } from '../components/Layout'
 import { useIsDesktop } from '../hooks/useMedia'
 
@@ -23,6 +24,7 @@ export function SupportPage() {
   const isDesktop = useIsDesktop()
   const [filter, setFilter] = useState<Filter>('open')
   const [notifyOpen, setNotifyOpen] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
 
   const { data: tickets, isLoading, error } = useQuery({
     queryKey: ['support-tickets', filter],
@@ -41,6 +43,9 @@ export function SupportPage() {
             ? <Bell className={`h-4 w-4 ${notify.last_error ? 'text-warn' : 'text-ok'}`} />
             : <BellOff className="h-4 w-4 text-ink-faint" />}
           Уведомления
+        </button>
+        <button className="btn-ghost btn-sm" onClick={() => setGuideOpen(true)} title="Ссылка на гид для владельцев">
+          <BookMarked className="h-4 w-4 text-ink-muted" />Гид
         </button>
       </div>
       {!notify?.configured && notify && (
@@ -80,7 +85,10 @@ export function SupportPage() {
     </div>
   )
 
-  const modal = notifyOpen && <SupportNotifyModal onClose={() => setNotifyOpen(false)} />
+  const modal = <>
+    {notifyOpen && <SupportNotifyModal onClose={() => setNotifyOpen(false)} />}
+    {guideOpen && <GuideModal onClose={() => setGuideOpen(false)} />}
+  </>
 
   if (isDesktop) {
     return (

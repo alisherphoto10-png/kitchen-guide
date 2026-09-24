@@ -6,6 +6,7 @@ const tg = require('./telegram');
 const bots = require('./bots');
 const link = require('./telegramLink');
 const support = require('./support');
+const guide = require('./guide');
 
 function openButton(bot) {
   return { inline_keyboard: [[{ text: '📖 Открыть ТТК', web_app: { url: bots.miniAppUrl(bot.slug) } }]] };
@@ -43,6 +44,18 @@ async function handle(bot, update) {
   if (!bot.tenant_active) {
     await send(token, chatId, 'Доступ для заведения приостановлен.');
     return;
+  }
+
+  // /guide — одно сообщение с кнопкой-ссылкой, для всех (и до входа тоже): не
+  // сбрасывает диалог входа и не попадает в обращение. Гид выключен — команда
+  // ведёт себя как любая другая (её и в меню тогда нет).
+  if (guide.isGuideCommand(msg.text)) {
+    const url = await guide.getUrl();
+    if (url) {
+      await send(token, chatId, 'Как устроены «Калькуляции» и ответы на частые вопросы — по кнопке ниже.',
+        { inline_keyboard: [[{ text: '📘 Гид и частые вопросы', url }]] });
+      return;
+    }
   }
 
   // Уже привязан — логин/пароль больше не нужны.

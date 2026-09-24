@@ -9,6 +9,7 @@ declare global {
       ready: () => void
       expand: () => void
       close: () => void
+      openLink?: (url: string) => void
       setHeaderColor?: (c: string) => void
       setBackgroundColor?: (c: string) => void
       BackButton?: { show: () => void; hide: () => void; onClick: (f: () => void) => void; offClick: (f: () => void) => void }
@@ -33,4 +34,12 @@ export function closeMiniApp(): boolean {
   if (!wa?.close) return false
   wa.close()
   return true
+}
+
+// Ссылка наружу. В мини-аппе — Telegram.WebApp.openLink (браузер, а не внутри
+// мини-аппа), на сайте — новая вкладка.
+export function openExternal(url: string) {
+  const wa = window.Telegram?.WebApp
+  if (wa?.openLink && wa.initData) wa.openLink(url)
+  else window.open(url, '_blank', 'noopener,noreferrer')
 }

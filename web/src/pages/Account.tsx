@@ -1,10 +1,11 @@
 import { useCallback, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, LifeBuoy, LogOut, ChevronRight, MessagesSquare } from 'lucide-react'
+import { ArrowLeft, LifeBuoy, LogOut, ChevronRight, MessagesSquare, BookMarked, ExternalLink } from 'lucide-react'
 import { api } from '../lib/api'
 import { useSession } from '../lib/session'
-import { closeMiniApp, useTelegramBackButton } from '../lib/telegram'
+import { closeMiniApp, openExternal, useTelegramBackButton } from '../lib/telegram'
+import { GUIDE_LABEL, useGuideUrl } from '../lib/guide'
 import { plural } from '../lib/format'
 import type { MyTicket } from '../lib/types'
 import { errText, toast } from '../components/ui'
@@ -51,6 +52,8 @@ export function AccountPage() {
         {miniApp && <p className="text-xs muted mt-1">Вход через Telegram{me.user.tg_username ? ` · @${me.user.tg_username}` : ''}</p>}
       </div>
 
+      <GuideLink miniApp={miniApp} />
+
       {miniApp ? (
         <SupportLinks />
       ) : (
@@ -68,6 +71,25 @@ export function AccountPage() {
       )}
     </div>
   )
+}
+
+// Гид для владельцев. На сайте — обычная ссылка в новую вкладку, в мини-аппе —
+// Telegram.WebApp.openLink (браузер, а не внутри мини-аппа). Ссылки нет — пункта нет.
+function GuideLink({ miniApp }: { miniApp: boolean }) {
+  const url = useGuideUrl()
+  if (!url) return null
+  const body = <>
+    <BookMarked className="h-5 w-5 text-brand flex-shrink-0" />
+    <span className="flex-1 min-w-0">
+      <span className="block font-semibold">{GUIDE_LABEL}</span>
+      <span className="block text-xs muted">Как работают «Калькуляции» — откроется в браузере</span>
+    </span>
+    <ExternalLink className="h-4 w-4 text-ink-faint" />
+  </>
+  const cls = 'card mt-4 w-full px-4 py-3.5 flex items-center gap-3 text-left hover:bg-paper transition-colors'
+  return miniApp
+    ? <button onClick={() => openExternal(url)} className={cls}>{body}</button>
+    : <a href={url} target="_blank" rel="noopener noreferrer" className={cls}>{body}</a>
 }
 
 // Мини-апп: «Техподдержка» закрывает приложение — бот в чате просит написать

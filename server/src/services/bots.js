@@ -7,6 +7,7 @@ const { pool } = require('../db/pool');
 const { HttpError } = require('../utils/http');
 const secretBox = require('../utils/secretBox');
 const tg = require('./telegram');
+const guide = require('./guide');
 
 function webhookUrl(botRowId) {
   return `${config.publicBaseUrl}/tg/${botRowId}`;
@@ -54,7 +55,8 @@ const BOT_COMMANDS = [
   { command: 'support', description: 'Написать в техподдержку' },
 ];
 
-// Вебхук + кнопка меню «ТТК» (открывает мини-апп этого клиента) + команда /start.
+// Вебхук + кнопка меню «ТТК» (открывает мини-апп этого клиента) + меню команд
+// (/start, /support и /guide, если ссылка на гид задана).
 async function configureTelegram(token, row, slug) {
   if (!/^https:\/\//.test(config.publicBaseUrl)) {
     throw new HttpError(500, 'PUBLIC_BASE_URL в server/.env должен быть https-адресом сайта');
@@ -68,7 +70,25 @@ async function configureTelegram(token, row, slug) {
   await tg.call(token, 'setChatMenuButton', {
     menu_button: { type: 'web_app', text: 'ТТК', web_app: { url: miniAppUrl(slug) } },
   });
-  await tg.call(token, 'setMyCommands', { commands: BOT_COMMANDS });
+  await guide.syncCommands(token, BOT_COMMANDS, await guide.getUrl());
+}
+
+// Привести меню команд всех включённых ботов к текущей настройке гида: при старте
+// сервера (уже подключённые боты получают /guide) и после смены ссылки (пустая
+// ссылка убирает /guide). Сбой одного бота не мешает остальным.
+async function syncAllCommands() {
+  const url = await guide.getUrl();
+  const { rows } = await pool.query('SELECT * FROM tenant_bots WHERE is_active');
+  const result = { total: rows.length, changed: 0, failed: 0 };
+  for (const row of rows) {
+    try {
+      if (await guide.syncCommands(tokenOf(row), BOT_COMMANDS, url)) result.changed++;
+    } catch (e) {
+      result.failed++;
+      console.error(`[bot ${row.id}] меню команд не обновилось: ${e.description || e.message}`);
+    }
+  }
+  return result;
 }
 
 // Снять вебхук и кнопку — «по возможности»: если токен уже отозван в @BotFather,
@@ -240,5 +260,5 @@ async function touch(id) {
 
 module.exports = {
   connect, setActive, remove, status, summary, getById, getActiveBySlug, activeForTenant, touch,
-  tokenOf, miniAppUrl, webhookUrl, publicBot, BOT_COMMANDS,
+  tokenOf, miniAppUrl, webhookUrl, publicBot, BOT_COMMANDS, syncAllCommands,
 };

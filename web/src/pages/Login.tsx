@@ -1,12 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { useSession } from '../lib/session'
 import { errText } from '../components/ui'
+import { useGuideUrl } from '../lib/guide'
 
 export function LoginPage() {
   const { login } = useSession()
   const [form, setForm] = useState({ login: '', password: '' })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const guideUrl = useGuideUrl()
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -63,6 +65,12 @@ export function LoginPage() {
           <button className="btn-primary w-full h-11 mt-6" disabled={busy || !form.login || !form.password}>
             {busy ? 'Входим…' : 'Войти'}
           </button>
+
+          {guideUrl && (
+            <p className="mt-6 text-center text-[13px]">
+              <a href={guideUrl} target="_blank" rel="noopener noreferrer" className="muted underline underline-offset-2 hover:text-brand">Что такое «Калькуляции»?</a>
+            </p>
+          )}
         </form>
       </div>
     </div>

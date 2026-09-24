@@ -1,8 +1,9 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BookOpen, Tags, Users, Building2, LogOut, UserCircle2, ArrowLeft, LifeBuoy } from 'lucide-react'
+import { BookOpen, Tags, Users, Building2, LogOut, UserCircle2, ArrowLeft, LifeBuoy, BookMarked, ExternalLink } from 'lucide-react'
 import { api } from '../lib/api'
 import { useSession } from '../lib/session'
+import { GUIDE_LABEL, useGuideUrl } from '../lib/guide'
 import type { Role } from '../lib/types'
 
 const ROLE_LABEL: Record<Role, string> = { owner: 'Владелец', viewer: 'Повар' }
@@ -54,6 +55,7 @@ export function Layout() {
   const nav = useNav()
   const navigate = useNavigate()
   const adminInside = me?.user.is_platform_admin && me.tenant
+  const guideUrl = useGuideUrl()
 
   const leaveTenant = () => { enterTenant(null); navigate('/platform') }
 
@@ -81,6 +83,14 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
+        {guideUrl && (
+          <a href={guideUrl} target="_blank" rel="noopener noreferrer"
+            className="mx-3 mb-2 flex items-center gap-3 rounded-xl px-3 h-10 text-sm font-semibold text-ink-2 hover:bg-paper-card/60">
+            <BookMarked className="h-[18px] w-[18px] text-ink-muted" />
+            <span className="flex-1">{GUIDE_LABEL}</span>
+            <ExternalLink className="h-3.5 w-3.5 text-ink-faint" />
+          </a>
+        )}
         <div className="border-t border-line p-3">
           <NavLink to="/account" className="flex items-center gap-2.5 rounded-xl px-2 py-2 hover:bg-paper-card/60">
             <UserCircle2 className="h-8 w-8 text-ink-faint flex-shrink-0" strokeWidth={1.5} />
