@@ -34,6 +34,9 @@ app.use('/uploads', express.static(config.uploadsDir, { maxAge: '30d', immutable
 
 // Собранный фронтенд (web/dist): SPA — любые не-API пути отдают index.html.
 if (fs.existsSync(config.webDist)) {
+  // Гид для владельцев (web/public/guide) — отдельная статическая страница:
+  // /guide/ отдаёт её index.html (у общей статики index выключен — там SPA).
+  app.use('/guide', express.static(path.join(config.webDist, 'guide'), { maxAge: '1h' }));
   app.use(express.static(config.webDist, { index: false, maxAge: '1h' }));
   app.get(/^(?!\/api|\/uploads|\/tg\/).*/, (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');

@@ -236,8 +236,11 @@ cd /root/zhiguli/server && node scripts/create-platform-admin.js <login> "<Им�
 
 ## Шаг 5 — ссылка на гид для владельцев (2026-09-24)
 
-Гид «Как это работает» (позже там же «Частые вопросы»): по умолчанию
-`https://claude.ai/artifact/2XkkoVWcDHjLzmjLEsokvk`.
+Гид «Как это работает» (позже там же «Частые вопросы»). В коде по умолчанию —
+`https://claude.ai/artifact/2XkkoVWcDHjLzmjLEsokvk`, но с 2026-09-24 в настройке стоит своя копия:
+**https://jigulibar.chefplan.ru/guide/** — статика `web/public/guide/` (index.html + img/), после сборки
+лежит в `web/dist/guide/`; сервер отдаёт её отдельным `express.static` на `/guide` (у общей статики
+`index: false`, без этого `/guide/` уходил в SPA). Обновить гид = заменить файлы, `npm run build` в `web/`.
 
 - **Одна настройка:** `platform_settings`, ключ `guide_url` (`services/guide.js`). Меняет администратор
   платформы: «Поддержка» → «Гид» (рядом с «Уведомления»). Нет строки — ссылка по умолчанию;
