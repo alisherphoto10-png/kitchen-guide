@@ -31,6 +31,22 @@ async function call(token, method, params = {}) {
   return body.result;
 }
 
+// Отправка файла (sendDocument и т. п.): multipart вместо JSON.
+async function upload(token, method, params, field, { buffer, filename, contentType }) {
+  const form = new FormData();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) form.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+  form.append(field, new Blob([buffer], { type: contentType }), filename);
+  let res;
+  try {
+    res = await fetch(`${config.telegramApiBase}/bot${token}/${method}`, { method: 'POST', body: form, signal: AbortSignal.timeout(30_000) });
+  } catch (e) {
+    throw new TelegramError(method, 0, e.name === 'TimeoutError' ? 'Telegram не ответил за 30 секунд' : 'нет связи с Telegram');
+  }
+  const body = await res.json().catch(() => null);
+  if (!body?.ok) throw new TelegramError(method, body?.error_code || res.status, body?.description);
+  return body.result;
+}
+
 function assertTokenFormat(token) {
   if (!TOKEN_RE.test(String(token || '').trim())) {
     throw new HttpError(400, 'Это не похоже на токен от @BotFather — он выглядит как 123456789:AA…');
@@ -38,4 +54,4 @@ function assertTokenFormat(token) {
   return String(token).trim();
 }
 
-module.exports = { call, assertTokenFormat, TelegramError };
+module.exports = { call, upload, assertTokenFormat, TelegramError };

@@ -9,7 +9,7 @@
 const { pool } = require('../db/pool');
 const { HttpError } = require('../utils/http');
 const tg = require('./telegram');
-const bots = require('./bots');
+const delivery = require('./botDelivery');
 const notifier = require('./supportNotify');
 
 const REQUEST_HOURS = 24;       // «Техподдержка» нажата — ждём текст обращения столько
@@ -28,32 +28,7 @@ async function openTicketOf(userId) {
   return t || null;
 }
 
-// Написать сотруднику от имени бота его заведения.
-async function sendToUser(tenantId, tgId, text) {
-  if (!tgId) throw new HttpError(409, 'Сотрудник отвязан от Telegram — ответ не доставить');
-  const bot = await bots.activeForTenant(tenantId);
-  if (!bot) throw new HttpError(409, 'Бот заведения отключён — ответ не доставить');
-  try {
-    return await tg.call(bots.tokenOf(bot), 'sendMessage', { chat_id: tgId, text });
-  } catch (e) {
-    if (e instanceof tg.TelegramError) {
-      throw new HttpError(502, e.code === 403
-        ? 'Сотрудник заблокировал бота — Telegram не принимает сообщение'
-        : `Telegram не принял сообщение: ${e.description || e.message}`);
-    }
-    throw e;
-  }
-}
-
-async function tenantName(tenantId) {
-  const { rows: [t] } = await pool.query('SELECT name FROM tenants WHERE id = $1', [tenantId]);
-  return t?.name || '';
-}
-
-function who(user) {
-  const name = user.name || user.login;
-  return `${name}${user.tg_username ? ` (@${user.tg_username})` : ''} · ${ROLE[user.role] || user.role}`;
-}
+const sendToUser = delivery.sendMessage;
 
 // ── сторона сотрудника ───────────────────────────────────────────────
 
@@ -126,14 +101,13 @@ async function handleBotMessage(token, user, msg) {
     return true;
   }
   const text = cleanText(raw);
-  const tenant = await tenantName(user.tenant_id);
 
   if (!open) {
     const t = await createTicket(user, text);
     if (t) {
       await say(`Обращение ${no(t.id)} принято. Ответ придёт сюда же.\n\nПока вопрос не закрыт, всё, что вы напишете в этот чат, добавится к обращению.`
         + (attachment ? '\n\nФото и файлы пока не передаются — только текст.' : ''));
-      await notifier.notify(`🆕 Обращение ${no(t.id)} · ${tenant}\n${who(user)}\n\n${text}`, t.id);
+      await refreshNotify(t.id);
       return true;
     }
     open = await openTicketOf(user.id);
@@ -146,7 +120,7 @@ async function handleBotMessage(token, user, msg) {
     chat_id: chatId, message_id: msg.message_id, reaction: [{ type: 'emoji', emoji: '👌' }],
   }).catch(() => {});
   if (attachment) await say('Фото и файлы пока не передаются в техподдержку — только текст сообщения.');
-  await notifier.notify(`💬 ${no(open.id)} · ${tenant}\n${who(user)}\n\n${text}`, open.id);
+  await refreshNotify(open.id);
   return true;
 }
 
@@ -226,6 +200,62 @@ async function summary() {
   return r;
 }
 
+// ── уведомление в группе ─────────────────────────────────────────────
+
+const NOTIFY_BUDGET = 3300;   // символов на переписку (лимит сообщения Telegram — 4096)
+
+function messagesWord(n) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return 'сообщение';
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'сообщения';
+  return 'сообщений';
+}
+
+// Карточка тикета в группе: статус виден сразу, ниже — переписка (последние сообщения,
+// если вся не помещается). Одна на тикет, редактируется по ходу разговора.
+function notifyText(t, messages) {
+  const status = t.status === 'closed'
+    ? `✅ ЗАКРЫТО${t.closed_by_name ? ` (${t.closed_by_name})` : ''}`
+    : t.last_author === 'user' ? '🟠 Ждёт ответа' : '🔵 Отвечено — ждём сотрудника';
+  const user = `${t.user_name || t.user_login}${t.user_tg_username ? ` (@${t.user_tg_username})` : ''} · ${ROLE[t.user_role] || t.user_role}`;
+  const lines = [];
+  let used = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    const line = `${m.author === 'user' ? '👤' : '↩️ Поддержка:'} ${m.text}`;
+    if (used + line.length > NOTIFY_BUDGET && lines.length) {
+      lines.unshift(`… ещё ${i + 1} ${messagesWord(i + 1)} выше — на сайте`);
+      break;
+    }
+    lines.unshift(used + line.length > NOTIFY_BUDGET ? line.slice(0, NOTIFY_BUDGET) + '…' : line);
+    used += line.length + 2;
+  }
+  return `${status}\nОбращение ${no(t.id)} · ${t.tenant_name}\n${user}\n\n${lines.join('\n\n')}`;
+}
+
+// Обновления одного тикета идут строго по очереди — иначе два быстрых сообщения
+// подряд успели бы прислать в группу две карточки вместо одной.
+const notifyQueue = new Map();
+
+function refreshNotify(ticketId) {
+  const run = (notifyQueue.get(ticketId) || Promise.resolve()).then(async () => {
+    try {
+      const t = await getRow(ticketId);
+      // BIGINT приходит из pg строкой, а Telegram ждёт число.
+      const prev = t.notify_message_id ? { chat_id: t.notify_chat_id, message_id: Number(t.notify_message_id) } : null;
+      const where = await notifier.upsert(prev, notifyText(t, await messagesOf(t.id)), t.id);
+      if (where && (String(where.message_id) !== String(prev?.message_id) || String(where.chat_id) !== String(prev?.chat_id))) {
+        await pool.query('UPDATE support_tickets SET notify_chat_id = $2, notify_message_id = $3 WHERE id = $1', [t.id, where.chat_id, where.message_id]);
+      }
+    } catch (e) {
+      console.error('[support notify]', e.message);
+    }
+  });
+  notifyQueue.set(ticketId, run);
+  run.finally(() => { if (notifyQueue.get(ticketId) === run) notifyQueue.delete(ticketId); });
+  return run;
+}
+
 async function userOf(ticket) {
   const { rows: [u] } = await pool.query('SELECT id, tenant_id, tg_id FROM users WHERE id = $1', [ticket.user_id]);
   return u;
@@ -241,6 +271,7 @@ async function reply(ticketId, admin, rawText) {
   const u = await userOf(t);
   await sendToUser(u.tenant_id, u.tg_id, `💬 Техподдержка · обращение ${no(t.id)}\n\n${text}`);
   await addMessage(t.id, 'admin', admin.id, text);
+  await refreshNotify(t.id);
   return get(t.id);
 }
 
@@ -256,6 +287,7 @@ async function close(ticketId, admin) {
   await sendToUser(u.tenant_id, u.tg_id,
     `✅ Обращение ${no(t.id)} закрыто. Если появится новый вопрос — «Техподдержка» в профиле приложения или команда /support.`
   ).catch(() => {});
+  await refreshNotify(t.id);
   return get(t.id);
 }
 
@@ -274,6 +306,7 @@ async function reopen(ticketId) {
   await sendToUser(u.tenant_id, u.tg_id,
     `Обращение ${no(t.id)} снова открыто — можно продолжать писать сюда.`
   ).catch(() => {});
+  await refreshNotify(t.id);
   return get(t.id);
 }
 

@@ -9,6 +9,10 @@ const config = require('../config');
 const FONT = path.join(config.fontsDir, 'DejaVuSans.ttf');
 const FONT_BOLD = path.join(config.fontsDir, 'DejaVuSans-Bold.ttf');
 
+// Ненавязчивая подпись на самих документах (они расходятся дальше по рукам).
+// Интерфейс «Калькуляций» при этом остаётся без бренда KitchenDesk.
+const BRAND = 'Калькуляции — модуль KitchenDesk';
+
 function fmt(n) {
   if (n == null) return '';
   return String(Math.round(n * 1000) / 1000).replace('.', ',');
@@ -44,7 +48,7 @@ function pdf(recipe, { tenantName }) {
   doc.registerFont('r', FONT);
   doc.registerFont('b', FONT_BOLD);
   const W = doc.page.width - 96;
-  const INK = '#1c1a17', MUTED = '#7a746b', LINE = '#ddd6cb', ACCENT = '#b4471f';
+  const INK = '#1c1a17', MUTED = '#7a746b', LINE = '#ddd6cb', ACCENT = '#b4471f', LINE_TEXT = '#a39c90';
 
   doc.font('r').fontSize(9).fillColor(MUTED).text(`Технологическая карта · ${tenantName}`, { width: W });
   doc.moveDown(0.3);
@@ -109,8 +113,10 @@ function pdf(recipe, { tenantName }) {
     doc.switchToPage(p);
     // Колонтитул стоит ниже нижнего поля — без обнуления поля pdfkit начал бы новую страницу.
     doc.page.margins.bottom = 0;
+    const y = doc.page.height - 36;
+    doc.font('r').fontSize(7).fillColor(LINE_TEXT).text(BRAND, 48, y + 0.5, { width: W / 2, align: 'left', lineBreak: false });
     doc.font('r').fontSize(8).fillColor(MUTED)
-      .text(`${tenantName} · ${stamp} · стр. ${p + 1} из ${range.count}`, 48, doc.page.height - 36, { width: W, align: 'right', lineBreak: false });
+      .text(`${tenantName} · ${stamp} · стр. ${p + 1} из ${range.count}`, 48 + W / 2, y, { width: W / 2, align: 'right', lineBreak: false });
   }
   return { doc, filename: fileBase(recipe) + '.pdf' };
 }
@@ -155,7 +161,22 @@ async function xlsx(recipe, { tenantName }) {
     r.getCell(2).alignment = { wrapText: true, vertical: 'top' };
     r.height = Math.min(400, 15 * Math.ceil(text.length / 80 + text.split('\n').length));
   }
+  ws.addRow([]);
+  ws.addRow(['', BRAND]).font = { size: 8, color: { argb: 'FFA39C90' } };
+  ws.headerFooter.oddFooter = `&L&8${BRAND}&R&8${tenantName.replace(/&/g, '&&')} · стр. &P из &N`;
   return { buffer: await wb.xlsx.writeBuffer(), filename: fileBase(recipe) + '.xlsx' };
 }
 
-module.exports = { pdf, xlsx };
+// PDF целиком в память — для отправки документом в Telegram.
+function pdfBuffer(recipe, opts) {
+  const { doc, filename } = pdf(recipe, opts);
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    doc.on('data', c => chunks.push(c));
+    doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), filename }));
+    doc.on('error', reject);
+    doc.end();
+  });
+}
+
+module.exports = { pdf, pdfBuffer, xlsx };

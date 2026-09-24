@@ -273,13 +273,25 @@ function Actions({ recipe, k }: { recipe: Recipe; k: number | null }) {
   const [confirm, confirmNode] = useConfirm()
   const suffix = k ? `?k=${k}` : ''
 
+  // В мини-аппе скачивание во встроенном браузере Telegram ненадёжно — файл
+  // приходит документом в чат с ботом. На сайте — обычное скачивание.
+  const { me } = useSession()
+  const toChat = me?.via === 'telegram'
   const exportFile = async (ext: 'pdf' | 'xlsx') => {
     setOpen(false)
     setBusy(true)
-    try { await download(`/recipes/${recipe.id}/export.${ext}${suffix}`, `ttk.${ext}`) }
+    try {
+      if (toChat) {
+        await api(`/recipes/${recipe.id}/export.${ext}/telegram${suffix}`, { method: 'POST' })
+        toast(`${ext === 'pdf' ? 'PDF' : 'Excel'} отправлен в чат с ботом`)
+      } else {
+        await download(`/recipes/${recipe.id}/export.${ext}${suffix}`, `ttk.${ext}`)
+      }
+    }
     catch (e) { toast(errText(e), 'error') }
     finally { setBusy(false) }
   }
+  const verb = toChat ? 'Отправить в чат' : 'Скачать'
 
   const statusMut = useMutation({
     mutationFn: (to: 'archive' | 'restore') => api(`/recipes/${recipe.id}/${to}`, { method: 'POST' }),
@@ -311,8 +323,8 @@ function Actions({ recipe, k }: { recipe: Recipe; k: number | null }) {
           <>
             <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
             <div className="absolute right-0 top-10 z-50 w-60 card shadow-pop py-1 overflow-hidden">
-              <button className={item} onClick={() => exportFile('pdf')}><FileText className="h-4 w-4 text-ink-muted" />Скачать PDF{k ? ` ×${fmt(k)}` : ''}</button>
-              <button className={item} onClick={() => exportFile('xlsx')}><FileSpreadsheet className="h-4 w-4 text-ink-muted" />Скачать Excel{k ? ` ×${fmt(k)}` : ''}</button>
+              <button className={item} onClick={() => exportFile('pdf')}><FileText className="h-4 w-4 text-ink-muted" />{verb} PDF{k ? ` ×${fmt(k)}` : ''}</button>
+              <button className={item} onClick={() => exportFile('xlsx')}><FileSpreadsheet className="h-4 w-4 text-ink-muted" />{verb} Excel{k ? ` ×${fmt(k)}` : ''}</button>
               <div className="border-t border-line my-1" />
               {recipe.status === 'active'
                 ? <button className={item} onClick={() => { setOpen(false); statusMut.mutate('archive') }}><Archive className="h-4 w-4 text-ink-muted" />В архив</button>

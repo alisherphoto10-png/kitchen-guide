@@ -18,7 +18,7 @@ router.put('/:id', ah(async (req, res) => {
 }));
 
 router.post('/:id/reset-password', ah(async (req, res) => {
-  res.json({ password: await users.resetPassword(req.tenantId, toId(req.params.id)) });
+  res.json({ password: await users.resetPassword(req.tenantId, toId(req.params.id), (req.body || {}).password) });
 }));
 
 // Сброс привязки Telegram — после этого сотрудник снова входит в боте логином и паролем.

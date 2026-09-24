@@ -108,9 +108,11 @@ async function update(tenantId, id, patch) {
   return publicUser(row);
 }
 
-async function resetPassword(tenantId, id) {
+// Новый пароль сотруднику: свой (владелец задал вручную, можно простой — хоть одни цифры)
+// или сгенерированный, если не передан.
+async function resetPassword(tenantId, id, password) {
   await getInTenant(tenantId, id);
-  const plain = generatePassword();
+  const plain = password ? cleanPassword(password) : generatePassword();
   await pool.query('UPDATE users SET password_hash = $2 WHERE id = $1', [id, await bcrypt.hash(plain, 10)]);
   return plain;
 }

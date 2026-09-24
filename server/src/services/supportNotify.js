@@ -143,26 +143,47 @@ function ticketUrl(ticketId) {
   return `${config.publicBaseUrl}/support/${ticketId}`;
 }
 
-// Отправка уведомления «по возможности»: обращение уже сохранено, и сбой
-// уведомления не должен ронять разговор сотрудника с ботом. Ошибка видна в панели.
-async function notify(text, ticketId) {
+// Карточка тикета в группе: одно сообщение на тикет. prev — где оно уже лежит
+// ({ chat_id, message_id }); если там же текущий чат уведомлений — редактируем,
+// иначе (первое уведомление, чат сменили, сообщение удалили) — шлём новое.
+// Возвращает новое местоположение или null (уведомления не настроены / сбой).
+// «По возможности»: сбой не должен ронять переписку, ошибка видна в панели.
+async function upsert(prev, text, ticketId) {
   const s = await load();
-  if (!s?.token_encrypted || !s.chat_id) return;
-  try {
-    const url = ticketUrl(ticketId);
-    await tg.call(secretBox.decrypt(s.token_encrypted), 'sendMessage', {
-      chat_id: s.chat_id,
-      ...(s.thread_id && { message_thread_id: s.thread_id }),
-      text: text.length > 3500 ? text.slice(0, 3500) + '…' : text,
-      link_preview_options: { is_disabled: true },
-      // Кнопка-ссылка работает только с https-адресом.
-      ...(/^https:\/\//.test(url) && { reply_markup: { inline_keyboard: [[{ text: 'Открыть обращение', url }]] } }),
-    });
+  if (!s?.token_encrypted || !s.chat_id) return null;
+  const token = secretBox.decrypt(s.token_encrypted);
+  const url = ticketUrl(ticketId);
+  const body = {
+    text: text.length > 4000 ? text.slice(0, 4000) + '…' : text,
+    link_preview_options: { is_disabled: true },
+    // Кнопка-ссылка работает только с https-адресом.
+    ...(/^https:\/\//.test(url) && { reply_markup: { inline_keyboard: [[{ text: 'Открыть обращение', url }]] } }),
+  };
+  const ok = async where => {
     if (s.last_error) await save({ ...s, last_error: null, last_error_at: null, last_ok_at: new Date().toISOString() });
+    return where;
+  };
+  try {
+    if (prev?.message_id && String(prev.chat_id) === String(s.chat_id)) {
+      try {
+        await tg.call(token, 'editMessageText', { chat_id: s.chat_id, message_id: prev.message_id, ...body });
+        return ok(prev);
+      } catch (e) {
+        // Текст не изменился — это не ошибка.
+        if (/message is not modified/i.test(e.description || '')) return ok(prev);
+        // Сообщение удалили в группе и т. п. — пришлём заново.
+        if (!(e instanceof tg.TelegramError) || e.code !== 400) throw e;
+      }
+    }
+    const m = await tg.call(token, 'sendMessage', {
+      chat_id: s.chat_id, ...(s.thread_id && { message_thread_id: s.thread_id }), ...body,
+    });
+    return ok({ chat_id: String(s.chat_id), message_id: m.message_id });
   } catch (e) {
     console.error('[support notify]', e.message);
     await save({ ...s, last_error: e.description || e.message, last_error_at: new Date().toISOString() }).catch(() => {});
+    return null;
   }
 }
 
-module.exports = { get, setBot, discoverChats, setChat, remove, notify };
+module.exports = { get, setBot, discoverChats, setChat, remove, upsert };

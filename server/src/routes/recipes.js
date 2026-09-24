@@ -10,6 +10,7 @@ const recipes = require('../services/recipes');
 const exports_ = require('../services/exports');
 const tenants = require('../services/tenants');
 const modules = require('../services/modules');
+const botDelivery = require('../services/botDelivery');
 
 // ── чтение: все роли ─────────────────────────────────────────────────
 
@@ -44,23 +45,37 @@ function attachment(res, filename) {
   res.setHeader('Content-Disposition', `attachment; filename="ttk"; filename*=UTF-8''${encodeURIComponent(filename)}`);
 }
 
-router.get('/:id/export.pdf', requireRole('owner'), ah(async (req, res) => {
+const EXPORT_TYPES = {
+  pdf: 'application/pdf',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
+
+async function buildExport(req, ext) {
+  if (!EXPORT_TYPES[ext]) throw new HttpError(404, 'Не найдено');
   const recipe = recipes.scale(await recipes.get(req.tenantId, toId(req.params.id)), await scaleFromQuery(req));
   const tenant = await tenants.get(req.tenantId);
-  const { doc, filename } = exports_.pdf(recipe, { tenantName: tenant.name });
-  res.setHeader('Content-Type', 'application/pdf');
+  const { buffer, filename } = ext === 'pdf'
+    ? await exports_.pdfBuffer(recipe, { tenantName: tenant.name })
+    : await exports_.xlsx(recipe, { tenantName: tenant.name });
+  return { recipe, buffer: Buffer.from(buffer), filename };
+}
+
+// Сайт: обычное скачивание браузером.
+router.get('/:id/export.:ext', requireRole('owner'), ah(async (req, res) => {
+  const { buffer, filename } = await buildExport(req, req.params.ext);
+  res.setHeader('Content-Type', EXPORT_TYPES[req.params.ext]);
   attachment(res, filename);
-  doc.pipe(res);
-  doc.end();
+  res.send(buffer);
 }));
 
-router.get('/:id/export.xlsx', requireRole('owner'), ah(async (req, res) => {
-  const recipe = recipes.scale(await recipes.get(req.tenantId, toId(req.params.id)), await scaleFromQuery(req));
-  const tenant = await tenants.get(req.tenantId);
-  const { buffer, filename } = await exports_.xlsx(recipe, { tenantName: tenant.name });
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  attachment(res, filename);
-  res.send(Buffer.from(buffer));
+// Мини-апп: во встроенном браузере Telegram скачивание работает плохо — файл
+// приходит документом в чат с ботом заведения (тот же чат, откуда открыт мини-апп).
+router.post('/:id/export.:ext/telegram', requireRole('owner'), ah(async (req, res) => {
+  if (req.authVia !== 'telegram') throw new HttpError(400, 'Отправка в Telegram — только из мини-аппа');
+  const { recipe, buffer, filename } = await buildExport(req, req.params.ext);
+  const caption = recipe.name + (recipe.scale_factor ? ` · пересчитано ×${String(Math.round(recipe.scale_factor * 1000) / 1000).replace('.', ',')}` : '');
+  await botDelivery.sendDocument(req.tenantId, req.user.tg_id, { buffer, filename, contentType: EXPORT_TYPES[req.params.ext], caption });
+  res.json({ ok: true });
 }));
 
 // ── запись: только владелец ────────────────────────────────────────────
