@@ -1,12 +1,18 @@
 package com.kitchendesk.app;
 
 import android.os.Bundle;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
   @Override
   public void onCreate(Bundle savedInstanceState) {
+    // Запрет скриншотов и записи экрана (данные заведения — не для
+    // сохранения). Заодно скрывает содержимое в превью списка
+    // недавних приложений. До super.onCreate(), чтобы применилось до
+    // отрисовки окна.
+    getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
     super.onCreate(savedInstanceState);
     // На одном из двух тестовых устройств вход на сайте не переживал
     // закрытие приложения (куки не сохранялись между запусками), хотя

@@ -85,7 +85,12 @@
   }
   .secondary-btn:active { background: var(--card); }
   .err-msg { min-height: 18px; font-size: 0.8rem; color: var(--bad); margin-top: 10px; }
+  .info-msg { font-size: 0.8rem; color: var(--muted); margin-top: 10px; text-align: center; max-width: 280px; line-height: 1.5; }
   .code-field.plain { text-transform: none; letter-spacing: normal; margin-bottom: 12px; }
+  .text-link {
+    margin-top: 16px; background: none; border: none; color: var(--accent);
+    font-size: 0.82rem; font-weight: 700; font-family: inherit; cursor: pointer; padding: 6px;
+  }
 
   /* ---------- searching ---------- */
   .search-text { font-size: 0.95rem; color: var(--muted); margin-top: 20px; }
@@ -247,8 +252,21 @@
   <div class="screen" id="landingScreen">
     <div class="wordmark" style="font-size:1.7rem;">KitchenDesk</div>
     <div class="wordmark-tag" style="margin-top:10px;">Операционная система вашей кухни</div>
-    <button class="primary-btn" id="landingLoginBtn" style="margin-top:36px;">Войти</button>
+    <button class="primary-btn" id="landingLoginBtn" style="margin-top:36px;">Войти по коду приглашения</button>
     <button class="secondary-btn" id="landingRegisterVenueBtn">Зарегистрировать заведение</button>
+    <button class="text-link" id="landingAccountLoginBtn">Уже есть аккаунт? Войти по логину и паролю</button>
+  </div>
+
+  <!-- Вход по логину/паролю — для случая смены телефона (заглушка,
+       без реальной проверки, пока нет бэкенда учётных записей) -->
+  <div class="screen" id="loginScreen">
+    <div class="headline">Вход по логину и паролю</div>
+    <div class="sub">Если вы уже работали в KitchenDesk на другом устройстве</div>
+    <input class="code-field plain" id="loginInput" placeholder="Логин или телефон" />
+    <input class="code-field plain" id="passwordInput" type="password" placeholder="Пароль" />
+    <button class="primary-btn" id="loginSubmit">Войти</button>
+    <div class="info-msg" id="loginInfo"></div>
+    <button class="secondary-btn" id="loginBack">Назад</button>
   </div>
 
   <!-- 2. Регистрация (первый вход) -->
@@ -461,9 +479,10 @@
     show("pinScreen");
   });
 
-  // Главный экран: "Войти" ведёт к регистрации, "Зарегистрировать
-  // заведение" — пока заглушка (это отдельная, ещё не продуманная ветка
-  // для новых потенциальных клиентов, не для сотрудников заведения).
+  // Главный экран: "Войти по коду приглашения" ведёт к регистрации,
+  // "Зарегистрировать заведение" — заглушка для новых потенциальных
+  // клиентов, "Уже есть аккаунт" — заглушка для входа при смене
+  // телефона (нужен реальный бэкенд учётных записей, которого пока нет).
   document.getElementById("landingLoginBtn").addEventListener("click", function () {
     show("codeScreen");
   });
@@ -472,6 +491,22 @@
   });
   document.getElementById("venueRegisterBack").addEventListener("click", function () {
     show("landingScreen");
+  });
+  document.getElementById("landingAccountLoginBtn").addEventListener("click", function () {
+    show("loginScreen");
+  });
+  document.getElementById("loginBack").addEventListener("click", function () {
+    show("landingScreen");
+  });
+  document.getElementById("loginSubmit").addEventListener("click", function () {
+    var loginInput = document.getElementById("loginInput");
+    var passwordInput = document.getElementById("passwordInput");
+    var loginInfo = document.getElementById("loginInfo");
+    if (!loginInput.value.trim() || !passwordInput.value.trim()) {
+      loginInfo.textContent = "Заполните логин и пароль";
+      return;
+    }
+    loginInfo.textContent = "Эта проверка ещё не подключена к серверу — пока входите по коду приглашения от администратора заведения.";
   });
 
   var pinHeadline = document.getElementById("pinHeadline");
