@@ -5,8 +5,10 @@ const { HttpError } = require('../utils/http');
 
 const ROLE_RANK = { viewer: 1, editor: 2, owner: 3 };
 
-function signToken(user) {
-  return jwt.sign({ uid: user.id }, config.jwtSecret, { expiresIn: '30d' });
+// via — как открыта сессия: 'password' (сайт) или 'telegram' (мини-апп).
+// Интерфейс мини-аппа по нему прячет лишнее (смена пароля, выход).
+function signToken(user, via = 'password') {
+  return jwt.sign({ uid: user.id, via }, config.jwtSecret, { expiresIn: '30d' });
 }
 
 // Пользователь перечитывается из БД на каждый запрос — отключение сотрудника
@@ -51,6 +53,7 @@ async function authenticate(req, res, next) {
       req.role = user.role;
     }
     req.user = user;
+    req.authVia = payload.via === 'telegram' ? 'telegram' : 'password';
     next();
   } catch (e) {
     next(e);

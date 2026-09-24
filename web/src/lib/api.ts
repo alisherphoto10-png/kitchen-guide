@@ -23,9 +23,11 @@ export const session = {
 
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  code?: string
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
@@ -48,7 +50,7 @@ async function handle(res: Response) {
   }
   if (!res.ok) {
     const body = await res.json().catch(() => null)
-    throw new ApiError(body?.error || `Ошибка ${res.status}`, res.status)
+    throw new ApiError(body?.error || `Ошибка ${res.status}`, res.status, body?.code)
   }
   return res
 }

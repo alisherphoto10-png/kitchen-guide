@@ -4,10 +4,27 @@ const { ah, toId } = require('../utils/http');
 const { requirePlatformAdmin } = require('../middleware/auth');
 const tenants = require('../services/tenants');
 const bots = require('../services/bots');
+const modules = require('../services/modules');
 
 router.use(requirePlatformAdmin);
 
-router.get('/tenants', ah(async (req, res) => res.json(await tenants.list())));
+router.get('/tenants', ah(async (req, res) => {
+  const [list, modulesOf] = await Promise.all([tenants.list(), modules.allTenants()]);
+  res.json(list.map(t => ({ ...t, modules: modulesOf(t.id) })));
+}));
+
+// Платные модули заведения: включаются вручную после оплаты.
+router.get('/tenants/:id/modules', ah(async (req, res) => {
+  const id = toId(req.params.id);
+  await tenants.get(id);
+  res.json(await modules.detailed(id));
+}));
+
+router.put('/tenants/:id/modules/:key', ah(async (req, res) => {
+  const id = toId(req.params.id);
+  await tenants.get(id);
+  res.json(await modules.set(id, req.params.key, !!(req.body || {}).enabled, req.user.id));
+}));
 
 // «Название заведения + токен от @BotFather» одной формой: токен необязателен.
 // Если бот не подключился, заведение всё равно создано — ошибка бота уходит

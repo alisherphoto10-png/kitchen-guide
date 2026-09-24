@@ -37,7 +37,10 @@ if (fs.existsSync(config.webDist)) {
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+  if (err instanceof HttpError) {
+    // code/module — чтобы фронтенд отличал «модуль не оплачен» от прочих 403.
+    return res.status(err.status).json({ error: err.message, ...(err.code && { code: err.code, module: err.module }) });
+  }
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'Файл больше 8 МБ' : 'Ошибка загрузки файла' });
   }

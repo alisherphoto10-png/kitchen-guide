@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Pencil, MoreHorizontal, FileText, FileSpreadsheet, Archive, ArchiveRestore, Trash2, Calculator, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Pencil, MoreHorizontal, FileText, FileSpreadsheet, Archive, ArchiveRestore, Trash2, Calculator, RotateCcw, Lock } from 'lucide-react'
 import { api, download } from '../lib/api'
 import { useSession } from '../lib/session'
 import { fmt, yieldLabel } from '../lib/format'
 import { INITIAL_CALC, coefficient, isActive, scaleValue, nettoSum, ingredientBase, type CalcMode, type CalcState } from '../lib/calc'
 import type { Recipe } from '../lib/types'
+import { MODULE_LOCKED_TEXT, useModule } from '../lib/modules'
 import { ErrorBox, PageLoader, errText, toast, useConfirm } from './ui'
 
 export function RecipeDetail({ id, onBack }: { id: number; onBack?: () => void }) {
@@ -15,11 +16,13 @@ export function RecipeDetail({ id, onBack }: { id: number; onBack?: () => void }
   // Пересчёт от прошлой карты на новую не переносится: родитель монтирует
   // компонент с key={id}, и состояние калькулятора создаётся заново.
   const [calc, setCalc] = useState<CalcState>(INITIAL_CALC)
+  const recalcOn = useModule('recalc')
 
   if (isLoading) return <PageLoader />
   if (error || !recipe) return <div className="p-6"><BackLink onBack={onBack} /><ErrorBox error={error} /></div>
 
-  const k = coefficient(recipe, calc)
+  // Модуль «Пересчёт» выключен — коэффициента нет, карта всегда в исходных количествах.
+  const k = recalcOn ? coefficient(recipe, calc) : null
   const active = isActive(k)
   const sum = nettoSum(recipe)
 
@@ -55,7 +58,9 @@ export function RecipeDetail({ id, onBack }: { id: number; onBack?: () => void }
         </div>
       </header>
 
-      <CalcPanel recipe={recipe} state={calc} onChange={p => setCalc(s => ({ ...s, ...p }))} k={k} />
+      {recalcOn
+        ? <CalcPanel recipe={recipe} state={calc} onChange={p => setCalc(s => ({ ...s, ...p }))} k={k} />
+        : <CalcLocked />}
 
       <section className="mt-5">
         <h2 className="text-sm font-bold uppercase tracking-[0.06em] text-ink-muted mb-2">Состав</h2>
@@ -159,6 +164,26 @@ function CalcPanel({ recipe, state, onChange, k }: { recipe: Recipe; state: Calc
       </div>
       {active && <p className="mt-3 text-[13px] text-brand-ink font-semibold">Состав и выход пересчитаны ×{fmt(k)} — выгрузка тоже пойдёт с пересчётом.</p>}
       {state.mode === 'ingredient' && !active && <p className="mt-2 text-xs muted">Считается по брутто: сколько продукта у вас есть — на столько и пересчитаем всю карту.</p>}
+    </section>
+  )
+}
+
+// Модуль «Пересчёт» не подключён: те же режимы на виду, но недоступны — с объяснением.
+function CalcLocked() {
+  return (
+    <section className="rounded-2xl border border-dashed border-line-strong bg-paper-2/40 p-3 sm:p-4" aria-disabled="true">
+      <div className="flex items-center gap-2 mb-3">
+        <Calculator className="h-4 w-4 text-ink-faint" />
+        <h2 className="text-sm font-bold flex-1 text-ink-muted">Пересчёт</h2>
+        <span className="tag bg-paper-2 text-ink-muted gap-1"><Lock className="h-3 w-3" />расширенный тариф</span>
+      </div>
+      <div className="flex flex-wrap gap-1 mb-3 opacity-50 pointer-events-none select-none" aria-hidden>
+        {['× Множитель', 'Порции', 'Выход', 'От продукта'].map(l => <span key={l} className="chip">{l}</span>)}
+      </div>
+      <p className="flex items-start gap-2 text-[13px] text-ink-2">
+        <Lock className="h-4 w-4 flex-shrink-0 mt-0.5 text-ink-muted" />
+        <span>Пересчёт на нужное количество порций, выход или от остатка продукта. {MODULE_LOCKED_TEXT}.</span>
+      </p>
     </section>
   )
 }

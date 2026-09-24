@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, LogIn, Building2, Bot } from 'lucide-react'
+import { Plus, LogIn, Building2, Bot, Puzzle } from 'lucide-react'
 import { api } from '../lib/api'
 import { useSession } from '../lib/session'
 import { relDate } from '../lib/format'
 import type { PlatformTenant } from '../lib/types'
 import { Empty, ErrorBox, Modal, PageLoader, SecretReveal, errText, toast, useConfirm } from '../components/ui'
 import { BotModal, TokenField, BotFatherHelp } from '../components/BotModal'
+import { ModulesModal } from '../components/ModulesModal'
 
 // Транслитерация названия в идентификатор-подсказку (его потом можно поправить руками).
 const TR: Record<string, string> = { а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'y',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'c',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya' }
@@ -21,6 +22,7 @@ export function PlatformPage() {
   const [adding, setAdding] = useState(false)
   const [created, setCreated] = useState<Created | null>(null)
   const [botFor, setBotFor] = useState<PlatformTenant | null>(null)
+  const [modulesFor, setModulesFor] = useState<PlatformTenant | null>(null)
   const [confirm, confirmNode] = useConfirm()
 
   const toggle = useMutation({
@@ -49,6 +51,10 @@ export function PlatformPage() {
                 <p className="font-semibold">{t.name} {!t.is_active && <span className="tag bg-ink text-paper ml-1">приостановлено</span>}</p>
                 <p className="text-xs muted">{t.slug} · {t.recipe_count} ТТК · {t.user_count} сотр. · активность {relDate(t.last_activity_at)}</p>
               </div>
+              <button className="btn-ghost btn-sm" onClick={() => setModulesFor(t)} title="Платные модули">
+                <Puzzle className={`h-3.5 w-3.5 ${Object.values(t.modules || {}).some(Boolean) ? 'text-ok' : 'text-ink-faint'}`} />
+                Модули <span className="muted">{Object.values(t.modules || {}).filter(Boolean).length}/{Object.keys(t.modules || {}).length}</span>
+              </button>
               <button className="btn-ghost btn-sm" onClick={() => setBotFor(t)} title="Telegram-бот заведения">
                 <Bot className={`h-3.5 w-3.5 ${t.bot_username ? (t.bot_active && !t.bot_error ? 'text-ok' : 'text-warn') : 'text-ink-faint'}`} />
                 {t.bot_username ? <>@{t.bot_username}{!t.bot_active && <span className="muted"> · выкл</span>}</> : 'Подключить бота'}
@@ -74,6 +80,7 @@ export function PlatformPage() {
         </Modal>
       )}
       {botFor && <BotModal tenant={botFor} onClose={() => setBotFor(null)} />}
+      {modulesFor && <ModulesModal tenant={modulesFor} onClose={() => setModulesFor(null)} />}
       {confirmNode}
     </div>
   )

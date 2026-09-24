@@ -18,11 +18,14 @@ export interface Tenant {
   name: string
   slug: string
   bot?: { username: string; is_active: boolean } | null
+  modules?: Record<string, boolean>
 }
 
 export interface Me {
   user: User
   role: Role
+  // Как открыта сессия: сайт (логин/пароль) или мини-апп Telegram.
+  via: 'password' | 'telegram'
   tenant: Tenant | null
 }
 
@@ -83,6 +86,16 @@ export interface PlatformTenant extends Tenant {
   bot_username: string | null
   bot_active: boolean | null
   bot_error: string | null
+  modules: Record<string, boolean>
+}
+
+export interface TenantModule {
+  key: string
+  title: string
+  description: string
+  enabled: boolean
+  changed_at: string | null
+  changed_by: string | null
 }
 
 export interface BotStatus {

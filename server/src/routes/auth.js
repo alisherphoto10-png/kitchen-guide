@@ -6,6 +6,7 @@ const users = require('../services/users');
 const tenants = require('../services/tenants');
 const bots = require('../services/bots');
 const telegramLink = require('../services/telegramLink');
+const modules = require('../services/modules');
 
 // 10 неудачных попыток с одного IP за 15 минут. Успешные входы не считаются.
 const loginLimiter = rateLimit({
@@ -38,7 +39,7 @@ router.post('/telegram', loginLimiter, ah(async (req, res) => {
   if (!user) throw new HttpError(403, 'Ваш Telegram ещё не привязан. Откройте чат с ботом, нажмите «Старт» и войдите логином и паролем от владельца.');
   if (!user.is_active) throw new HttpError(403, 'Доступ отключён — обратитесь к владельцу заведения');
   await users.touchLogin(user.id);
-  res.json({ token: signToken(user), user: users.publicUser(user) });
+  res.json({ token: signToken(user, 'telegram'), user: users.publicUser(user) });
 }));
 
 // Кто я и в каком заведении — фронтенд берёт роль отсюда, а не из localStorage.
@@ -47,7 +48,12 @@ router.get('/me', authenticate, ah(async (req, res) => {
   res.json({
     user: users.publicUser(req.user),
     role: req.role,
-    tenant: tenant && { id: tenant.id, name: tenant.name, slug: tenant.slug, bot: await bots.summary(tenant.id) },
+    via: req.authVia,
+    tenant: tenant && {
+      id: tenant.id, name: tenant.name, slug: tenant.slug,
+      bot: await bots.summary(tenant.id),
+      modules: await modules.forTenant(tenant.id),
+    },
   });
 }));
 

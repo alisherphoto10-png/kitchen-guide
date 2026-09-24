@@ -9,6 +9,7 @@ const { requireRole } = require('../middleware/auth');
 const recipes = require('../services/recipes');
 const exports_ = require('../services/exports');
 const tenants = require('../services/tenants');
+const modules = require('../services/modules');
 
 // ── чтение: все роли ─────────────────────────────────────────────────
 
@@ -29,10 +30,13 @@ router.get('/:id', ah(async (req, res) => {
 
 // Выгрузка. ?k= — коэффициент пересчёта (как в калькуляторе на экране).
 // Повару (viewer) выгрузка закрыта — рецептуры не должны уходить файлами.
-function scaleFromQuery(q) {
+// Выгрузка как есть — базовая функция; с пересчётом (k ≠ 1) — модуль «Пересчёт».
+async function scaleFromQuery(req) {
+  const q = req.query;
   if (q.k === undefined || q.k === '') return 1;
   const k = parseFloat(String(q.k).replace(',', '.'));
   if (!(k > 0) || k > 10000) throw new HttpError(400, 'Некорректный коэффициент');
+  if (k !== 1 && !(await modules.isEnabled(req.tenantId, 'recalc'))) throw new modules.ModuleLockedError('recalc');
   return k;
 }
 
@@ -41,7 +45,7 @@ function attachment(res, filename) {
 }
 
 router.get('/:id/export.pdf', requireRole('editor'), ah(async (req, res) => {
-  const recipe = recipes.scale(await recipes.get(req.tenantId, toId(req.params.id)), scaleFromQuery(req.query));
+  const recipe = recipes.scale(await recipes.get(req.tenantId, toId(req.params.id)), await scaleFromQuery(req));
   const tenant = await tenants.get(req.tenantId);
   const { doc, filename } = exports_.pdf(recipe, { tenantName: tenant.name });
   res.setHeader('Content-Type', 'application/pdf');
@@ -51,7 +55,7 @@ router.get('/:id/export.pdf', requireRole('editor'), ah(async (req, res) => {
 }));
 
 router.get('/:id/export.xlsx', requireRole('editor'), ah(async (req, res) => {
-  const recipe = recipes.scale(await recipes.get(req.tenantId, toId(req.params.id)), scaleFromQuery(req.query));
+  const recipe = recipes.scale(await recipes.get(req.tenantId, toId(req.params.id)), await scaleFromQuery(req));
   const tenant = await tenants.get(req.tenantId);
   const { buffer, filename } = await exports_.xlsx(recipe, { tenantName: tenant.name });
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

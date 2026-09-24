@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { BookOpen, Tags, Users, Building2, LogOut, UserCircle2, ArrowLeft } from 'lucide-react'
 import { useSession } from '../lib/session'
 import type { Role } from '../lib/types'
@@ -62,15 +62,20 @@ export function Layout() {
               <p className="text-xs muted">{me?.user.is_platform_admin ? 'Администратор платформы' : me && ROLE_LABEL[me.role]}</p>
             </div>
           </NavLink>
-          <button onClick={logout} className="btn-ghost btn-sm w-full justify-start mt-1 text-ink-muted"><LogOut className="h-4 w-4" />Выйти</button>
+          {me?.via !== 'telegram' && (
+            <button onClick={logout} className="btn-ghost btn-sm w-full justify-start mt-1 text-ink-muted"><LogOut className="h-4 w-4" />Выйти</button>
+          )}
         </div>
       </aside>
 
       {/* Верхняя панель (мобильный) */}
       <header className="lg:hidden sticky top-0 z-30 flex items-center gap-2.5 px-4 h-14 border-b border-line bg-paper/90 backdrop-blur">
-        <Mark />
-        <p className="flex-1 min-w-0 text-[15px] font-bold truncate">{me?.tenant?.name || 'Платформа'}</p>
-        <NavLink to="/account" className="btn-icon btn-ghost h-9 w-9" aria-label="Аккаунт"><UserCircle2 className="h-5 w-5" /></NavLink>
+        {/* Лого и название ведут на главный экран — у повара нижних вкладок нет. */}
+        <Link to={me?.tenant ? '/recipes' : '/platform'} className="flex flex-1 min-w-0 items-center gap-2.5">
+          <Mark />
+          <p className="flex-1 min-w-0 text-[15px] font-bold truncate">{me?.tenant?.name || 'Платформа'}</p>
+        </Link>
+        <NavLink to="/account" className="btn-icon btn-ghost h-9 w-9" aria-label="Профиль"><UserCircle2 className="h-5 w-5" /></NavLink>
       </header>
 
       {adminInside && (
