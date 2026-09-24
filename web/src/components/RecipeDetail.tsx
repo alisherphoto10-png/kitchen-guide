@@ -30,7 +30,7 @@ export function RecipeDetail({ id, onBack }: { id: number; onBack?: () => void }
     <article className="max-w-4xl mx-auto px-4 lg:px-8 pt-4 lg:pt-6 pb-10">
       <div className="flex items-center justify-between gap-2 mb-4">
         <BackLink onBack={onBack} />
-        {can('editor') && <Actions recipe={recipe} k={active ? k : null} />}
+        {can('owner') && <Actions recipe={recipe} k={active ? k : null} />}
       </div>
 
       <header className="flex gap-4 items-start mb-5">

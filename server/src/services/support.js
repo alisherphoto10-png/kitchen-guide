@@ -14,7 +14,7 @@ const notifier = require('./supportNotify');
 
 const REQUEST_HOURS = 24;       // «Техподдержка» нажата — ждём текст обращения столько
 const MAX_TEXT = 4000;
-const ROLE = { owner: 'владелец', editor: 'технолог', viewer: 'повар' };
+const ROLE = { owner: 'владелец', viewer: 'повар' };
 
 const no = id => `№${id}`;
 

@@ -10,7 +10,6 @@ import { ROLE_LABEL } from '../components/Layout'
 
 const ROLE_HINT: Record<Role, string> = {
   owner: 'всё, включая команду',
-  editor: 'создаёт и правит ТТК, выгружает',
   viewer: 'смотрит и пересчитывает',
 }
 

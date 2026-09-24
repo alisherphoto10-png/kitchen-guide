@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const { pool } = require('../db/pool');
 const { HttpError } = require('../utils/http');
 
-const ROLES = ['owner', 'editor', 'viewer'];
+const ROLES = ['owner', 'viewer'];
 
 // Без похожих символов (0/O, 1/l/I) — пароль диктуют голосом или переписывают с экрана.
 function generatePassword(len = 10) {

@@ -44,7 +44,7 @@ function attachment(res, filename) {
   res.setHeader('Content-Disposition', `attachment; filename="ttk"; filename*=UTF-8''${encodeURIComponent(filename)}`);
 }
 
-router.get('/:id/export.pdf', requireRole('editor'), ah(async (req, res) => {
+router.get('/:id/export.pdf', requireRole('owner'), ah(async (req, res) => {
   const recipe = recipes.scale(await recipes.get(req.tenantId, toId(req.params.id)), await scaleFromQuery(req));
   const tenant = await tenants.get(req.tenantId);
   const { doc, filename } = exports_.pdf(recipe, { tenantName: tenant.name });
@@ -54,7 +54,7 @@ router.get('/:id/export.pdf', requireRole('editor'), ah(async (req, res) => {
   doc.end();
 }));
 
-router.get('/:id/export.xlsx', requireRole('editor'), ah(async (req, res) => {
+router.get('/:id/export.xlsx', requireRole('owner'), ah(async (req, res) => {
   const recipe = recipes.scale(await recipes.get(req.tenantId, toId(req.params.id)), await scaleFromQuery(req));
   const tenant = await tenants.get(req.tenantId);
   const { buffer, filename } = await exports_.xlsx(recipe, { tenantName: tenant.name });
@@ -63,28 +63,28 @@ router.get('/:id/export.xlsx', requireRole('editor'), ah(async (req, res) => {
   res.send(Buffer.from(buffer));
 }));
 
-// ── запись: editor и выше ────────────────────────────────────────────
+// ── запись: только владелец ────────────────────────────────────────────
 
-router.post('/', requireRole('editor'), ah(async (req, res) => {
+router.post('/', requireRole('owner'), ah(async (req, res) => {
   res.status(201).json(await recipes.create(req.tenantId, req.user.id, req.body || {}));
 }));
 
-router.post('/import', requireRole('editor'), ah(async (req, res) => {
+router.post('/import', requireRole('owner'), ah(async (req, res) => {
   const { items, category_id } = req.body || {};
   const created = await recipes.importMany(req.tenantId, req.user.id, items, { categoryId: parseInt(category_id, 10) || null });
   res.json({ created });
 }));
 
-router.put('/:id', requireRole('editor'), ah(async (req, res) => {
+router.put('/:id', requireRole('owner'), ah(async (req, res) => {
   res.json(await recipes.update(req.tenantId, req.user.id, toId(req.params.id), req.body || {}));
 }));
 
-router.post('/:id/archive', requireRole('editor'), ah(async (req, res) => {
+router.post('/:id/archive', requireRole('owner'), ah(async (req, res) => {
   await recipes.setStatus(req.tenantId, toId(req.params.id), 'archived');
   res.json({ ok: true });
 }));
 
-router.post('/:id/restore', requireRole('editor'), ah(async (req, res) => {
+router.post('/:id/restore', requireRole('owner'), ah(async (req, res) => {
   await recipes.setStatus(req.tenantId, toId(req.params.id), 'active');
   res.json({ ok: true });
 }));
@@ -94,7 +94,7 @@ function unlinkUpload(publicPath) {
   fs.unlink(path.join(config.uploadsDir, path.basename(publicPath)), () => {});
 }
 
-router.delete('/:id', requireRole('editor'), ah(async (req, res) => {
+router.delete('/:id', requireRole('owner'), ah(async (req, res) => {
   unlinkUpload(await recipes.remove(req.tenantId, toId(req.params.id)));
   res.json({ ok: true });
 }));
@@ -113,7 +113,7 @@ const upload = multer({
   limits: { fileSize: 8 * 1024 * 1024, files: 1 },
 });
 
-router.post('/:id/photo', requireRole('editor'), upload.single('photo'), ah(async (req, res) => {
+router.post('/:id/photo', requireRole('owner'), upload.single('photo'), ah(async (req, res) => {
   if (!req.file) throw new HttpError(400, 'Нет файла');
   const publicPath = '/uploads/' + req.file.filename;
   try {
@@ -125,7 +125,7 @@ router.post('/:id/photo', requireRole('editor'), upload.single('photo'), ah(asyn
   res.json({ photo: publicPath });
 }));
 
-router.delete('/:id/photo', requireRole('editor'), ah(async (req, res) => {
+router.delete('/:id/photo', requireRole('owner'), ah(async (req, res) => {
   unlinkUpload(await recipes.setPhoto(req.tenantId, toId(req.params.id), null));
   res.json({ ok: true });
 }));

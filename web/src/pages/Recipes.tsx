@@ -66,7 +66,7 @@ export function RecipesPage() {
       <div className="px-4 lg:px-6 pt-5 pb-3 space-y-3 bg-paper sticky top-14 lg:top-0 z-20">
         <div className="flex items-center justify-between gap-2">
           <h1 className="h-page">{archived ? 'Архив ТТК' : 'ТТК'}</h1>
-          {can('editor') && !archived && (
+          {can('owner') && !archived && (
             <div className="flex gap-1.5">
               <button className="btn-outline btn-icon h-9 w-9 lg:w-auto lg:px-3" onClick={() => setImportOpen(true)} title="Импорт из Excel">
                 <FileUp className="h-4 w-4" /><span className="hidden lg:inline">Импорт</span>
@@ -99,7 +99,7 @@ export function RecipesPage() {
                 className={`px-3 h-8 rounded-[10px] transition-colors ${kind === v ? 'bg-paper-card shadow-card text-ink' : 'text-ink-muted'}`}>{l}</button>
             ))}
           </div>
-          {can('editor') && (
+          {can('owner') && (
             <button className="btn-ghost btn-sm" onClick={() => setParam('archived', archived ? '' : '1')}>
               <Archive className="h-3.5 w-3.5" />{archived ? 'Действующие' : 'Архив'}
             </button>
@@ -116,8 +116,8 @@ export function RecipesPage() {
             : archived
               ? <Empty icon={<Archive className="h-8 w-8" />} title="Архив пуст" />
               : <Empty icon={<BookOpen className="h-8 w-8" />} title="Пока ни одной ТТК"
-                  text={can('editor') ? 'Создайте первую карту вручную или загрузите выгрузку из Excel.' : 'Здесь появятся технологические карты заведения.'}
-                  action={can('editor') && <Link to="/recipes/new" className="btn-primary"><Plus className="h-4 w-4" />Новая ТТК</Link>} />
+                  text={can('owner') ? 'Создайте первую карту вручную или загрузите выгрузку из Excel.' : 'Здесь появятся технологические карты заведения.'}
+                  action={can('owner') && <Link to="/recipes/new" className="btn-primary"><Plus className="h-4 w-4" />Новая ТТК</Link>} />
         ) : (
           <>
             <p className="text-xs muted mb-2">{groups.length} {plural(groups.length, 'карта', 'карты', 'карт')}</p>

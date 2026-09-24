@@ -3,7 +3,7 @@ const config = require('../config');
 const { pool } = require('../db/pool');
 const { HttpError } = require('../utils/http');
 
-const ROLE_RANK = { viewer: 1, editor: 2, owner: 3 };
+const ROLE_RANK = { viewer: 1, owner: 2 };
 
 // via — как открыта сессия: 'password' (сайт) или 'telegram' (мини-апп).
 // Интерфейс мини-аппа по нему прячет лишнее (смена пароля, выход).

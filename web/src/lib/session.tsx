@@ -16,7 +16,7 @@ interface SessionValue {
 }
 
 const Ctx = createContext<SessionValue | null>(null)
-const RANK: Record<Role, number> = { viewer: 1, editor: 2, owner: 3 }
+const RANK: Record<Role, number> = { viewer: 1, owner: 2 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient()

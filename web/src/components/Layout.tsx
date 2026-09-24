@@ -5,7 +5,7 @@ import { api } from '../lib/api'
 import { useSession } from '../lib/session'
 import type { Role } from '../lib/types'
 
-const ROLE_LABEL: Record<Role, string> = { owner: 'Владелец', editor: 'Технолог', viewer: 'Повар' }
+const ROLE_LABEL: Record<Role, string> = { owner: 'Владелец', viewer: 'Повар' }
 
 // Сколько открытых обращений в техподдержку ждут ответа — бейдж в меню.
 function useSupportWaiting(enabled: boolean) {
@@ -23,7 +23,7 @@ function useNav() {
   const items = [] as { to: string; label: string; Icon: typeof BookOpen; badge?: number }[]
   if (me?.tenant) {
     items.push({ to: '/recipes', label: 'ТТК', Icon: BookOpen })
-    if (can('editor')) items.push({ to: '/categories', label: 'Категории', Icon: Tags })
+    if (can('owner')) items.push({ to: '/categories', label: 'Категории', Icon: Tags })
     if (can('owner')) items.push({ to: '/team', label: 'Команда', Icon: Users })
   }
   if (me?.user.is_platform_admin) {
