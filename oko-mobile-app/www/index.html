@@ -160,6 +160,10 @@
   .key:active { background: #1b2338; }
   .key.ghost { border: none; background: transparent; }
   .note { position: fixed; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); font-size: 11px; color: var(--dim); text-align: center; padding: 0 24px; }
+  .reset-link {
+    margin-top: 20px; background: none; border: none; color: var(--dim);
+    font-size: 12px; text-decoration: underline; font-family: inherit; cursor: pointer; padding: 8px;
+  }
 
   /* ---------- постоянная шапка KitchenDesk ----------
      Видна на всех экранах, КРОМЕ заставки (там и так на весь экран
@@ -248,6 +252,7 @@
       <div class="key ghost"></div><div class="key" data-k="0">0</div><div class="key ghost" id="back">⌫</div>
     </div>
     <div class="err-msg" id="pinMsg"></div>
+    <button class="reset-link" id="resetOnboarding" hidden>Сбросить и посмотреть первый вход заново</button>
   </div>
 
   <div class="note" id="note">Демо-сценарий входа — код и поиск заведения пока не настоящие, ведут к тестовому заведению ОКО. При повторном открытии приложение запомнит это и сразу покажет PIN.</div>
@@ -373,6 +378,16 @@
   // 4 → 5
   document.getElementById("foundContinue").addEventListener("click", function () {
     show("pinScreen");
+  });
+
+  // Для тестирования: на быстром PIN-экране (когда вход уже запомнен)
+  // можно сбросить и заново пройти первый вход на этом же устройстве.
+  if (isReturning) {
+    document.getElementById("resetOnboarding").hidden = false;
+  }
+  document.getElementById("resetOnboarding").addEventListener("click", function () {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    window.location.reload();
   });
 
   // 5: PIN-заглушка (как раньше)
