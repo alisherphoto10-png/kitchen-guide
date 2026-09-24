@@ -56,8 +56,9 @@ export function App() {
         <Route path="/support/:id" element={<Guard platform><SupportPage /></Guard>} />
         <Route path="/support/my" element={<Guard><MySupportPage /></Guard>} />
         <Route path="/support/my/:id" element={<Guard><MySupportPage /></Guard>} />
-        <Route path="/guide" element={<Guard platform><GuidePage /></Guard>} />
-        <Route path="/faq" element={<Guard platform><FaqPage /></Guard>} />
+        {/* Не /guide: этот адрес — публичная страница гида (статика сервера). */}
+        <Route path="/admin/guide" element={<Guard platform><GuidePage /></Guard>} />
+        <Route path="/admin/faq" element={<Guard platform><FaqPage /></Guard>} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="*" element={<Navigate to={home} replace />} />
       </Route>

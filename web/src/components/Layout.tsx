@@ -33,8 +33,8 @@ function useNav() {
   if (atPlatformLevel) {
     items.push({ to: '/platform', label: 'Заведения', Icon: Building2 })
     items.push({ to: '/support', label: 'Поддержка', Icon: LifeBuoy, badge: waiting })
-    items.push({ to: '/guide', label: 'Гид', Icon: BookMarked })
-    items.push({ to: '/faq', label: 'Вопросы', Icon: HelpCircle })
+    items.push({ to: '/admin/guide', label: 'Гид', Icon: BookMarked })
+    items.push({ to: '/admin/faq', label: 'Вопросы', Icon: HelpCircle })
   }
   return items
 }
