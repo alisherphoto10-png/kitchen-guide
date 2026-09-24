@@ -17,10 +17,25 @@ async function send(token, chatId, text, markup) {
 
 const ASK_LOGIN = 'Здравствуйте! Это бот технологических карт заведения.\n\nЧтобы войти, отправьте ваш логин — его выдал владелец заведения.';
 
+// То, что человек сам написал или прислал. Всё остальное — служебные сообщения
+// Telegram (например, приходят в чат вместе с документом, который бот отправил
+// из мини-аппа); на них бот не отвечает, иначе после каждой выгрузки в чат
+// падало бы лишнее приветствие.
+const CONTENT_KEYS = ['text', 'caption', 'photo', 'document', 'video', 'voice', 'audio', 'sticker', 'video_note', 'animation', 'contact', 'location'];
+
+function isUserContent(msg) {
+  return CONTENT_KEYS.some(k => msg[k] !== undefined);
+}
+
 async function handle(bot, update) {
   const msg = update.message;
   // Только личка: в группах бот молчит (там могут быть все — логины туда не просим).
   if (!msg || msg.chat?.type !== 'private' || !msg.from || msg.from.is_bot) return;
+  if (!isUserContent(msg)) {
+    // Без содержимого сообщения — только названия полей, чтобы понять, что это было.
+    console.log(`[bot ${bot.id}] служебное сообщение пропущено: ${Object.keys(msg).filter(k => !['message_id', 'from', 'chat', 'date'].includes(k)).join(',') || '—'}`);
+    return;
+  }
   const token = bots.tokenOf(bot);
   const chatId = msg.chat.id;
   const tgUser = msg.from;
