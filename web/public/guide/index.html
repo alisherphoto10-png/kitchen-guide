@@ -276,6 +276,16 @@
   footer img { width: 260px; height: auto; }
   footer small { color: var(--dim); font-size: 0.82rem; }
 
+  /* ---------- faq ---------- */
+  #faq .num { background: var(--coral); color: #fff; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 0.85rem; font-weight: 800; }
+  .faq-item { border: 1px solid var(--line); border-radius: 16px; padding: 2px 22px; background: var(--card); }
+  .faq-item summary { cursor: pointer; list-style: none; padding: 18px 0; font-weight: 700; font-size: 1.02rem; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .faq-item summary::-webkit-details-marker { display: none; }
+  .faq-item summary::after { content: '+'; flex: none; font-size: 1.4rem; line-height: 1; color: var(--coral); transition: transform 200ms var(--ease); }
+  .faq-item[open] summary::after { transform: rotate(45deg); }
+  .faq-item p { margin: 0 0 18px; color: var(--muted); font-size: 0.92rem; line-height: 1.65; max-width: 62ch; }
+  #faq-empty { color: var(--dim); font-size: 0.92rem; }
+
 
   /* ---------- stacked layers ----------
      Each section sits in a tall .pin rail; the .layer inside is what
@@ -390,11 +400,11 @@
     </div>
 
     <div class="hero-stage">
-      <img class="hero-deco caesar" src="img/bowl-caesar.png" alt="" data-r="pop" style="--d:300ms">
-      <img class="hero-deco cake" src="img/plate-cheesecake.png" alt="" data-r="pop" style="--d:420ms">
+      <img class="hero-deco caesar" src="img/bowl-caesar.png" alt="" data-r="pop" style="--d:300ms" data-guide-slot="hero-caesar">
+      <img class="hero-deco cake" src="img/plate-cheesecake.png" alt="" data-r="pop" style="--d:420ms" data-guide-slot="hero-cake">
       <div data-r="right" style="--d:150ms">
         <div class="dish-card float">
-          <div class="dish-photo"><img src="img/photo-carbonara.jpg" alt="Паста Карбонара"></div>
+          <div class="dish-photo"><img src="img/photo-carbonara.jpg" alt="Паста Карбонара" data-guide-slot="hero-carbonara"></div>
           <div class="dish-body">
             <h3>Паста Карбонара</h3>
             <div class="tags"><span class="tag green">Блюдо</span><span class="tag">Основное</span><span class="tag">Итальянская кухня</span></div>
@@ -430,9 +440,9 @@
         <div class="panel-head"><h4>Технологические карты</h4><span class="plus">+</span></div>
         <div class="search"><svg><use href="#i-search"/></svg><span id="q"></span><span class="caret"></span></div>
         <div class="tabs"><span class="on">Все</span><span>Блюда</span><span>Полуфабрикаты</span><span>Соусы</span><i class="ink"></i></div>
-        <div class="row" data-k="dish"><img src="img/th1.jpg" alt=""><div class="t"><b>Цезарь с курицей</b><small>Выход 220 г · 540 ккал</small></div><span class="badge">Блюдо</span></div>
-        <div class="row" data-k="dish soup"><img src="img/th2.jpg" alt=""><div class="t"><b>Том Ям</b><small>Выход 350 г · 310 ккал</small></div><span class="badge">Блюдо</span></div>
-        <div class="row" data-k="dish"><img src="img/th3.jpg" alt=""><div class="t"><b>Паста Карбонара</b><small>Выход 250 г · 540 ккал</small></div><span class="badge">Блюдо</span></div>
+        <div class="row" data-k="dish"><img src="img/th1.jpg" alt="" data-guide-slot="list-caesar"><div class="t"><b>Цезарь с курицей</b><small>Выход 220 г · 540 ккал</small></div><span class="badge">Блюдо</span></div>
+        <div class="row" data-k="dish soup"><img src="img/th2.jpg" alt="" data-guide-slot="list-tomyum"><div class="t"><b>Том Ям</b><small>Выход 350 г · 310 ккал</small></div><span class="badge">Блюдо</span></div>
+        <div class="row" data-k="dish"><img src="img/th3.jpg" alt="" data-guide-slot="list-carbonara"><div class="t"><b>Паста Карбонара</b><small>Выход 250 г · 540 ккал</small></div><span class="badge">Блюдо</span></div>
         <div class="row" data-k="pf"><div class="ava" style="background:#B98A5A;border-radius:12px;width:48px;height:48px">ПФ</div><div class="t"><b>Демиглас</b><small>Выход 1 л · соус</small></div><span class="badge coral">ПФ</span></div>
       </div>
     </div>
@@ -630,8 +640,16 @@
 </section>
 </div>
 
+<section id="faq" data-scene style="background:var(--bg); padding: 96px 24px; position: relative; z-index: 1">
+  <div class="wrap" style="max-width: 760px">
+    <div class="eyebrow" data-r="up"><span class="num">?</span><span>Частые вопросы</span></div>
+    <h2 data-r="up" style="--d:80ms; margin-bottom: 28px">Отвечаем на вопросы <span class="hl">заранее</span></h2>
+    <div id="faq-list" data-r="up" style="--d:160ms; display: flex; flex-direction: column; gap: 12px"></div>
+  </div>
+</section>
+
 <div class="pin">
-<section class="final layer dark" style="--img:url(img/bg-kitchen.jpg)" data-scene>
+<section class="final layer dark"  style="--img:url(img/bg-kitchen.jpg)" data-scene>
   <div class="wrap">
     <div>
       <h2 data-r="up">Остались вопросы? <span class="hl">Пишите.</span></h2>
@@ -641,8 +659,8 @@
       </div>
     </div>
     <div class="final-visual" data-r="pop" style="--d:150ms">
-      <img class="plate" src="img/bowl-salmon.png" alt="Лосось с овощами">
-      <img class="plate-2" src="img/bowl-tomyum.png" alt="">
+      <img class="plate" src="img/bowl-salmon.png" alt="Лосось с овощами" data-guide-slot="final-salmon">
+      <img class="plate-2" src="img/bowl-tomyum.png" alt="" data-guide-slot="final-tomyum">
       <div class="note" style="right:0; top:-30px">
         <span class="hand" data-r="up" style="--d:900ms">Меньше расчётов —<br>больше времени на вкус</span>
         <svg class="arrow" viewBox="0 0 70 50"><path pathLength="1" d="M30 2c6 14 0 26-18 38m0 0 10-2m-10 2 3-10"/></svg>
@@ -842,6 +860,34 @@
   tick();
 
   if (reduce) document.querySelectorAll('[data-scene]').forEach(function (s) { s.classList.add('in'); });
+
+  /* live content: photo overrides + FAQ, set by the platform admin.
+     Falls back silently to the built-in placeholders/empty FAQ if the
+     page is opened outside the product (e.g. this Artifact preview)
+     or the request fails — nothing on the page depends on it loading. */
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  fetch('/api/guide/content').then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
+    if (!data) return;
+    if (data.photos) {
+      document.querySelectorAll('[data-guide-slot]').forEach(function (img) {
+        var url = data.photos[img.dataset.guideSlot];
+        if (url) img.src = url;
+      });
+    }
+    var list = document.getElementById('faq-list');
+    if (list && Array.isArray(data.faq) && data.faq.length) {
+      list.innerHTML = data.faq.map(function (item) {
+        return '<details class="faq-item"><summary>' + escapeHtml(item.question) +
+          '</summary><p>' + escapeHtml(item.answer) + '</p></details>';
+      }).join('');
+    } else if (list) {
+      document.getElementById('faq').style.display = 'none';
+    }
+  }).catch(function () {});
 })();
 </script>
 </body>
