@@ -262,7 +262,7 @@
   @keyframes dots { 50% { transform: translateY(-4px); opacity: 0.5; } }
 
   /* final */
-  .final { padding-block: 80px 60px; background: #1D2A1F; color: #fff; }
+  .final { position: relative; padding-block: 80px 60px; background: #1D2A1F; color: #fff; }
   .final .wrap { display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; align-items: center; }
   .final h2 { font-size: clamp(2.2rem, 4.6vw, 3.4rem); line-height: 1.05; margin-bottom: 18px; color: #fff; }
   .final .hl { color: #7BD35A; }
@@ -294,7 +294,7 @@
      One continuous page. Each block gets a hairline rule above it —
      just enough separation to read as a new topic, no card/stack
      mechanics, no scroll-driven layout math. */
-  .hero, .feature, #faq, .final { position: relative; background: var(--bg); }
+  .hero, .feature, #faq { position: relative; background: var(--bg); }
   .feature, #faq, .final { border-top: 1px solid var(--line); }
 
   @media (max-width: 880px) {
@@ -790,8 +790,12 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  function hideFaq() {
+    var el = document.getElementById('faq');
+    if (el) el.style.display = 'none';
+  }
   fetch('/api/guide/content').then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
-    if (!data) return;
+    if (!data) { hideFaq(); return; }
     if (data.photos) {
       document.querySelectorAll('[data-guide-slot]').forEach(function (img) {
         var url = data.photos[img.dataset.guideSlot];
@@ -804,10 +808,10 @@
         return '<details class="faq-item"><summary>' + escapeHtml(item.question) +
           '</summary><p>' + escapeHtml(item.answer) + '</p></details>';
       }).join('');
-    } else if (list) {
-      document.getElementById('faq').style.display = 'none';
+    } else {
+      hideFaq();
     }
-  }).catch(function () {});
+  }).catch(hideFaq);
 })();
 </script>
 </body>
