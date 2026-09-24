@@ -1,20 +1,40 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { BookOpen, Tags, Users, Building2, LogOut, UserCircle2, ArrowLeft } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { BookOpen, Tags, Users, Building2, LogOut, UserCircle2, ArrowLeft, LifeBuoy } from 'lucide-react'
+import { api } from '../lib/api'
 import { useSession } from '../lib/session'
 import type { Role } from '../lib/types'
 
 const ROLE_LABEL: Record<Role, string> = { owner: 'Владелец', editor: 'Технолог', viewer: 'Повар' }
 
+// Сколько открытых обращений в техподдержку ждут ответа — бейдж в меню.
+function useSupportWaiting(enabled: boolean) {
+  const { data } = useQuery({
+    queryKey: ['support-summary'],
+    queryFn: () => api<{ open: number; waiting: number }>('/platform/support/summary'),
+    enabled, refetchInterval: 30_000,
+  })
+  return data?.waiting || 0
+}
+
 function useNav() {
   const { me, can } = useSession()
-  const items = [] as { to: string; label: string; Icon: typeof BookOpen }[]
+  const waiting = useSupportWaiting(!!me?.user.is_platform_admin)
+  const items = [] as { to: string; label: string; Icon: typeof BookOpen; badge?: number }[]
   if (me?.tenant) {
     items.push({ to: '/recipes', label: 'ТТК', Icon: BookOpen })
     if (can('editor')) items.push({ to: '/categories', label: 'Категории', Icon: Tags })
     if (can('owner')) items.push({ to: '/team', label: 'Команда', Icon: Users })
   }
-  if (me?.user.is_platform_admin) items.push({ to: '/platform', label: 'Заведения', Icon: Building2 })
+  if (me?.user.is_platform_admin) {
+    items.push({ to: '/platform', label: 'Заведения', Icon: Building2 })
+    items.push({ to: '/support', label: 'Поддержка', Icon: LifeBuoy, badge: waiting })
+  }
   return items
+}
+
+function Badge({ n }: { n: number }) {
+  return <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-brand text-white text-[11px] font-bold leading-[18px] text-center">{n > 99 ? '99+' : n}</span>
 }
 
 function Mark() {
@@ -46,11 +66,15 @@ export function Layout() {
           </div>
         </div>
         <nav className="flex-1 px-3 pt-2 flex flex-col gap-0.5">
-          {nav.map(({ to, label, Icon }) => (
+          {nav.map(({ to, label, Icon, badge }) => (
             <NavLink key={to} to={to}
               className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 h-10 text-sm font-semibold transition-colors
                 ${isActive ? 'bg-paper-card text-ink shadow-card' : 'text-ink-2 hover:bg-paper-card/60'}`}>
-              {({ isActive }) => <><Icon className={`h-[18px] w-[18px] ${isActive ? 'text-brand' : 'text-ink-muted'}`} />{label}</>}
+              {({ isActive }) => <>
+                <Icon className={`h-[18px] w-[18px] ${isActive ? 'text-brand' : 'text-ink-muted'}`} />
+                <span className="flex-1">{label}</span>
+                {!!badge && <Badge n={badge} />}
+              </>}
             </NavLink>
           ))}
         </nav>
@@ -95,11 +119,12 @@ export function Layout() {
       {nav.length > 1 && (
         <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-line bg-paper-card/95 backdrop-blur safe-bottom">
           <div className="flex">
-            {nav.map(({ to, label, Icon }) => (
+            {nav.map(({ to, label, Icon, badge }) => (
               <NavLink key={to} to={to}
-                className={({ isActive }) => `flex-1 flex flex-col items-center gap-0.5 pt-2 pb-2 text-[11px] font-semibold
+                className={({ isActive }) => `relative flex-1 flex flex-col items-center gap-0.5 pt-2 pb-2 text-[11px] font-semibold
                   ${isActive ? 'text-brand' : 'text-ink-muted'}`}>
                 <Icon className="h-5 w-5" />{label}
+                {!!badge && <span className="absolute top-1 left-1/2 ml-1.5"><Badge n={badge} /></span>}
               </NavLink>
             ))}
           </div>

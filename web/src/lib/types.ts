@@ -118,3 +118,69 @@ export interface BotStatus {
     error?: string
   }
 }
+
+// ── техподдержка ──
+
+export type TicketStatus = 'open' | 'closed'
+
+export interface SupportMessage {
+  id: number
+  author: 'user' | 'admin'
+  text: string
+  created_at: string
+  author_name?: string | null
+  author_login?: string | null
+}
+
+// Обращение глазами сотрудника (история в мини-аппе).
+export interface MyTicket {
+  id: number
+  status: TicketStatus
+  last_author: 'user' | 'admin'
+  created_at: string
+  updated_at: string
+  closed_at: string | null
+  first_text: string
+  message_count: number
+}
+
+// Обращение в инбоксе администратора платформы.
+export interface SupportTicket {
+  id: number
+  tenant_id: number
+  tenant_name: string
+  user_id: number
+  user_name: string
+  user_login: string
+  user_role: Role
+  user_tg_username: string | null
+  user_tg_linked: boolean
+  status: TicketStatus
+  last_author: 'user' | 'admin'
+  created_at: string
+  updated_at: string
+  closed_at: string | null
+  closed_by_name: string | null
+  last_text: string
+  message_count: number
+}
+
+export interface SupportNotifySettings {
+  configured: boolean
+  bot_username: string | null
+  token_last4?: string
+  chat_id?: string | null
+  thread_id?: number | null
+  chat_title?: string | null
+  last_error?: string | null
+  last_error_at?: string | null
+  last_ok_at?: string | null
+}
+
+export interface NotifyChat {
+  chat_id: number
+  thread_id: number | null
+  type: string
+  title: string
+  topic: string | null
+}

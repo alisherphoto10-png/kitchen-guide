@@ -5,19 +5,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSession } from '../lib/session'
 import { errText, Spinner } from '../components/ui'
-
-declare global {
-  interface Window {
-    Telegram?: { WebApp?: {
-      initData: string
-      initDataUnsafe?: { start_param?: string }
-      ready: () => void
-      expand: () => void
-      setHeaderColor?: (c: string) => void
-      setBackgroundColor?: (c: string) => void
-    } }
-  }
-}
+import '../lib/telegram'
 
 function loadTelegramScript(): Promise<void> {
   if (window.Telegram?.WebApp) return Promise.resolve()

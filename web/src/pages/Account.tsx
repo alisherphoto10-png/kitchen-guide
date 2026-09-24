@@ -1,28 +1,20 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, LifeBuoy, LogOut, ChevronRight } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { ArrowLeft, LifeBuoy, LogOut, ChevronRight, MessagesSquare } from 'lucide-react'
 import { api } from '../lib/api'
 import { useSession } from '../lib/session'
-import { Modal, errText, toast } from '../components/ui'
+import { closeMiniApp, useTelegramBackButton } from '../lib/telegram'
+import { plural } from '../lib/format'
+import type { MyTicket } from '../lib/types'
+import { errText, toast } from '../components/ui'
 import { ROLE_LABEL } from '../components/Layout'
-
-// Системная кнопка «Назад» в шапке Telegram (есть, если страница открыта из мини-аппа).
-function useTelegramBackButton(onBack: () => void) {
-  useEffect(() => {
-    const bb = (window as any).Telegram?.WebApp?.BackButton
-    if (!bb) return
-    bb.onClick(onBack)
-    bb.show()
-    return () => { bb.offClick(onBack); bb.hide() }
-  }, [onBack])
-}
 
 export function AccountPage() {
   const { me, logout } = useSession()
   const navigate = useNavigate()
   const [f, setF] = useState({ current: '', next: '', repeat: '' })
   const [busy, setBusy] = useState(false)
-  const [supportOpen, setSupportOpen] = useState(false)
   const mismatch = f.repeat !== '' && f.next !== f.repeat
   const home = me?.tenant ? '/recipes' : '/platform'
   // Мини-апп: вход через Telegram, пароль и выход не нужны.
@@ -60,11 +52,7 @@ export function AccountPage() {
       </div>
 
       {miniApp ? (
-        <button onClick={() => setSupportOpen(true)} className="card w-full mt-4 px-4 py-3.5 flex items-center gap-3 text-left hover:bg-paper transition-colors">
-          <LifeBuoy className="h-5 w-5 text-brand flex-shrink-0" />
-          <span className="flex-1 font-semibold">Техподдержка</span>
-          <ChevronRight className="h-4 w-4 text-ink-faint" />
-        </button>
+        <SupportLinks />
       ) : (
         <>
           <form onSubmit={submit} className="card p-4 mt-4 grid gap-3">
@@ -78,13 +66,47 @@ export function AccountPage() {
           <button onClick={logout} className="btn-outline w-full mt-4 lg:hidden"><LogOut className="h-4 w-4" />Выйти</button>
         </>
       )}
+    </div>
+  )
+}
 
-      {/* Заглушка: куда ведёт поддержка, решим позже (чат, бот, телефон). */}
-      {supportOpen && (
-        <Modal title="Техподдержка" onClose={() => setSupportOpen(false)} footer={<button className="btn-primary" onClick={() => setSupportOpen(false)}>Понятно</button>}>
-          <p className="text-sm text-ink-2">Скоро здесь появится связь с поддержкой. А пока по любым вопросам обращайтесь к владельцу заведения.</p>
-        </Modal>
-      )}
+// Мини-апп: «Техподдержка» закрывает приложение — бот в чате просит написать
+// обращение, переписка идёт там. История обращений — тут же, в приложении.
+function SupportLinks() {
+  const [busy, setBusy] = useState(false)
+  const { data: tickets } = useQuery({ queryKey: ['my-tickets'], queryFn: () => api<MyTicket[]>('/support/my') })
+  const open = tickets?.find(t => t.status === 'open')
+
+  const start = async () => {
+    setBusy(true)
+    try {
+      await api('/support/request', { method: 'POST' })
+      if (!closeMiniApp()) toast('Бот написал вам в чат — отправьте обращение туда')
+    } catch (e) {
+      toast(errText(e), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card mt-4 divide-y divide-line overflow-hidden">
+      <button onClick={start} disabled={busy} className="w-full px-4 py-3.5 flex items-center gap-3 text-left hover:bg-paper transition-colors disabled:opacity-60">
+        <LifeBuoy className="h-5 w-5 text-brand flex-shrink-0" />
+        <span className="flex-1 min-w-0">
+          <span className="block font-semibold">Техподдержка</span>
+          <span className="block text-xs muted">
+            {open ? `Обращение №${open.id} открыто — продолжите в чате с ботом` : 'Напишите нам — ответим в чат с ботом'}
+          </span>
+        </span>
+        <ChevronRight className="h-4 w-4 text-ink-faint" />
+      </button>
+      <Link to="/support/my" className="w-full px-4 py-3.5 flex items-center gap-3 hover:bg-paper transition-colors">
+        <MessagesSquare className="h-5 w-5 text-ink-muted flex-shrink-0" />
+        <span className="flex-1 font-semibold">История обращений</span>
+        {!!tickets?.length && <span className="text-sm muted">{tickets.length} {plural(tickets.length, 'обращение', 'обращения', 'обращений')}</span>}
+        <ChevronRight className="h-4 w-4 text-ink-faint" />
+      </Link>
     </div>
   )
 }

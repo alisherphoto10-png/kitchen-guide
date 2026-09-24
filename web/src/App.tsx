@@ -11,6 +11,8 @@ import { TeamPage } from './pages/Team'
 import { PlatformPage } from './pages/Platform'
 import { AccountPage } from './pages/Account'
 import { TgAppPage } from './pages/TgApp'
+import { SupportPage } from './pages/Support'
+import { MySupportPage } from './pages/MySupport'
 import type { Role } from './lib/types'
 
 function Guard({ min, platform, children }: { min?: Role; platform?: boolean; children: ReactNode }) {
@@ -48,6 +50,10 @@ export function App() {
         <Route path="/categories" element={<Guard min="editor"><CategoriesPage /></Guard>} />
         <Route path="/team" element={<Guard min="owner"><TeamPage /></Guard>} />
         <Route path="/platform" element={<Guard platform><PlatformPage /></Guard>} />
+        <Route path="/support" element={<Guard platform><SupportPage /></Guard>} />
+        <Route path="/support/:id" element={<Guard platform><SupportPage /></Guard>} />
+        <Route path="/support/my" element={<Guard><MySupportPage /></Guard>} />
+        <Route path="/support/my/:id" element={<Guard><MySupportPage /></Guard>} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="*" element={<Navigate to={home} replace />} />
       </Route>

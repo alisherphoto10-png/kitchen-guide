@@ -17,7 +17,9 @@ fs.mkdirSync(config.uploadsDir, { recursive: true });
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/platform/support', authenticate, require('./routes/support').admin);
 app.use('/api/platform', authenticate, require('./routes/platform'));
+app.use('/api/support', authenticate, require('./routes/support').mine);
 app.use('/api/recipes', authenticate, requireTenant, require('./routes/recipes'));
 app.use('/api/categories', authenticate, requireTenant, require('./routes/categories'));
 app.use('/api/team', authenticate, requireTenant, require('./routes/team'));

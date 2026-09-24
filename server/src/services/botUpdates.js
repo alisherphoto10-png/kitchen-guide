@@ -1,9 +1,11 @@
 // Обработка входящих апдейтов бота клиента. Бот минимальный: пустить
-// сотрудника (логин + пароль один раз → Telegram привязан навсегда) и открыть
-// мини-апп с ТТК. Сами ТТК живут в мини-аппе.
+// сотрудника (логин + пароль один раз → Telegram привязан навсегда), открыть
+// мини-апп с ТТК и принимать обращения в техподдержку (services/support.js).
+// Сами ТТК живут в мини-аппе.
 const tg = require('./telegram');
 const bots = require('./bots');
 const link = require('./telegramLink');
+const support = require('./support');
 
 function openButton(bot) {
   return { inline_keyboard: [[{ text: '📖 Открыть ТТК', web_app: { url: bots.miniAppUrl(bot.slug) } }]] };
@@ -31,8 +33,15 @@ async function handle(bot, update) {
   // Уже привязан — логин/пароль больше не нужны.
   const linked = await link.findLinkedUser(bot.tenant_id, tgUser.id);
   if (linked) {
-    if (!linked.is_active) await send(token, chatId, 'Ваш доступ отключён. Обратитесь к владельцу заведения.');
-    else await send(token, chatId, `${linked.name || linked.login}, технологические карты — по кнопке ниже или «ТТК» в меню.`, openButton(bot));
+    if (!linked.is_active) {
+      await send(token, chatId, 'Ваш доступ отключён. Обратитесь к владельцу заведения.');
+      return;
+    }
+    // Открытое обращение или только что нажата «Техподдержка» — сообщение уходит в поддержку.
+    if (await support.handleBotMessage(token, linked, msg)) return;
+    await send(token, chatId,
+      `${linked.name || linked.login}, технологические карты — по кнопке ниже или «ТТК» в меню.\n\nВопрос или проблема — /support`,
+      openButton(bot));
     return;
   }
 

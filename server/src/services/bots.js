@@ -49,6 +49,11 @@ async function tenantSlug(tenantId) {
   return t.slug;
 }
 
+const BOT_COMMANDS = [
+  { command: 'start', description: 'Открыть технологические карты' },
+  { command: 'support', description: 'Написать в техподдержку' },
+];
+
 // Вебхук + кнопка меню «ТТК» (открывает мини-апп этого клиента) + команда /start.
 async function configureTelegram(token, row, slug) {
   if (!/^https:\/\//.test(config.publicBaseUrl)) {
@@ -63,7 +68,7 @@ async function configureTelegram(token, row, slug) {
   await tg.call(token, 'setChatMenuButton', {
     menu_button: { type: 'web_app', text: 'ТТК', web_app: { url: miniAppUrl(slug) } },
   });
-  await tg.call(token, 'setMyCommands', { commands: [{ command: 'start', description: 'Открыть технологические карты' }] });
+  await tg.call(token, 'setMyCommands', { commands: BOT_COMMANDS });
 }
 
 // Снять вебхук и кнопку — «по возможности»: если токен уже отозван в @BotFather,
@@ -223,11 +228,17 @@ async function getActiveBySlug(slug) {
   return row || null;
 }
 
+// Для техподдержки: написать сотруднику от имени бота его заведения.
+async function activeForTenant(tenantId) {
+  const { rows: [row] } = await pool.query('SELECT * FROM tenant_bots WHERE tenant_id = $1 AND is_active', [tenantId]);
+  return row || null;
+}
+
 async function touch(id) {
   await pool.query('UPDATE tenant_bots SET last_update_at = NOW() WHERE id = $1', [id]);
 }
 
 module.exports = {
-  connect, setActive, remove, status, summary, getById, getActiveBySlug, touch,
-  tokenOf, miniAppUrl, webhookUrl, publicBot,
+  connect, setActive, remove, status, summary, getById, getActiveBySlug, activeForTenant, touch,
+  tokenOf, miniAppUrl, webhookUrl, publicBot, BOT_COMMANDS,
 };
