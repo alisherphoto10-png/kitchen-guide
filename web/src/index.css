@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    font-feature-settings: 'tnum' 1, 'cv11' 1;
+  }
+  :focus-visible { @apply outline-none ring-2 ring-brand/40 ring-offset-1 ring-offset-paper; }
+  ::selection { @apply bg-brand-soft; }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-xl px-3.5 h-10 text-sm font-semibold
+      transition-colors disabled:opacity-50 disabled:pointer-events-none select-none whitespace-nowrap;
+  }
+  .btn-primary { @apply btn bg-brand text-white hover:bg-brand-hover; }
+  .btn-ghost { @apply btn text-ink-2 hover:bg-paper-2; }
+  .btn-outline { @apply btn border border-line-strong bg-paper-card text-ink hover:bg-paper-2; }
+  .btn-danger { @apply btn text-bad hover:bg-bad-soft; }
+  .btn-sm { @apply h-8 px-2.5 text-[13px] rounded-lg; }
+  .btn-icon { @apply btn w-10 px-0; }
+
+  .field-label { @apply block text-[12px] font-semibold text-ink-muted mb-1.5; }
+  .input {
+    @apply w-full h-10 rounded-xl border border-line-strong bg-paper-card px-3 text-sm text-ink
+      placeholder:text-ink-faint outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/15;
+  }
+  textarea.input { @apply h-auto py-2.5 leading-relaxed; }
+  .input-num { @apply input text-right tabular-nums; }
+
+  .card { @apply rounded-2xl border border-line bg-paper-card shadow-card; }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-line px-3 h-8 text-[13px] font-medium
+      text-ink-2 bg-paper-card whitespace-nowrap transition-colors hover:border-line-strong;
+  }
+  .chip-active { @apply border-ink bg-ink text-paper hover:border-ink; }
+  .tag { @apply inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold; }
+  .h-page { @apply text-[22px] font-extrabold tracking-tight; }
+  .muted { @apply text-ink-muted; }
+}
+
+.scrollbar-none { scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
