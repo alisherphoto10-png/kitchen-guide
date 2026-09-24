@@ -16,11 +16,11 @@
 |---|---|
 | Код на сервере | `/root/zhiguli` (отдельный git-репозиторий) |
 | Git | ветка `zhiguli` в `github.com/alisherphoto10-png/kitchen-guide` — orphan, без общей истории с остальными ветками |
-| Процесс | pm2 `zhiguli`, `127.0.0.1:3008` (наружу порт закрыт ufw) |
+| Адрес | **https://jigulibar.chefplan.ru** (nginx `/etc/nginx/sites-available/zhiguli` → `127.0.0.1:3008`, сертификат Let's Encrypt через certbot, автопродление) |
+| Процесс | pm2 `zhiguli`, `127.0.0.1:3008` (сам порт наружу закрыт ufw) |
 | База | Postgres `zhiguli`, роль `zhiguli_user` (владелец базы) |
 | Секреты | `server/.env` (в git не попадает) |
 | Файлы (фото ТТК) | `data/uploads/` (в git не попадает) |
-| Домен | пока нет — см. «Как открыть снаружи» |
 
 ## Устройство
 
@@ -88,14 +88,13 @@ cd /root/zhiguli/server && node scripts/create-platform-admin.js <login> "<Им�
 
 Новая миграция — новый файл `server/src/db/migrations/00N_что_делает.sql`, старые не править.
 
-## Как открыть снаружи
+## Домен и nginx
 
-Сейчас сервис слушает только `127.0.0.1:3008`. Когда будет домен:
-
-1. A-запись домена → `5.129.238.76` (wildcard на chefplan.ru нет, каждый поддомен отдельно).
-2. nginx: `server_name <домен>; location / { proxy_pass http://127.0.0.1:3008; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; client_max_body_size 10m; }`
-3. `certbot --nginx -d <домен>`.
-4. `trust proxy` уже настроен на loopback — лимит попыток входа будет считать реальные IP.
+`jigulibar.chefplan.ru` → A-запись на `5.129.238.76` (подключено 2026-09-24). nginx-конфиг
+`/etc/nginx/sites-available/zhiguli` — простой `proxy_pass` на `127.0.0.1:3008` с
+`X-Forwarded-For`/`X-Forwarded-Proto`, `client_max_body_size 10m` (фото до 8 МБ). HTTP → 301 на HTTPS.
+`trust proxy` на loopback — лимит попыток входа считает реальные IP клиентов (проверено).
+Вебхуки ботов (шаг 2) пойдут на этот же домен: `https://jigulibar.chefplan.ru/tg/<id>`.
 
 ## Что сделано (шаг 1 — сайт)
 
@@ -125,7 +124,7 @@ cd /root/zhiguli/server && node scripts/create-platform-admin.js <login> "<Им�
    не в БД), `bot_id`, `username`, `webhook_secret` (случайный), `is_active`, `created_at`.
    Токен после сохранения обратно не отдаётся — только `@username` и «последние 4 символа».
 2. Сохранение: `getMe` для проверки токена → `setWebhook` на
-   `https://<домен>/tg/<bot_row_id>` c `secret_token` = `webhook_secret` → запись в БД.
+   `https://jigulibar.chefplan.ru/tg/<bot_row_id>` c `secret_token` = `webhook_secret` → запись в БД.
    Один бот — один вебхук, клиент определяется по пути, а не по содержимому апдейта;
    апдейт без правильного `X-Telegram-Bot-Api-Secret-Token` отбрасывается.
 3. Деактивация: `deleteWebhook` + `is_active = false` (токен оставить, чтобы включить обратно).
