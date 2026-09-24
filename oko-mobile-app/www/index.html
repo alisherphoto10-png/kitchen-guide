@@ -96,78 +96,36 @@
     text-align: center;
     padding: 0 24px;
   }
-  .picker {
-    display: none;
-    flex-direction: column;
-    align-items: stretch;
-    width: 100%;
-    max-width: 320px;
-    gap: 12px;
-  }
-  .picker.show { display: flex; }
-  .picker-title {
-    font-size: 14px;
-    color: #9d9382;
-    text-align: center;
-    margin-bottom: 8px;
-  }
-  .choice {
-    padding: 18px 20px;
-    border-radius: 14px;
-    border: 1px solid #423a2d;
-    background: #262019;
-    color: #f2ece1;
-    text-align: left;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .choice:active { background: #322a20; }
-  .choice b { display: block; font-size: 16px; margin-bottom: 3px; }
-  .choice span { font-size: 12.5px; color: #9d9382; }
 </style>
 </head>
 <body>
   <div class="logo">KitchenDesk</div>
-  <div class="tag" id="tag">Тестовая сборка — вход по PIN-заглушке,<br>настоящая авторизация будет добавлена позже</div>
+  <div class="tag">Тестовая сборка — вход по PIN-заглушке,<br>настоящая авторизация будет добавлена позже</div>
 
-  <div id="pinScreen">
-    <div class="dots" id="dots">
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
-    </div>
-
-    <div class="pad" id="pad">
-      <div class="key" data-k="1">1</div>
-      <div class="key" data-k="2">2</div>
-      <div class="key" data-k="3">3</div>
-      <div class="key" data-k="4">4</div>
-      <div class="key" data-k="5">5</div>
-      <div class="key" data-k="6">6</div>
-      <div class="key" data-k="7">7</div>
-      <div class="key" data-k="8">8</div>
-      <div class="key" data-k="9">9</div>
-      <div class="key ghost"></div>
-      <div class="key" data-k="0">0</div>
-      <div class="key ghost" id="back">⌫</div>
-    </div>
-
-    <div class="msg" id="msg"></div>
+  <div class="dots" id="dots">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
   </div>
 
-  <div class="picker" id="picker">
-    <div class="picker-title">Куда открыть — на этом устройстве запомнится</div>
-    <button class="choice" data-dest="superadmin">
-      <b>Суперадмин</b>
-      <span>Панель управления всеми заведениями</span>
-    </button>
-    <button class="choice" data-dest="oko">
-      <b>Панель заведения (ОКО)</b>
-      <span>Админ/шеф/сушеф — обычный кабинет</span>
-    </button>
+  <div class="pad" id="pad">
+    <div class="key" data-k="1">1</div>
+    <div class="key" data-k="2">2</div>
+    <div class="key" data-k="3">3</div>
+    <div class="key" data-k="4">4</div>
+    <div class="key" data-k="5">5</div>
+    <div class="key" data-k="6">6</div>
+    <div class="key" data-k="7">7</div>
+    <div class="key" data-k="8">8</div>
+    <div class="key" data-k="9">9</div>
+    <div class="key ghost"></div>
+    <div class="key" data-k="0">0</div>
+    <div class="key ghost" id="back">⌫</div>
   </div>
 
-  <div class="note" id="note">Заглушка для тестирования сборки. PIN и адреса — временные, меняются в коде.</div>
+  <div class="msg" id="msg"></div>
+  <div class="note">Заглушка для тестирования сборки. PIN и адрес — временные, меняются в коде.<br>Суперадмин или кабинет ОКО — определяется тем, под каким аккаунтом войдёте на следующем экране, адрес один.</div>
 
 <script>
   // Временная заглушка, НЕ настоящая авторизация — просто чтобы можно было
@@ -176,23 +134,17 @@
   // сменить "пароль" этой тестовой сборки.
   var TEST_PIN = "2606";
 
-  // Куда попадаем после выбора раздела. TODO: подставить настоящие адреса
-  // кабинета/панели суперадмина, когда другая сессия их подтвердит —
-  // сейчас это заглушка на корень сайта для обоих, до уточнения.
-  var DESTINATIONS = {
-    superadmin: "https://kitchendesk.chefplan.ru/",
-    oko: "https://kitchendesk.chefplan.ru/",
-  };
-
-  var STORAGE_KEY = "kitchendesk_test_destination";
+  // /web-login просит логин/пароль сайта и после входа сам ведёт на /web —
+  // там уже показывается панель суперадмина ИЛИ кабинет заведения, в
+  // зависимости от того, под каким аккаунтом вошли (не от адреса).
+  // Пускает только роль "Главный администратор" — шеф/сушеф так не
+  // войдут, у них только Telegram Mini App (/cabinet), которое в этой
+  // тестовой обёртке (не в самом Telegram) скорее всего не заработает.
+  var TARGET_URL = "https://kitchendesk.chefplan.ru/web-login";
 
   var entered = "";
   var dots = document.querySelectorAll("#dots .dot");
   var msg = document.getElementById("msg");
-  var pinScreen = document.getElementById("pinScreen");
-  var picker = document.getElementById("picker");
-  var tag = document.getElementById("tag");
-  var note = document.getElementById("note");
 
   function render() {
     for (var i = 0; i < dots.length; i++) {
@@ -210,26 +162,9 @@
     }, 450);
   }
 
-  function go(dest) {
-    try {
-      localStorage.setItem(STORAGE_KEY, dest);
-    } catch (e) {
-      // приватный режим/заблокированное хранилище — не критично, просто
-      // спросит выбор заново при следующем открытии
-    }
-    window.location.href = DESTINATIONS[dest];
-  }
-
-  function showPicker() {
-    pinScreen.style.display = "none";
-    tag.textContent = "Выберите раздел для этого устройства";
-    note.textContent = "Выбор сохранится в этом приложении — при следующем открытии сразу попадёте туда же.";
-    picker.classList.add("show");
-  }
-
   function submit() {
     if (entered === TEST_PIN) {
-      showPicker();
+      window.location.href = TARGET_URL;
     } else {
       fail();
     }
@@ -249,26 +184,6 @@
     render();
     if (entered.length === 4) setTimeout(submit, 120);
   });
-
-  picker.addEventListener("click", function (e) {
-    var btn = e.target.closest(".choice");
-    if (!btn) return;
-    go(btn.getAttribute("data-dest"));
-  });
-
-  // Уже выбирали раздел на этом устройстве раньше — не переспрашивать PIN
-  // заново каждый раз (это тестовая сборка, не боевой вход) и сразу вести
-  // куда выбрали. Уберётся вместе с этой заглушкой, когда появится
-  // настоящая авторизация.
-  (function () {
-    var saved = null;
-    try {
-      saved = localStorage.getItem(STORAGE_KEY);
-    } catch (e) {}
-    if (saved && DESTINATIONS[saved]) {
-      window.location.href = DESTINATIONS[saved];
-    }
-  })();
 </script>
 </body>
 </html>
