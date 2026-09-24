@@ -5,204 +5,248 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>KitchenDesk</title>
 <style>
-  * { box-sizing: border-box; }
-  html, body {
-    height: 100%;
-    margin: 0;
-    background: #1a1712;
-    color: #f2ece1;
-    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  :root {
+    --bg:#0f0c09; --card:#1c1712; --border:#2c2319;
+    --text:#f3ede2; --muted:#b6a993; --dim:#8a7c68; --accent:#d9a24a; --accent-soft:#241b0f;
+    --bad:#e0663f;
   }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
   body {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  .screen {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
     padding: 24px;
     padding-top: calc(24px + env(safe-area-inset-top, 0px));
     padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    opacity: 0; pointer-events: none;
+    transition: opacity 380ms ease;
   }
-  .logo {
-    font-size: 22px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    margin-bottom: 6px;
+  .screen.active { opacity: 1; pointer-events: auto; }
+
+  /* ---------- preloader ---------- */
+  .preloader-ring {
+    width: 88px; height: 88px; border-radius: 50%;
+    border: 2px solid rgba(217,162,74,0.16); border-top-color: var(--accent);
+    animation: spin 900ms linear infinite;
   }
-  .tag {
-    font-size: 13px;
-    color: #9d9382;
-    margin-bottom: 40px;
-    text-align: center;
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .preloader-ring { animation: none; } }
+  .wordmark { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em; margin-top: 22px; }
+  .wordmark-tag { font-size: 0.688rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-top: 6px; }
+
+  /* ---------- code entry ---------- */
+  .headline { font-size: 1.4rem; font-weight: 800; line-height: 1.3; text-align: center; margin: 0 0 8px; text-wrap: balance; }
+  .sub { font-size: 0.875rem; color: var(--muted); text-align: center; margin: 0 0 28px; line-height: 1.5; max-width: 32ch; }
+  .code-field {
+    width: 100%; max-width: 280px;
+    background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px; padding: 15px 16px; font-size: 1.1rem; letter-spacing: 0.08em;
+    color: var(--text); text-align: center; text-transform: uppercase;
   }
-  .dots {
-    display: flex;
-    gap: 14px;
-    margin-bottom: 28px;
+  .code-field:focus { outline: none; border-color: var(--accent); }
+  .code-field::placeholder { color: var(--dim); letter-spacing: normal; text-transform: none; }
+  .primary-btn {
+    width: 100%; max-width: 280px; margin-top: 16px;
+    background: linear-gradient(160deg, #ecb968 0%, var(--accent) 100%);
+    color: #1a1108; border: none; border-radius: 100px; padding: 15px;
+    font-size: 0.95rem; font-weight: 800; cursor: pointer;
   }
-  .dot {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    border: 1.5px solid #6b6252;
-    background: transparent;
-    transition: background 0.12s, border-color 0.12s;
+  .primary-btn:disabled { opacity: 0.4; }
+  .err-msg { min-height: 18px; font-size: 0.8rem; color: var(--bad); margin-top: 10px; }
+
+  /* ---------- searching ---------- */
+  .search-text { font-size: 0.95rem; color: var(--muted); margin-top: 20px; }
+
+  /* ---------- found venue ---------- */
+  #foundScreen { padding: 0; justify-content: flex-end; align-items: stretch; }
+  .found-photo {
+    position: absolute; inset: 0; z-index: -2;
+    background-size: cover; background-position: center;
+    opacity: 0; transition: opacity 900ms ease;
   }
-  .dot.filled {
-    background: #e07a4c;
-    border-color: #e07a4c;
+  .found-photo.active { opacity: 1; }
+  .found-overlay {
+    position: absolute; inset: 0; z-index: -1;
+    background:
+      radial-gradient(120% 55% at 50% -5%, rgba(15,12,9,0.75), transparent 60%),
+      linear-gradient(180deg, rgba(15,12,9,0.1) 0%, rgba(15,12,9,0.55) 55%, rgba(15,12,9,0.94) 100%);
   }
-  .dot.err {
-    border-color: #c1552b;
-    background: #c1552b;
+  .found-content {
+    padding: 24px 24px calc(36px + env(safe-area-inset-bottom, 0px));
+    display: flex; flex-direction: column; align-items: center; text-align: center;
   }
-  .pad {
-    display: grid;
-    grid-template-columns: repeat(3, 68px);
-    gap: 14px;
-    margin-bottom: 20px;
-  }
+  .found-eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+  .found-logo { height: 56px; width: auto; margin-bottom: 14px; mix-blend-mode: screen; border-radius: 12px; }
+  .found-name { font-size: 1.6rem; font-weight: 800; margin: 0 0 6px; }
+  .found-sub { font-size: 0.875rem; color: var(--muted); margin: 0 0 26px; }
+
+  /* ---------- PIN screen ---------- */
+  .dots { display: flex; gap: 14px; margin-bottom: 28px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--dim); background: transparent; transition: background 0.12s, border-color 0.12s; }
+  .dot.filled { background: var(--accent); border-color: var(--accent); }
+  .dot.err { border-color: var(--bad); background: var(--bad); }
+  .pad { display: grid; grid-template-columns: repeat(3, 68px); gap: 14px; margin-bottom: 20px; }
   .key {
-    width: 68px;
-    height: 68px;
-    border-radius: 50%;
-    border: 1px solid #423a2d;
-    background: #262019;
-    color: #f2ece1;
-    font-size: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
+    width: 68px; height: 68px; border-radius: 50%; border: 1px solid var(--border); background: var(--card);
+    color: var(--text); font-size: 22px; display: flex; align-items: center; justify-content: center; user-select: none;
   }
-  .key:active {
-    background: #322a20;
-  }
-  .key.ghost {
-    border: none;
-    background: transparent;
-  }
-  .msg {
-    min-height: 18px;
-    font-size: 13px;
-    color: #c1552b;
-    margin-top: 4px;
-  }
-  .note {
-    position: fixed;
-    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-    font-size: 11px;
-    color: #524a3c;
-    text-align: center;
-    padding: 0 24px;
-  }
+  .key:active { background: #241d16; }
+  .key.ghost { border: none; background: transparent; }
+  .note { position: fixed; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); font-size: 11px; color: var(--dim); text-align: center; padding: 0 24px; }
 </style>
 </head>
 <body>
-  <div class="logo">KitchenDesk</div>
-  <div class="tag">Тестовая сборка — вход по PIN-заглушке,<br>настоящая авторизация будет добавлена позже</div>
 
-  <div class="dots" id="dots">
-    <div class="dot"></div>
-    <div class="dot"></div>
-    <div class="dot"></div>
-    <div class="dot"></div>
+  <!-- 1. Заставка -->
+  <div class="screen active" id="splashScreen">
+    <div class="preloader-ring"></div>
+    <div class="wordmark">KitchenDesk</div>
+    <div class="wordmark-tag">Система для кухни</div>
   </div>
 
-  <div class="pad" id="pad">
-    <div class="key" data-k="1">1</div>
-    <div class="key" data-k="2">2</div>
-    <div class="key" data-k="3">3</div>
-    <div class="key" data-k="4">4</div>
-    <div class="key" data-k="5">5</div>
-    <div class="key" data-k="6">6</div>
-    <div class="key" data-k="7">7</div>
-    <div class="key" data-k="8">8</div>
-    <div class="key" data-k="9">9</div>
-    <div class="key ghost"></div>
-    <div class="key" data-k="0">0</div>
-    <div class="key ghost" id="back">⌫</div>
+  <!-- 2. Ввод кода (первый вход) -->
+  <div class="screen" id="codeScreen">
+    <div class="headline">Введите код приглашения</div>
+    <div class="sub">Его выдаёт администратор вашего заведения при первом входе</div>
+    <input class="code-field" id="codeInput" placeholder="Например, 4F9K2P" maxlength="8" autocapitalize="characters" />
+    <button class="primary-btn" id="codeSubmit">Продолжить</button>
+    <div class="err-msg" id="codeErr"></div>
   </div>
 
-  <div class="msg" id="msg"></div>
-  <div class="note" id="note">Заглушка для тестирования сборки. PIN и адрес — временные, меняются в коде.<br>Суперадмин или кабинет ОКО — определяется тем, под каким аккаунтом войдёте на следующем экране, адрес один.<br><b id="counter"></b></div>
+  <!-- 3. Поиск -->
+  <div class="screen" id="searchScreen">
+    <div class="preloader-ring"></div>
+    <div class="search-text">Ищём ваше заведение…</div>
+  </div>
+
+  <!-- 4. Нашли заведение -->
+  <div class="screen" id="foundScreen">
+    <div class="found-photo" id="foundPhoto"></div>
+    <div class="found-overlay"></div>
+    <div class="found-content">
+      <div class="found-eyebrow">Заведение найдено</div>
+      <img class="found-logo" id="foundLogo" alt="">
+      <div class="found-name" id="foundName"></div>
+      <div class="found-sub">Осталось задать код быстрого входа</div>
+      <button class="primary-btn" id="foundContinue">Продолжить</button>
+    </div>
+  </div>
+
+  <!-- 5. PIN (уже привычный экран) -->
+  <div class="screen" id="pinScreen">
+    <div class="headline" style="margin-bottom:6px;">Придумайте PIN</div>
+    <div class="sub">Тестовая заглушка — сейчас подходит 2606, дальше подключим настоящую проверку</div>
+    <div class="dots" id="dots">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+    <div class="pad" id="pad">
+      <div class="key" data-k="1">1</div><div class="key" data-k="2">2</div><div class="key" data-k="3">3</div>
+      <div class="key" data-k="4">4</div><div class="key" data-k="5">5</div><div class="key" data-k="6">6</div>
+      <div class="key" data-k="7">7</div><div class="key" data-k="8">8</div><div class="key" data-k="9">9</div>
+      <div class="key ghost"></div><div class="key" data-k="0">0</div><div class="key ghost" id="back">⌫</div>
+    </div>
+    <div class="err-msg" id="pinMsg"></div>
+  </div>
+
+  <div class="note" id="note">Демо-сценарий первого входа — код и поиск заведения пока не настоящие, ведут к тестовому заведению ОКО.</div>
 
 <script>
-  // Временная заглушка, НЕ настоящая авторизация — просто чтобы можно было
-  // открыть и посмотреть приложение до того, как готов реальный вход по
-  // одноразовому коду + PIN. Поменять цифры здесь — единственный способ
-  // сменить "пароль" этой тестовой сборки.
-  var TEST_PIN = "2606";
+  // Демонстрация "изюминки" первого входа: код → поиск → нашли заведение →
+  // PIN. Реального бэкенда для поиска заведения по коду ЕЩЁ НЕТ — здесь
+  // подставлена ОДНА тестовая находка (ОКО), чтобы увидеть и обкатать
+  // саму последовательность/анимацию до того, как строить сервер под неё.
+  // Финальный шаг (адрес сайта после PIN) не менялся — см. TARGET_URL.
 
-  // ВАЖНО: именно /web, не /web-login. /web-login всегда рисует форму
-  // входа, не проверяя localStorage — из-за этого приложение при каждом
-  // запуске требовало войти заново, хотя токен (localStorage.web_token,
-  // 30 дней) на месте. А /web сам проверяет токен: есть — открывает
-  // кабинет/панель суперадмина сразу, нет — уводит на /web-login. Так
-  // работает и "просто открыть /web" в обычном браузере с уже
-  // сохранённым входом. Пускает только роль "Главный администратор" —
-  // шеф/сушеф так не войдут, у них только Telegram Mini App (/cabinet),
-  // которое в этой тестовой обёртке (не в самом Telegram) скорее всего
-  // не заработает.
+  var TEST_PIN = "2606";
   var TARGET_URL = "https://kitchendesk.chefplan.ru/web";
 
-  // Диагностика: считаем, сколько раз открывали приложение. Если число
-  // растёт от запуска к запуску — localStorage переживает закрытие
-  // приложения нормально, и дело не в хранилище вообще, а конкретно в
-  // том, как сайт выдаёт сессию при входе. Если каждый раз "Открытий: 1"
-  // — значит ничего не переживает перезапуск, проблема глубже.
-  (function () {
-    var counterEl = document.getElementById("counter");
-    try {
-      var n = parseInt(localStorage.getItem("kd_open_count") || "0", 10) + 1;
-      localStorage.setItem("kd_open_count", String(n));
-      counterEl.textContent = "Открытий приложения: " + n;
-    } catch (e) {
-      counterEl.textContent = "Открытий приложения: ошибка хранилища (" + e.message + ")";
-    }
-  })();
+  var MOCK_VENUE = {
+    name: "ОКО",
+    logo: "https://kitchendesk.chefplan.ru/waiter-guide/logo.jpg",
+    photo: "https://kitchendesk.chefplan.ru/waiter-guide/hero/hero-1.jpg",
+  };
 
+  function show(id) {
+    document.querySelectorAll(".screen").forEach(function (el) { el.classList.remove("active"); });
+    document.getElementById(id).classList.add("active");
+  }
+
+  // 1 → 2: заставка держится немного, потом просит код
+  setTimeout(function () { show("codeScreen"); }, 1100);
+
+  // 2 → 3 → 4: ввод кода (пока принимает любой непустой код)
+  var codeInput = document.getElementById("codeInput");
+  var codeErr = document.getElementById("codeErr");
+  document.getElementById("codeSubmit").addEventListener("click", function () {
+    var val = codeInput.value.trim();
+    if (!val) {
+      codeErr.textContent = "Введите код";
+      return;
+    }
+    codeErr.textContent = "";
+    show("searchScreen");
+    setTimeout(function () {
+      document.getElementById("foundPhoto").style.backgroundImage = "url('" + MOCK_VENUE.photo + "')";
+      document.getElementById("foundLogo").src = MOCK_VENUE.logo;
+      document.getElementById("foundName").textContent = MOCK_VENUE.name;
+      show("foundScreen");
+      requestAnimationFrame(function () {
+        document.getElementById("foundPhoto").classList.add("active");
+      });
+    }, 1300);
+  });
+
+  // 4 → 5
+  document.getElementById("foundContinue").addEventListener("click", function () {
+    show("pinScreen");
+  });
+
+  // 5: PIN-заглушка (как раньше)
   var entered = "";
   var dots = document.querySelectorAll("#dots .dot");
-  var msg = document.getElementById("msg");
+  var pinMsg = document.getElementById("pinMsg");
 
-  function render() {
+  function renderDots() {
     for (var i = 0; i < dots.length; i++) {
       dots[i].className = "dot" + (i < entered.length ? " filled" : "");
     }
   }
-
-  function fail() {
+  function failPin() {
     for (var i = 0; i < dots.length; i++) dots[i].className = "dot err";
-    msg.textContent = "Неверный PIN";
+    pinMsg.textContent = "Неверный PIN";
     setTimeout(function () {
       entered = "";
-      render();
-      msg.textContent = "";
+      renderDots();
+      pinMsg.textContent = "";
     }, 450);
   }
-
-  function submit() {
+  function submitPin() {
     if (entered === TEST_PIN) {
       window.location.href = TARGET_URL;
     } else {
-      fail();
+      failPin();
     }
   }
-
   document.getElementById("pad").addEventListener("click", function (e) {
     var key = e.target.closest(".key");
     if (!key) return;
     if (key.id === "back") {
       entered = entered.slice(0, -1);
-      render();
+      renderDots();
       return;
     }
     var k = key.getAttribute("data-k");
     if (k == null || entered.length >= 4) return;
     entered += k;
-    render();
-    if (entered.length === 4) setTimeout(submit, 120);
+    renderDots();
+    if (entered.length === 4) setTimeout(submitPin, 120);
   });
 </script>
 </body>
