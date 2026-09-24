@@ -1,61 +1,104 @@
 // Привязка Telegram-аккаунта к сотруднику и вход в мини-апп.
+//
+// Схема: у бота одна общая ссылка (её можно кинуть в общий чат). Непривязанному
+// Telegram бот предлагает войти логином и паролем, которые владелец задал
+// сотруднику в «Команде». При совпадении tg_id записывается в сотрудника навсегда;
+// сменить привязку может только владелец (сброс в «Команде»).
 const crypto = require('crypto');
-const { pool, withTransaction } = require('../db/pool');
+const { pool } = require('../db/pool');
 const { HttpError } = require('../utils/http');
-const bots = require('./bots');
+const bcrypt = require('bcryptjs');
+const users = require('./users');
 
-const LINK_TTL_HOURS = 24;
+const DUMMY_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 10);
 
-// Одноразовая ссылка t.me/<бот>?start=link_<код> для конкретного сотрудника.
-// Новая ссылка отменяет прежние ссылки этого сотрудника.
-async function createLink(tenantId, userId) {
-  const bot = await bots.summary(tenantId);
-  if (!bot) throw new HttpError(409, 'У заведения ещё нет бота — его подключает администратор платформы');
-  if (!bot.is_active) throw new HttpError(409, 'Бот заведения отключён');
-  const { rows: [u] } = await pool.query('SELECT id, is_active FROM users WHERE id = $1 AND tenant_id = $2', [userId, tenantId]);
-  if (!u) throw new HttpError(404, 'Сотрудник не найден');
-  if (!u.is_active) throw new HttpError(409, 'Сотрудник отключён');
-
-  const code = crypto.randomBytes(15).toString('base64url');
-  await pool.query('DELETE FROM tg_link_codes WHERE user_id = $1', [userId]);
-  const { rows: [row] } = await pool.query(
-    `INSERT INTO tg_link_codes (code, user_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '${LINK_TTL_HOURS} hours') RETURNING expires_at`,
-    [code, userId]
-  );
-  return { url: `https://t.me/${bot.username}?start=link_${code}`, expires_at: row.expires_at };
-}
+const MAX_FAILED = 5;          // неудачных попыток подряд…
+const LOCK_MINUTES = 15;       // …и Telegram блокируется на столько минут
+const SESSION_MINUTES = 10;    // незаконченный диалог входа забывается
 
 async function unlink(tenantId, userId) {
   const { rowCount } = await pool.query(
     'UPDATE users SET tg_id = NULL, tg_username = NULL WHERE id = $1 AND tenant_id = $2', [userId, tenantId]
   );
   if (!rowCount) throw new HttpError(404, 'Сотрудник не найден');
-  await pool.query('DELETE FROM tg_link_codes WHERE user_id = $1', [userId]);
-}
-
-// Вызывается ботом на /start link_<код>. Код годится только в боте своего заведения.
-// Возвращает сотрудника или null (код неверный/просрочен/чужой).
-async function consumeLink(tenantId, code, tgUser) {
-  return withTransaction(async db => {
-    const { rows: [u] } = await db.query(
-      `SELECT u.* FROM tg_link_codes c JOIN users u ON u.id = c.user_id
-        WHERE c.code = $1 AND c.expires_at > NOW() AND u.tenant_id = $2 AND u.is_active
-        FOR UPDATE OF c`,
-      [code, tenantId]
-    );
-    if (!u) return null;
-    // Один Telegram — один сотрудник внутри заведения: снимаем с прежнего.
-    await db.query('UPDATE users SET tg_id = NULL, tg_username = NULL WHERE tenant_id = $1 AND tg_id = $2 AND id <> $3', [tenantId, tgUser.id, u.id]);
-    await db.query('UPDATE users SET tg_id = $2, tg_username = $3 WHERE id = $1', [u.id, tgUser.id, tgUser.username || null]);
-    await db.query('DELETE FROM tg_link_codes WHERE user_id = $1', [u.id]);
-    return u;
-  });
 }
 
 async function findLinkedUser(tenantId, tgId) {
   const { rows: [u] } = await pool.query('SELECT * FROM users WHERE tenant_id = $1 AND tg_id = $2', [tenantId, tgId]);
   return u || null;
 }
+
+// ── диалог входа в боте ──────────────────────────────────────────────
+
+async function getSession(tenantId, tgId) {
+  const { rows: [s] } = await pool.query(
+    `SELECT *, (updated_at < NOW() - INTERVAL '${SESSION_MINUTES} minutes') AS stale,
+            (locked_until IS NOT NULL AND locked_until > NOW()) AS locked
+       FROM tg_auth_sessions WHERE tenant_id = $1 AND tg_id = $2`,
+    [tenantId, tgId]
+  );
+  return s || null;
+}
+
+// Начать (или начать заново) ввод: ждём логин. Счётчик ошибок не сбрасывается.
+async function askLogin(tenantId, tgId) {
+  await pool.query(
+    `INSERT INTO tg_auth_sessions (tenant_id, tg_id, step, login) VALUES ($1, $2, 'login', NULL)
+     ON CONFLICT (tenant_id, tg_id) DO UPDATE SET step = 'login', login = NULL, updated_at = NOW()`,
+    [tenantId, tgId]
+  );
+}
+
+async function rememberLogin(tenantId, tgId, login) {
+  await pool.query(
+    "UPDATE tg_auth_sessions SET step = 'password', login = $3, updated_at = NOW() WHERE tenant_id = $1 AND tg_id = $2",
+    [tenantId, tgId, String(login).trim().slice(0, 100)]
+  );
+}
+
+// Возвращает { status }:
+//   'linked'   — привязан, user в ответе;
+//   'invalid'  — неверный логин/пароль (или сотрудник отключён) — одинаковый ответ, чтобы не подсказывать;
+//   'taken'    — пароль верный, но сотрудник уже привязан к другому Telegram;
+//   'locked'   — слишком много неудачных попыток (lockedMinutes).
+async function tryLink(tenantId, tgUser, password) {
+  const session = await getSession(tenantId, tgUser.id);
+  if (session?.locked) return { status: 'locked', lockedMinutes: LOCK_MINUTES };
+  const login = session?.login || '';
+
+  const { rows: [u] } = await pool.query('SELECT * FROM users WHERE tenant_id = $1 AND LOWER(login) = LOWER($2)', [tenantId, login]);
+  // Нет такого логина — всё равно гоняем bcrypt по пустышке, чтобы по времени
+  // ответа нельзя было отличить «нет логина» от «не тот пароль».
+  const passwordOk = await users.checkPassword(u || { password_hash: DUMMY_HASH }, password) && !!u;
+
+  if (!u || !passwordOk || !u.is_active) {
+    const { rows: [s] } = await pool.query(
+      `UPDATE tg_auth_sessions SET step = 'login', login = NULL, updated_at = NOW(),
+              failed_attempts = failed_attempts + 1,
+              locked_until = CASE WHEN failed_attempts + 1 >= $3 THEN NOW() + INTERVAL '${LOCK_MINUTES} minutes' ELSE locked_until END
+        WHERE tenant_id = $1 AND tg_id = $2 RETURNING failed_attempts, locked_until`,
+      [tenantId, tgUser.id, MAX_FAILED]
+    );
+    if (s && s.failed_attempts >= MAX_FAILED) {
+      // Блокировка выставлена — со следующего окна считаем заново.
+      await pool.query('UPDATE tg_auth_sessions SET failed_attempts = 0 WHERE tenant_id = $1 AND tg_id = $2', [tenantId, tgUser.id]);
+      return { status: 'locked', lockedMinutes: LOCK_MINUTES };
+    }
+    return { status: 'invalid', attemptsLeft: MAX_FAILED - (s?.failed_attempts || 0) };
+  }
+
+  // Привязка только к ещё не привязанной записи — условие прямо в UPDATE, чтобы
+  // два Telegram не могли одновременно занять одного сотрудника.
+  const { rows: [linked] } = await pool.query(
+    'UPDATE users SET tg_id = $2, tg_username = $3 WHERE id = $1 AND tg_id IS NULL RETURNING *',
+    [u.id, tgUser.id, tgUser.username || null]
+  );
+  await pool.query('DELETE FROM tg_auth_sessions WHERE tenant_id = $1 AND tg_id = $2', [tenantId, tgUser.id]);
+  if (!linked) return { status: 'taken' };
+  return { status: 'linked', user: linked };
+}
+
+// ── мини-апп ─────────────────────────────────────────────────────────
 
 // Проверка initData мини-аппа по документации Telegram:
 // secret = HMAC_SHA256("WebAppData", bot_token); hash = HMAC_SHA256(secret, data_check_string).
@@ -79,4 +122,7 @@ function verifyInitData(initData, botToken, maxAgeSec = 24 * 3600) {
   }
 }
 
-module.exports = { createLink, unlink, consumeLink, findLinkedUser, verifyInitData, LINK_TTL_HOURS };
+module.exports = {
+  unlink, findLinkedUser, getSession, askLogin, rememberLogin, tryLink, verifyInitData,
+  MAX_FAILED, LOCK_MINUTES,
+};

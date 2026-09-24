@@ -21,11 +21,7 @@ router.post('/:id/reset-password', ah(async (req, res) => {
   res.json({ password: await users.resetPassword(req.tenantId, toId(req.params.id)) });
 }));
 
-// Персональная ссылка-приглашение в бота заведения (привязка Telegram).
-router.post('/:id/telegram-link', ah(async (req, res) => {
-  res.json(await telegramLink.createLink(req.tenantId, toId(req.params.id)));
-}));
-
+// Сброс привязки Telegram — после этого сотрудник снова входит в боте логином и паролем.
 router.delete('/:id/telegram', ah(async (req, res) => {
   await telegramLink.unlink(req.tenantId, toId(req.params.id));
   res.json({ ok: true });

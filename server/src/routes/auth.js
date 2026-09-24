@@ -35,7 +35,7 @@ router.post('/telegram', loginLimiter, ah(async (req, res) => {
   if (!data) throw new HttpError(401, 'Не удалось подтвердить вход через Telegram — откройте приложение заново из бота');
   if (!bot.tenant_active) throw new HttpError(403, 'Доступ для заведения приостановлен');
   const user = await telegramLink.findLinkedUser(bot.tenant_id, data.user.id);
-  if (!user) throw new HttpError(403, 'Ваш Telegram не привязан к сотруднику заведения. Попросите владельца прислать ссылку-приглашение.');
+  if (!user) throw new HttpError(403, 'Ваш Telegram ещё не привязан. Откройте чат с ботом, нажмите «Старт» и войдите логином и паролем от владельца.');
   if (!user.is_active) throw new HttpError(403, 'Доступ отключён — обратитесь к владельцу заведения');
   await users.touchLogin(user.id);
   res.json({ token: signToken(user), user: users.publicUser(user) });
