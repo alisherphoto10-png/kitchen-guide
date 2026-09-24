@@ -262,16 +262,19 @@
   @keyframes dots { 50% { transform: translateY(-4px); opacity: 0.5; } }
 
   /* final */
-  .final { padding-block: 80px 60px; }
+  .final { padding-block: 80px 60px; background: #1D2A1F; color: #fff; }
   .final .wrap { display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; align-items: center; }
-  .final h2 { font-size: clamp(2.2rem, 4.6vw, 3.4rem); line-height: 1.05; margin-bottom: 18px; }
-  .final p { font-size: 1.05rem; line-height: 1.6; color: var(--muted); margin: 0 0 28px; max-width: 440px; }
-  .tg-handle { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 0.9rem; color: var(--muted); }
-  .tg-handle b { color: var(--ink); }
+  .final h2 { font-size: clamp(2.2rem, 4.6vw, 3.4rem); line-height: 1.05; margin-bottom: 18px; color: #fff; }
+  .final .hl { color: #7BD35A; }
+  .final p { font-size: 1.05rem; line-height: 1.6; color: #C9BEAE; margin: 0 0 28px; max-width: 440px; }
+  .tg-handle { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 0.9rem; color: #C9BEAE; }
+  .tg-handle b { color: #fff; }
   .final-visual { position: relative; display: flex; justify-content: center; }
-  .final-visual .plate { width: min(400px, 88%); filter: drop-shadow(0 26px 30px rgba(70, 48, 20, 0.3)); animation: float 7s ease-in-out infinite; }
-  .final-visual .plate-2 { position: absolute; width: min(190px, 42%); left: 0; bottom: -20px; filter: drop-shadow(0 18px 22px rgba(70, 48, 20, 0.28)); animation: sway 9s ease-in-out infinite alternate; }
-  footer { padding-block: 48px 60px; }
+  .final-visual .plate { width: min(400px, 88%); filter: drop-shadow(0 26px 30px rgba(0, 0, 0, 0.45)); animation: float 7s ease-in-out infinite; }
+  .final-visual .plate-2 { position: absolute; width: min(190px, 42%); left: 0; bottom: -20px; filter: drop-shadow(0 18px 22px rgba(0, 0, 0, 0.4)); animation: sway 9s ease-in-out infinite alternate; }
+  .final .note .hand { color: #EADBC2; }
+  .final .note .arrow path { stroke: #EADBC2; }
+  footer { padding-block: 48px 60px; border-top: 1px solid var(--line); }
   footer .wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
   footer img { width: 260px; height: auto; }
   footer small { color: var(--dim); font-size: 0.82rem; }
@@ -287,45 +290,12 @@
   #faq-empty { color: var(--dim); font-size: 0.92rem; }
 
 
-  /* ---------- stacked layers ----------
-     Each section sits in a tall .pin rail; the .layer inside is what
-     actually sticks. The rail's extra height IS the scroll distance
-     during which the layer stays pinned while the next one slides
-     over it — without it (a layer sticky at exactly 100vh, no extra
-     rail) there is no dwell time and the stack breaks. */
-  .pin { position: relative; height: 175vh; height: 175svh; }
-  .pin:last-of-type { height: 145vh; height: 145svh; }
-  .layer {
-    position: sticky; top: 0; height: 100vh; height: 100svh;
-    display: flex; flex-direction: column; justify-content: center;
-    border-radius: 36px 36px 0 0; background: var(--bg);
-    box-shadow: 0 -30px 60px -30px rgba(60, 38, 14, 0.45);
-    transform-origin: 50% 0%;
-    overflow: hidden;
-  }
-  .layer.hero { border-radius: 0; box-shadow: none; }
-  .layer::before {
-    content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: 0;
-    background: linear-gradient(180deg, rgba(251, 244, 234, 0.66), rgba(251, 244, 234, 0.84)), var(--img, none) center / cover no-repeat;
-  }
-  .layer::after {
-    content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: 4; pointer-events: none;
-    background: #1D1409; opacity: calc(var(--p, 0) * 0.45);
-  }
-  .layer > .wrap { z-index: 1; width: 100%; max-height: 100%; overflow-y: auto; scrollbar-width: none; }
-  .layer > .wrap::-webkit-scrollbar { display: none; }
-  .grab { position: absolute; top: 14px; left: 50%; width: 46px; height: 5px; border-radius: 5px; background: rgba(29, 42, 31, 0.2); transform: translateX(-50%); z-index: 2; }
-
-  .layer.dark { color: #fff; }
-  .layer.dark::before { background: linear-gradient(180deg, rgba(8, 12, 9, 0.55), rgba(8, 12, 9, 0.78)), var(--img) center / cover no-repeat; }
-  .layer.dark .grab { background: rgba(255, 255, 255, 0.35); }
-  .layer.dark h2 { color: #fff; }
-  .layer.dark .hl { color: #7BD35A; }
-  .layer.dark p { color: #D7DCD0; }
-  .layer.dark .hand { color: #EADBC2; }
-  .layer.dark .note .arrow path { stroke: #EADBC2; }
-  footer { position: relative; z-index: 1; background: var(--bg); border-radius: 36px 36px 0 0; box-shadow: 0 -30px 60px -30px rgba(60, 38, 14, 0.45); }
-  @media (max-width: 880px) { .layer, footer { border-radius: 28px 28px 0 0; } }
+  /* ---------- section rhythm ----------
+     One continuous page. Each block gets a hairline rule above it —
+     just enough separation to read as a new topic, no card/stack
+     mechanics, no scroll-driven layout math. */
+  .hero, .feature, #faq, .final { position: relative; background: var(--bg); }
+  .feature, #faq, .final { border-top: 1px solid var(--line); }
 
   @media (max-width: 880px) {
     .hero .wrap, .feature .wrap, .final .wrap { grid-template-columns: 1fr; gap: 40px; align-items: start; }
@@ -348,8 +318,6 @@
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
     [data-r] { opacity: 1; transform: none; }
-    .layer { transform: none; }
-    .layer::after { opacity: 0; }
     .arrow path { stroke-dashoffset: 0; }
   }
 </style>
@@ -386,8 +354,7 @@
   </div>
 </header>
 
-<div class="pin">
-<section class="hero layer" data-scene>
+<section class="hero" data-scene>
   <div class="wrap">
     <div>
       <span class="pill" data-r="up">Для ресторанов, кафе и точек питания</span>
@@ -429,11 +396,9 @@
     </div>
   </div>
 </section>
-</div>
 
 <!-- 01 -->
-<div class="pin">
-<section class="feature layer" id="f1" style="--img:url(img/bg-herbs.jpg)" data-scene>
+<section class="feature" id="f1" data-scene>
   <div class="wrap">
     <div class="visual" data-r="left">
       <div class="panel" id="list">
@@ -458,11 +423,9 @@
     </div>
   </div>
 </section>
-</div>
 
 <!-- 02 -->
-<div class="pin">
-<section class="feature flip layer" style="--img:url(img/bg-sauces.jpg)" data-scene>
+<section class="feature flip" data-scene>
   <div class="wrap">
     <div class="visual" data-r="right">
       <div class="panel pf" id="pf">
@@ -506,11 +469,9 @@
     </div>
   </div>
 </section>
-</div>
 
 <!-- 03 -->
-<div class="pin">
-<section class="feature layer" style="--img:url(img/bg-pasta.jpg)" data-scene>
+<section class="feature" data-scene>
   <div class="wrap">
     <div class="visual" data-r="left">
       <div class="panel" id="calc">
@@ -536,11 +497,9 @@
     </div>
   </div>
 </section>
-</div>
 
 <!-- 04 -->
-<div class="pin">
-<section class="feature flip layer" style="--img:url(img/bg-spices.jpg)" data-scene>
+<section class="feature flip" data-scene>
   <div class="wrap">
     <div class="visual" data-r="right">
       <div class="panel imp" id="imp">
@@ -569,11 +528,9 @@
     </div>
   </div>
 </section>
-</div>
 
 <!-- 05 -->
-<div class="pin">
-<section class="feature layer" style="--img:url(img/bg-protein.jpg)" data-scene>
+<section class="feature" data-scene>
   <div class="wrap">
     <div class="visual" data-r="left">
       <div class="panel">
@@ -600,11 +557,9 @@
     </div>
   </div>
 </section>
-</div>
 
 <!-- 06 -->
-<div class="pin">
-<section class="feature flip layer" style="--img:url(img/bg-tomato.jpg)" data-scene>
+<section class="feature flip" data-scene>
   <div class="wrap">
     <div class="visual" data-r="right">
       <div class="panel" id="tg">
@@ -638,7 +593,6 @@
     </div>
   </div>
 </section>
-</div>
 
 <section id="faq" data-scene style="background:var(--bg); padding: 96px 24px; position: relative; z-index: 1">
   <div class="wrap" style="max-width: 760px">
@@ -648,8 +602,7 @@
   </div>
 </section>
 
-<div class="pin">
-<section class="final layer dark"  style="--img:url(img/bg-kitchen.jpg)" data-scene>
+<section class="final" data-scene>
   <div class="wrap">
     <div>
       <h2 data-r="up">Остались вопросы? <span class="hl">Пишите.</span></h2>
@@ -668,7 +621,6 @@
     </div>
   </div>
 </section>
-</div>
 
 <footer>
   <div class="wrap">
@@ -826,38 +778,6 @@
     msgs[2].classList.add('show'); await wait(500); msgs[3].classList.add('show');
     await wait(3800);
   });
-
-
-  /* stacked layers
-     Each .pin is a tall rail; the .layer inside is sticky at top:0.
-     Progress is a pure function of that rail's own position — no
-     lookups into siblings, so it can't get stuck out of sync with
-     them. progress 0 = the layer just became pinned; progress 1 =
-     its rail has fully scrolled past (the next one has taken over). */
-  var pins = Array.prototype.slice.call(document.querySelectorAll('.pin'));
-  pins.forEach(function (pin, i) {
-    if (i > 0) { var g = document.createElement('span'); g.className = 'grab'; pin.querySelector('.layer').prepend(g); }
-  });
-  var ticking = false;
-  function tick() {
-    ticking = false;
-    var vh = window.innerHeight;
-    pins.forEach(function (pin) {
-      var l = pin.querySelector('.layer');
-      var rect = pin.getBoundingClientRect();
-      var range = rect.height - vh;
-      var p = range > 0 ? Math.max(0, Math.min(1, -rect.top / range)) : (rect.top <= 0 ? 1 : 0);
-      var covered = p >= 1;
-      if (l._covered !== covered) { l._covered = covered; l.style.visibility = covered ? 'hidden' : ''; }
-      var moving = !reduce && p > 0 && !covered;
-      l.style.transform = moving ? 'scale(' + (1 - p * 0.06).toFixed(4) + ')' : '';
-      l.style.setProperty('--p', moving ? p.toFixed(3) : 0);
-    });
-  }
-  window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(tick); } }, { passive: true });
-  window.addEventListener('resize', tick);
-  window.addEventListener('load', tick);
-  tick();
 
   if (reduce) document.querySelectorAll('[data-scene]').forEach(function (s) { s.classList.add('in'); });
 
