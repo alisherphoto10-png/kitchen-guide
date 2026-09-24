@@ -77,7 +77,15 @@
     font-size: 0.95rem; font-weight: 800; cursor: pointer;
   }
   .primary-btn:disabled { opacity: 0.4; }
+  .secondary-btn {
+    width: 100%; max-width: 280px; margin-top: 12px;
+    background: transparent; border: 1px solid var(--border); color: var(--text);
+    border-radius: 100px; padding: 14px; font-size: 0.88rem; font-weight: 700;
+    font-family: inherit; cursor: pointer;
+  }
+  .secondary-btn:active { background: var(--card); }
   .err-msg { min-height: 18px; font-size: 0.8rem; color: var(--bad); margin-top: 10px; }
+  .code-field.plain { text-transform: none; letter-spacing: normal; margin-bottom: 12px; }
 
   /* ---------- searching ---------- */
   .search-text { font-size: 0.95rem; color: var(--muted); margin-top: 20px; }
@@ -147,6 +155,39 @@
   .found-name { font-size: 1.3rem; font-weight: 800; }
   .found-sub { font-size: 0.875rem; color: var(--muted); margin: 0 0 26px; }
 
+  /* ---------- документы (согласие) ---------- */
+  .docs-list { width: 100%; max-width: 280px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
+  .docs-link {
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    border-radius: 14px; padding: 14px 16px; font-size: 0.9rem; font-weight: 700;
+    text-align: left; font-family: inherit; cursor: pointer;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .docs-link::after { content: "→"; color: var(--dim); }
+  .docs-agree {
+    display: flex; align-items: flex-start; gap: 10px; width: 100%; max-width: 280px;
+    margin-bottom: 22px; font-size: 0.82rem; color: var(--muted); line-height: 1.4; cursor: pointer;
+  }
+  .docs-agree input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--accent); flex: none; }
+
+  /* ---------- просмотр документа ---------- */
+  #docViewScreen { padding: 0; justify-content: flex-start; align-items: stretch; }
+  .doc-view-header {
+    flex: none; display: flex; align-items: center; gap: 12px;
+    padding: calc(20px + env(safe-area-inset-top, 0px)) 20px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .doc-back {
+    background: none; border: none; color: var(--accent); font-size: 0.9rem; font-weight: 700;
+    font-family: inherit; cursor: pointer; padding: 6px 0;
+  }
+  .doc-view-title { font-size: 1rem; font-weight: 800; }
+  .doc-view-body {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 20px 20px calc(28px + env(safe-area-inset-bottom, 0px));
+    font-size: 0.85rem; color: var(--muted); line-height: 1.6; white-space: pre-line;
+  }
+
   /* ---------- PIN screen ---------- */
   .dots { display: flex; gap: 14px; margin-bottom: 28px; }
   .dot { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--dim); background: transparent; transition: background 0.12s, border-color 0.12s; }
@@ -202,13 +243,30 @@
     <div class="wordmark-tag">Система для кухни</div>
   </div>
 
-  <!-- 2. Ввод кода (первый вход) -->
+  <!-- 1.5 Главный экран (до кода — ждёт нажатия) -->
+  <div class="screen" id="landingScreen">
+    <div class="wordmark" style="font-size:1.7rem;">KitchenDesk</div>
+    <div class="wordmark-tag" style="margin-top:10px;">Операционная система вашей кухни</div>
+    <button class="primary-btn" id="landingLoginBtn" style="margin-top:36px;">Войти</button>
+    <button class="secondary-btn" id="landingRegisterVenueBtn">Зарегистрировать заведение</button>
+  </div>
+
+  <!-- 2. Регистрация (первый вход) -->
   <div class="screen" id="codeScreen">
-    <div class="headline">Введите код приглашения</div>
-    <div class="sub">Его выдаёт администратор вашего заведения при первом входе</div>
-    <input class="code-field" id="codeInput" placeholder="Например, 4F9K2P" maxlength="8" autocapitalize="characters" />
+    <div class="headline">Регистрация</div>
+    <div class="sub">Код приглашения выдаёт администратор вашего заведения</div>
+    <input class="code-field plain" id="nameInput" placeholder="Имя" />
+    <input class="code-field plain" id="phoneInput" type="tel" placeholder="Телефон" />
+    <input class="code-field" id="codeInput" placeholder="Код приглашения" maxlength="8" autocapitalize="characters" />
     <button class="primary-btn" id="codeSubmit">Продолжить</button>
     <div class="err-msg" id="codeErr"></div>
+  </div>
+
+  <!-- Заглушка: регистрация нового заведения -->
+  <div class="screen" id="venueRegisterScreen">
+    <div class="headline">Регистрация заведения</div>
+    <div class="sub">Этот раздел ещё в разработке. Скоро здесь можно будет подключить новое заведение к KitchenDesk самостоятельно.</div>
+    <button class="secondary-btn" id="venueRegisterBack">Назад</button>
   </div>
 
   <!-- 3. Поиск -->
@@ -236,6 +294,30 @@
       <div class="found-sub">Осталось задать код быстрого входа</div>
       <button class="primary-btn" id="foundContinue">Продолжить</button>
     </div>
+  </div>
+
+  <!-- 4.5 Документы (согласие) -->
+  <div class="screen" id="docsScreen">
+    <div class="headline">Документы</div>
+    <div class="sub">Перед тем как продолжить, ознакомьтесь и согласитесь с условиями</div>
+    <div class="docs-list">
+      <button class="docs-link" data-doc="privacy" type="button">Политика конфиденциальности</button>
+      <button class="docs-link" data-doc="offer" type="button">Публичная оферта</button>
+    </div>
+    <label class="docs-agree">
+      <input type="checkbox" id="docsAgree" />
+      <span>Я прочитал(а) и согласен(на) с условиями</span>
+    </label>
+    <button class="primary-btn" id="docsSubmit" disabled>Продолжить</button>
+  </div>
+
+  <!-- Просмотр документа (открывается с экрана "Документы") -->
+  <div class="screen" id="docViewScreen">
+    <div class="doc-view-header">
+      <button class="doc-back" id="docViewBack" type="button">← Назад</button>
+      <div class="doc-view-title" id="docViewTitle"></div>
+    </div>
+    <div class="doc-view-body" id="docViewBody"></div>
   </div>
 
   <!-- 5. PIN (уже привычный экран) -->
@@ -327,16 +409,76 @@
   function show(id) {
     document.querySelectorAll(".screen").forEach(function (el) { el.classList.remove("active"); });
     document.getElementById(id).classList.add("active");
-    // Шапка с брендом KitchenDesk — на всех экранах, КРОМЕ заставки (там
-    // и так на весь экран написано "KitchenDesk", шапка была бы лишней).
-    topbar.classList.toggle("show", id !== "splashScreen");
+    // Шапка с брендом KitchenDesk — на всех экранах, КРОМЕ заставки и
+    // главного экрана (там и так крупно написано "KitchenDesk", шапка
+    // была бы лишней).
+    topbar.classList.toggle("show", id !== "splashScreen" && id !== "landingScreen");
   }
+
+  // Черновик типовых документов — нужна проверка юристом перед
+  // публикацией в Google Play, но UI и сам шаг согласия уже рабочие.
+  var DOC_TEXT = {
+    privacy: {
+      title: "Политика конфиденциальности",
+      body: "Черновик — требует проверки юристом перед публикацией.\n\n" +
+        "1. Общие положения\nKitchenDesk (далее — «Сервис») — система управления кухней и рестораном. Используя приложение, вы соглашаетесь с условиями этой политики.\n\n" +
+        "2. Какие данные мы собираем\nИмя, номер телефона, данные о вашей работе в системе (действия, смены, чек-листы), техническая информация об устройстве.\n\n" +
+        "3. Как мы используем данные\nДля входа в систему, работы функций приложения (чек-листы, ТТК, склад и т.д.) и связи с вами по рабочим вопросам.\n\n" +
+        "4. Хранение и защита\nДанные хранятся на серверах Сервиса и защищаются от несанкционированного доступа.\n\n" +
+        "5. Ваши права\nВы можете запросить удаление своих данных, обратившись к администратору вашего заведения или в поддержку KitchenDesk.\n\n" +
+        "6. Контакты\n[email/телеграм поддержки], [реквизиты компании]",
+    },
+    offer: {
+      title: "Публичная оферта",
+      body: "Черновик — требует проверки юристом перед публикацией.\n\n" +
+        "1. Предмет оферты\nНастоящая оферта регулирует использование Сервиса KitchenDesk сотрудниками заведений-партнёров.\n\n" +
+        "2. Порядок использования\nДоступ предоставляется по приглашению администратора заведения. Каждый пользователь получает личный PIN-код для входа.\n\n" +
+        "3. Права и обязанности\nПользователь обязуется не передавать доступ третьим лицам и использовать Сервис в рабочих целях.\n\n" +
+        "4. Стоимость\n[раздел будет заполнен после согласования тарифа с заведением]\n\n" +
+        "5. Ответственность\nСтороны несут ответственность в соответствии с действующим законодательством.\n\n" +
+        "6. Срок действия\nОферта действует бессрочно до отказа одной из сторон.\n\n" +
+        "7. Реквизиты\n[наименование юр. лица, ИНН, адрес, контакты]",
+    },
+  };
+  document.querySelectorAll(".docs-link").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var doc = DOC_TEXT[btn.getAttribute("data-doc")];
+      document.getElementById("docViewTitle").textContent = doc.title;
+      document.getElementById("docViewBody").textContent = doc.body;
+      show("docViewScreen");
+    });
+  });
+  document.getElementById("docViewBack").addEventListener("click", function () {
+    show("docsScreen");
+  });
+  var docsAgree = document.getElementById("docsAgree");
+  var docsSubmit = document.getElementById("docsSubmit");
+  docsAgree.addEventListener("change", function () {
+    docsSubmit.disabled = !docsAgree.checked;
+  });
+  docsSubmit.addEventListener("click", function () {
+    if (!docsAgree.checked) return;
+    show("pinScreen");
+  });
+
+  // Главный экран: "Войти" ведёт к регистрации, "Зарегистрировать
+  // заведение" — пока заглушка (это отдельная, ещё не продуманная ветка
+  // для новых потенциальных клиентов, не для сотрудников заведения).
+  document.getElementById("landingLoginBtn").addEventListener("click", function () {
+    show("codeScreen");
+  });
+  document.getElementById("landingRegisterVenueBtn").addEventListener("click", function () {
+    show("venueRegisterScreen");
+  });
+  document.getElementById("venueRegisterBack").addEventListener("click", function () {
+    show("landingScreen");
+  });
 
   var pinHeadline = document.getElementById("pinHeadline");
   var pinSub = document.getElementById("pinSub");
 
-  // 1 → 2: заставка держится немного, потом — код (первый вход) или
-  // сразу PIN (уже зарегистрирован на этом устройстве)
+  // 1 → 1.5 → 2: заставка держится немного, потом — главный экран
+  // (первый вход) или сразу PIN (уже зарегистрирован на этом устройстве)
   show("splashScreen");
   if (isReturning) {
     pinHeadline.textContent = "Введите PIN";
@@ -345,13 +487,19 @@
   } else {
     pinHeadline.textContent = "Придумайте PIN";
     pinSub.textContent = "Тестовая заглушка — сейчас подходит 2606, дальше подключим настоящую проверку";
-    setTimeout(function () { show("codeScreen"); }, 1100);
+    setTimeout(function () { show("landingScreen"); }, 1100);
   }
 
-  // 2 → 3 → 4: ввод кода (пока принимает любой непустой код)
+  // 2 → 3 → 4: имя + телефон + код (пока без СМС — код выдаёт админ
+  // заведения лично; всё это ещё заглушка, принимает любые непустые
+  // значения)
+  var nameInput = document.getElementById("nameInput");
+  var phoneInput = document.getElementById("phoneInput");
   var codeInput = document.getElementById("codeInput");
   var codeErr = document.getElementById("codeErr");
   document.getElementById("codeSubmit").addEventListener("click", function () {
+    if (!nameInput.value.trim()) { codeErr.textContent = "Введите имя"; return; }
+    if (!phoneInput.value.trim()) { codeErr.textContent = "Введите телефон"; return; }
     var val = codeInput.value.trim();
     if (!val) {
       codeErr.textContent = "Введите код";
@@ -375,9 +523,9 @@
     }, 1300);
   });
 
-  // 4 → 5
+  // 4 → 4.5 (документы)
   document.getElementById("foundContinue").addEventListener("click", function () {
-    show("pinScreen");
+    show("docsScreen");
   });
 
   // Для тестирования: на быстром PIN-экране (когда вход уже запомнен)
