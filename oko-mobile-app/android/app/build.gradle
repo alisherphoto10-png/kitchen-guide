@@ -16,7 +16,30 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        // Постоянный ключ подписи debug-сборок, закреплён в репозитории
+        // (debug.keystore, пароль "android" — это обычный незащищённый
+        // ключ разработки, ничего секретного, так и должно быть для
+        // debug). Без этого каждая сборка через GitHub Actions
+        // подписывалась бы СЛУЧАЙНЫМ ключом (Android Gradle Plugin сам
+        // генерирует ~/.android/debug.keystore, если его нет, а на
+        // GitHub-раннере его никогда нет — раннер каждый раз свежий).
+        // Установка APK с другим ключом подписи поверх старого — это для
+        // Android другое приложение, и он тихо стирает все данные при
+        // переустановке, включая сохранённый вход. Один и тот же ключ во
+        // всех сборках — обновление остаётся обновлением, данные не
+        // теряются.
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
