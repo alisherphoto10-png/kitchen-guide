@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>KitchenDesk</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: #1a1712;
+    color: #f2ece1;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    padding-top: calc(24px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+  .logo {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 6px;
+  }
+  .tag {
+    font-size: 13px;
+    color: #9d9382;
+    margin-bottom: 40px;
+    text-align: center;
+  }
+  .dots {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1.5px solid #6b6252;
+    background: transparent;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .dot.filled {
+    background: #e07a4c;
+    border-color: #e07a4c;
+  }
+  .dot.err {
+    border-color: #c1552b;
+    background: #c1552b;
+  }
+  .pad {
+    display: grid;
+    grid-template-columns: repeat(3, 68px);
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .key {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    border: 1px solid #423a2d;
+    background: #262019;
+    color: #f2ece1;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  .key:active {
+    background: #322a20;
+  }
+  .key.ghost {
+    border: none;
+    background: transparent;
+  }
+  .msg {
+    min-height: 18px;
+    font-size: 13px;
+    color: #c1552b;
+    margin-top: 4px;
+  }
+  .note {
+    position: fixed;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    font-size: 11px;
+    color: #524a3c;
+    text-align: center;
+    padding: 0 24px;
+  }
+</style>
+</head>
+<body>
+  <div class="logo">KitchenDesk</div>
+  <div class="tag">Тестовая сборка — вход по PIN-заглушке,<br>настоящая авторизация будет добавлена позже</div>
+
+  <div class="dots" id="dots">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+  </div>
+
+  <div class="pad" id="pad">
+    <div class="key" data-k="1">1</div>
+    <div class="key" data-k="2">2</div>
+    <div class="key" data-k="3">3</div>
+    <div class="key" data-k="4">4</div>
+    <div class="key" data-k="5">5</div>
+    <div class="key" data-k="6">6</div>
+    <div class="key" data-k="7">7</div>
+    <div class="key" data-k="8">8</div>
+    <div class="key" data-k="9">9</div>
+    <div class="key ghost"></div>
+    <div class="key" data-k="0">0</div>
+    <div class="key ghost" id="back">⌫</div>
+  </div>
+
+  <div class="msg" id="msg"></div>
+  <div class="note">Заглушка для тестирования сборки. PIN и адрес — временные, меняются в коде.</div>
+
+<script>
+  // Временная заглушка, НЕ настоящая авторизация — просто чтобы можно было
+  // открыть и посмотреть приложение до того, как готов реальный вход по
+  // одноразовому коду + PIN. Поменять цифры здесь — единственный способ
+  // сменить "пароль" этой тестовой сборки.
+  var TEST_PIN = "2606";
+
+  // Куда попадаем после верного PIN. Поправить, если нужен другой раздел
+  // сайта в качестве стартового экрана.
+  var TARGET_URL = "https://kitchendesk.chefplan.ru/";
+
+  var entered = "";
+  var dots = document.querySelectorAll("#dots .dot");
+  var msg = document.getElementById("msg");
+
+  function render() {
+    for (var i = 0; i < dots.length; i++) {
+      dots[i].className = "dot" + (i < entered.length ? " filled" : "");
+    }
+  }
+
+  function fail() {
+    for (var i = 0; i < dots.length; i++) dots[i].className = "dot err";
+    msg.textContent = "Неверный PIN";
+    setTimeout(function () {
+      entered = "";
+      render();
+      msg.textContent = "";
+    }, 450);
+  }
+
+  function submit() {
+    if (entered === TEST_PIN) {
+      window.location.href = TARGET_URL;
+    } else {
+      fail();
+    }
+  }
+
+  document.getElementById("pad").addEventListener("click", function (e) {
+    var key = e.target.closest(".key");
+    if (!key) return;
+    if (key.id === "back") {
+      entered = entered.slice(0, -1);
+      render();
+      return;
+    }
+    var k = key.getAttribute("data-k");
+    if (k == null || entered.length >= 4) return;
+    entered += k;
+    render();
+    if (entered.length === 4) setTimeout(submit, 120);
+  });
+</script>
+</body>
+</html>

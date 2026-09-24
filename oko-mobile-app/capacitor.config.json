@@ -1,0 +1,9 @@
+{
+  "appId": "com.kitchendesk.app",
+  "appName": "KitchenDesk",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "allowNavigation": ["kitchendesk.chefplan.ru", "*.chefplan.ru"]
+  }
+}

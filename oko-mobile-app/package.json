@@ -1,0 +1,17 @@
+{
+  "name": "kitchendesk-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "KitchenDesk — обёртка сайта в мобильное приложение (первая тестовая версия, вход по PIN-заглушке)",
+  "scripts": {
+    "sync": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/app": "^6.0.1",
+    "@capacitor/core": "^6.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}
