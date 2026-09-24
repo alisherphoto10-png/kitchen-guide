@@ -12,6 +12,8 @@ import { PlatformPage } from './pages/Platform'
 import { AccountPage } from './pages/Account'
 import { TgAppPage } from './pages/TgApp'
 import { SupportPage } from './pages/Support'
+import { GuidePage } from './pages/Guide'
+import { FaqPage } from './pages/Faq'
 import { MySupportPage } from './pages/MySupport'
 import type { Role } from './lib/types'
 
@@ -54,6 +56,8 @@ export function App() {
         <Route path="/support/:id" element={<Guard platform><SupportPage /></Guard>} />
         <Route path="/support/my" element={<Guard><MySupportPage /></Guard>} />
         <Route path="/support/my/:id" element={<Guard><MySupportPage /></Guard>} />
+        <Route path="/guide" element={<Guard platform><GuidePage /></Guard>} />
+        <Route path="/faq" element={<Guard platform><FaqPage /></Guard>} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="*" element={<Navigate to={home} replace />} />
       </Route>

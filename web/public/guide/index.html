@@ -51,6 +51,14 @@
   header.top.scrolled { border-bottom-color: var(--line); }
   header.top .wrap { display: flex; align-items: center; justify-content: space-between; height: 72px; }
   header.top img { height: 46px; width: auto; }
+  .top-left { display: flex; align-items: center; gap: 20px; }
+  .faq-link {
+    display: none; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.02em; color: var(--muted);
+    text-decoration: none; padding: 7px 12px; border-radius: 9px; border: 1px solid var(--line);
+    transition: color 150ms var(--ease), background 150ms var(--ease), border-color 150ms var(--ease);
+  }
+  .faq-link:hover { color: var(--ink); background: var(--bg-2); border-color: transparent; }
+  .faq-link.show { display: inline-block; }
   .btn {
     display: inline-flex; align-items: center; gap: 10px; text-decoration: none;
     background: var(--green); color: #fff; font-weight: 700; font-size: 0.95rem;
@@ -349,7 +357,10 @@
 
 <header class="top" id="top">
   <div class="wrap">
-    <img src="img/kd-logo.png" alt="KitchenDesk — Kitchen OS. Total control.">
+    <div class="top-left">
+      <img src="img/kd-logo.png" alt="KitchenDesk — Kitchen OS. Total control.">
+      <a class="faq-link" id="faqLink" href="#faq">FAQ</a>
+    </div>
     <a class="btn sm" href="https://t.me/AlisherXR2002" target="_blank" rel="noopener">Написать</a>
   </div>
 </header>
@@ -808,6 +819,8 @@
         return '<details class="faq-item"><summary>' + escapeHtml(item.question) +
           '</summary><p>' + escapeHtml(item.answer) + '</p></details>';
       }).join('');
+      var link = document.getElementById('faqLink');
+      if (link) link.classList.add('show');
     } else {
       hideFaq();
     }

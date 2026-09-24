@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BookOpen, Tags, Users, Building2, LogOut, UserCircle2, ArrowLeft, LifeBuoy, BookMarked, ExternalLink } from 'lucide-react'
+import { BookOpen, Tags, Users, Building2, LogOut, UserCircle2, ArrowLeft, LifeBuoy, BookMarked, HelpCircle, ExternalLink } from 'lucide-react'
 import { api } from '../lib/api'
 import { useSession } from '../lib/session'
 import { GUIDE_LABEL, useGuideUrl } from '../lib/guide'
@@ -33,6 +33,8 @@ function useNav() {
   if (atPlatformLevel) {
     items.push({ to: '/platform', label: 'Заведения', Icon: Building2 })
     items.push({ to: '/support', label: 'Поддержка', Icon: LifeBuoy, badge: waiting })
+    items.push({ to: '/guide', label: 'Гид', Icon: BookMarked })
+    items.push({ to: '/faq', label: 'Вопросы', Icon: HelpCircle })
   }
   return items
 }
