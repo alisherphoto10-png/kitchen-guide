@@ -21,6 +21,7 @@ app.use('/api/platform', authenticate, require('./routes/platform'));
 app.use('/api/recipes', authenticate, requireTenant, require('./routes/recipes'));
 app.use('/api/categories', authenticate, requireTenant, require('./routes/categories'));
 app.use('/api/team', authenticate, requireTenant, require('./routes/team'));
+app.use('/tg', require('./routes/webhook'));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Не найдено' }));
 
 app.use('/uploads', express.static(config.uploadsDir, { maxAge: '30d', immutable: true, fallthrough: false }));
@@ -28,7 +29,7 @@ app.use('/uploads', express.static(config.uploadsDir, { maxAge: '30d', immutable
 // Собранный фронтенд (web/dist): SPA — любые не-API пути отдают index.html.
 if (fs.existsSync(config.webDist)) {
   app.use(express.static(config.webDist, { index: false, maxAge: '1h' }));
-  app.get(/^(?!\/api|\/uploads).*/, (req, res) => {
+  app.get(/^(?!\/api|\/uploads|\/tg\/).*/, (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(config.webDist, 'index.html'));
   });

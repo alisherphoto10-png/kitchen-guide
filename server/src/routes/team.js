@@ -3,6 +3,7 @@ const router = require('express').Router();
 const { ah, toId } = require('../utils/http');
 const { requireRole } = require('../middleware/auth');
 const users = require('../services/users');
+const telegramLink = require('../services/telegramLink');
 
 router.use(requireRole('owner'));
 
@@ -18,6 +19,16 @@ router.put('/:id', ah(async (req, res) => {
 
 router.post('/:id/reset-password', ah(async (req, res) => {
   res.json({ password: await users.resetPassword(req.tenantId, toId(req.params.id)) });
+}));
+
+// Персональная ссылка-приглашение в бота заведения (привязка Telegram).
+router.post('/:id/telegram-link', ah(async (req, res) => {
+  res.json(await telegramLink.createLink(req.tenantId, toId(req.params.id)));
+}));
+
+router.delete('/:id/telegram', ah(async (req, res) => {
+  await telegramLink.unlink(req.tenantId, toId(req.params.id));
+  res.json({ ok: true });
 }));
 
 module.exports = router;

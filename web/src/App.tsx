@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useSession } from './lib/session'
 import { Layout } from './components/Layout'
 import { PageLoader } from './components/ui'
@@ -10,6 +10,7 @@ import { CategoriesPage } from './pages/Categories'
 import { TeamPage } from './pages/Team'
 import { PlatformPage } from './pages/Platform'
 import { AccountPage } from './pages/Account'
+import { TgAppPage } from './pages/TgApp'
 import type { Role } from './lib/types'
 
 function Guard({ min, platform, children }: { min?: Role; platform?: boolean; children: ReactNode }) {
@@ -23,6 +24,11 @@ function Guard({ min, platform, children }: { min?: Role; platform?: boolean; ch
 
 export function App() {
   const { me, loading } = useSession()
+  const { pathname } = useLocation()
+  // Мини-апп входит сам (через Telegram) — независимо от того, есть ли уже сессия.
+  if (pathname === '/tg-app') {
+    return <Routes><Route path="/tg-app" element={<TgAppPage />} /></Routes>
+  }
   if (loading) return <PageLoader />
   if (!me) {
     return (

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { UserPlus, KeyRound } from 'lucide-react'
+import { UserPlus, KeyRound, Send } from 'lucide-react'
 import { api } from '../lib/api'
 import { useSession } from '../lib/session'
 import { relDate } from '../lib/format'
@@ -21,7 +21,19 @@ export function TeamPage() {
   const [adding, setAdding] = useState(false)
   const [secret, setSecret] = useState<{ login: string; password: string; title: string } | null>(null)
   const [confirm, confirmNode] = useConfirm()
+  const [invite, setInvite] = useState<{ name: string; url: string; expires_at: string } | null>(null)
   const onError = (e: unknown) => toast(errText(e), 'error')
+  const bot = me?.tenant?.bot
+  const botOn = !!bot?.is_active
+
+  const tgLink = useMutation({
+    mutationFn: (u: User) => api<{ url: string; expires_at: string }>(`/team/${u.id}/telegram-link`, { method: 'POST' }).then(r => ({ ...r, name: u.name || u.login })),
+    onSuccess: r => setInvite(r), onError,
+  })
+  const tgUnlink = useMutation({
+    mutationFn: (u: User) => api(`/team/${u.id}/telegram`, { method: 'DELETE' }),
+    onSuccess: () => { toast('Telegram отвязан'); qc.invalidateQueries({ queryKey: ['team'] }) }, onError,
+  })
 
   const update = useMutation({
     mutationFn: (p: { id: number; body: Partial<User> }) => api<User>('/team/' + p.id, { method: 'PUT', body: p.body }),
@@ -38,7 +50,12 @@ export function TeamPage() {
         <h1 className="h-page">Команда</h1>
         <button className="btn-primary h-9" onClick={() => setAdding(true)}><UserPlus className="h-4 w-4" />Сотрудник</button>
       </div>
-      <p className="text-sm muted mt-1 mb-5">Каждому — свой логин. Пароль показывается один раз при создании или сбросе.</p>
+      <p className="text-sm muted mt-1 mb-5">
+        Каждому — свой логин. Пароль показывается один раз при создании или сбросе.
+        {botOn
+          ? <> Через бота <a href={`https://t.me/${bot!.username}`} target="_blank" rel="noreferrer" className="text-brand font-semibold">@{bot!.username}</a> сотрудники открывают ТТК прямо в Telegram — пришлите им приглашение.</>
+          : bot ? ' Бот заведения сейчас отключён — вход через Telegram не работает.' : ' Вход через Telegram появится, когда к заведению подключат бота.'}
+      </p>
 
       {isLoading ? <PageLoader /> : error ? <ErrorBox error={error} /> : (
         <ul className="card divide-y divide-line">
@@ -47,7 +64,19 @@ export function TeamPage() {
               <div className="flex-1 min-w-[160px]">
                 <p className="font-semibold">{u.name || u.login}{u.id === me?.user.id && <span className="muted font-normal"> · это вы</span>}</p>
                 <p className="text-xs muted">{u.login} · вход {relDate(u.last_login_at)}{!u.is_active && ' · отключён'}</p>
+                {u.tg_linked && (
+                  <p className="text-xs text-ok mt-0.5 flex items-center gap-1"><Send className="h-3 w-3" />Telegram{u.tg_username ? ` @${u.tg_username}` : ''}
+                    <button className="text-ink-muted underline underline-offset-2 ml-1" onClick={async () => {
+                      if (await confirm({ title: `Отвязать Telegram у ${u.name || u.login}?`, text: 'Вход через бота для этого сотрудника перестанет работать, пока вы не пришлёте новое приглашение.', ok: 'Отвязать' })) tgUnlink.mutate(u)
+                    }}>отвязать</button>
+                  </p>
+                )}
               </div>
+              {botOn && u.is_active && (
+                <button className="btn-ghost btn-sm" disabled={tgLink.isPending} onClick={() => tgLink.mutate(u)}>
+                  <Send className="h-3.5 w-3.5" />{u.tg_linked ? 'Перепривязать' : 'В Telegram'}
+                </button>
+              )}
               <select className="input h-9 w-auto text-[13px]" value={u.role} disabled={update.isPending}
                 onChange={e => update.mutate({ id: u.id, body: { role: e.target.value as Role } })}>
                 {(Object.keys(ROLE_LABEL) as Role[]).map(r => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
@@ -78,8 +107,29 @@ export function TeamPage() {
           <SecretReveal label="Передайте сотруднику — после закрытия пароль больше не покажется" login={secret.login} password={secret.password} />
         </Modal>
       )}
+      {invite && <InviteModal invite={invite} onClose={() => setInvite(null)} />}
       {confirmNode}
     </div>
+  )
+}
+
+function InviteModal({ invite, onClose }: { invite: { name: string; url: string; expires_at: string }; onClose: () => void }) {
+  const [copied, setCopied] = useState(false)
+  const expires = new Date(invite.expires_at).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+  return (
+    <Modal title={`Приглашение для ${invite.name}`} onClose={onClose} footer={<button className="btn-primary" onClick={onClose}>Готово</button>}>
+      <div className="grid gap-3">
+        <p className="text-sm text-ink-2">Отправьте сотруднику эту ссылку. Он откроет её в Telegram, нажмёт «Старт» — и бот привяжет его аккаунт. Дальше ТТК открываются кнопкой «ТТК» в боте, без логина и пароля.</p>
+        <div className="rounded-xl border border-line bg-paper-2/60 p-3">
+          <code className="font-mono text-[13px] break-all select-all">{invite.url}</code>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button className="btn-outline btn-sm" onClick={() => navigator.clipboard?.writeText(invite.url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })}>{copied ? 'Скопировано' : 'Скопировать'}</button>
+          <a className="btn-ghost btn-sm" href={`https://t.me/share/url?url=${encodeURIComponent(invite.url)}`} target="_blank" rel="noreferrer">Переслать в Telegram</a>
+        </div>
+        <p className="text-xs muted">Ссылка одноразовая, действует до {expires}. Новое приглашение отменяет прежнее.</p>
+      </div>
+    </Modal>
   )
 }
 

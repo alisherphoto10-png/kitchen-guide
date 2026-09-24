@@ -9,12 +9,15 @@ export interface User {
   is_platform_admin: boolean
   is_active: boolean
   last_login_at: string | null
+  tg_linked?: boolean
+  tg_username?: string | null
 }
 
 export interface Tenant {
   id: number
   name: string
   slug: string
+  bot?: { username: string; is_active: boolean } | null
 }
 
 export interface Me {
@@ -77,4 +80,28 @@ export interface PlatformTenant extends Tenant {
   recipe_count: number
   user_count: number
   last_activity_at: string | null
+  bot_username: string | null
+  bot_active: boolean | null
+  bot_error: string | null
+}
+
+export interface BotStatus {
+  id: number
+  tenant_id: number
+  username: string
+  token_last4: string
+  is_active: boolean
+  last_error: string | null
+  last_update_at: string | null
+  created_at: string
+  updated_at: string
+  bot_link: string
+  mini_app_link: string | null
+  telegram?: {
+    webhook_ok?: boolean
+    pending_update_count?: number
+    last_error_message?: string | null
+    last_error_date?: string | null
+    error?: string
+  }
 }

@@ -7,6 +7,8 @@ interface SessionValue {
   me: Me | null
   loading: boolean
   login: (login: string, password: string) => Promise<void>
+  // Вход из мини-аппа Telegram: initData + slug заведения из ссылки.
+  loginTelegram: (initData: string, tenant: string) => Promise<void>
   logout: () => void
   // Администратор платформы: «войти» в заведение / выйти обратно в список.
   enterTenant: (id: number | null) => void
@@ -46,6 +48,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       session.setTenantOverride(null)
       qc.clear()
       setHasToken(true)
+    },
+    loginTelegram: async (initData, tenant) => {
+      const res = await api<{ token: string; user: User }>('/auth/telegram', { method: 'POST', body: { initData, tenant } })
+      session.setToken(res.token)
+      session.setTenantOverride(null)
+      // Уже был вход (другой аккаунт в этом браузере) — сбросить кэш и перезапросить /me.
+      if (hasToken) await qc.resetQueries()
+      else { qc.clear(); setHasToken(true) }
     },
     logout: reset,
     enterTenant: id => {

@@ -9,8 +9,9 @@ async function list() {
     `SELECT t.*,
             (SELECT COUNT(*)::int FROM recipes r WHERE r.tenant_id = t.id AND r.status = 'active') AS recipe_count,
             (SELECT COUNT(*)::int FROM users u WHERE u.tenant_id = t.id AND u.is_active) AS user_count,
-            (SELECT MAX(u.last_login_at) FROM users u WHERE u.tenant_id = t.id) AS last_activity_at
-       FROM tenants t ORDER BY t.created_at DESC`
+            (SELECT MAX(u.last_login_at) FROM users u WHERE u.tenant_id = t.id) AS last_activity_at,
+            b.username AS bot_username, b.is_active AS bot_active, b.last_error AS bot_error
+       FROM tenants t LEFT JOIN tenant_bots b ON b.tenant_id = t.id ORDER BY t.created_at DESC`
   );
   return rows;
 }

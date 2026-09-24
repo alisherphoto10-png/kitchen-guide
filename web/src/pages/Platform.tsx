@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, LogIn, Building2 } from 'lucide-react'
+import { Plus, LogIn, Building2, Bot } from 'lucide-react'
 import { api } from '../lib/api'
 import { useSession } from '../lib/session'
 import { relDate } from '../lib/format'
 import type { PlatformTenant } from '../lib/types'
 import { Empty, ErrorBox, Modal, PageLoader, SecretReveal, errText, toast, useConfirm } from '../components/ui'
+import { BotModal, TokenField, BotFatherHelp } from '../components/BotModal'
 
 // Транслитерация названия в идентификатор-подсказку (его потом можно поправить руками).
 const TR: Record<string, string> = { а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'y',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'c',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya' }
@@ -18,7 +19,8 @@ export function PlatformPage() {
   const { enterTenant } = useSession()
   const { data: tenants, isLoading, error } = useQuery({ queryKey: ['platform-tenants'], queryFn: () => api<PlatformTenant[]>('/platform/tenants') })
   const [adding, setAdding] = useState(false)
-  const [created, setCreated] = useState<{ name: string; login: string; password: string } | null>(null)
+  const [created, setCreated] = useState<Created | null>(null)
+  const [botFor, setBotFor] = useState<PlatformTenant | null>(null)
   const [confirm, confirmNode] = useConfirm()
 
   const toggle = useMutation({
@@ -47,6 +49,10 @@ export function PlatformPage() {
                 <p className="font-semibold">{t.name} {!t.is_active && <span className="tag bg-ink text-paper ml-1">приостановлено</span>}</p>
                 <p className="text-xs muted">{t.slug} · {t.recipe_count} ТТК · {t.user_count} сотр. · активность {relDate(t.last_activity_at)}</p>
               </div>
+              <button className="btn-ghost btn-sm" onClick={() => setBotFor(t)} title="Telegram-бот заведения">
+                <Bot className={`h-3.5 w-3.5 ${t.bot_username ? (t.bot_active && !t.bot_error ? 'text-ok' : 'text-warn') : 'text-ink-faint'}`} />
+                {t.bot_username ? <>@{t.bot_username}{!t.bot_active && <span className="muted"> · выкл</span>}</> : 'Подключить бота'}
+              </button>
               <button className="btn-ghost btn-sm" onClick={async () => {
                 if (t.is_active && !(await confirm({ title: `Приостановить «${t.name}»?`, text: 'Все сотрудники заведения сразу потеряют доступ. Данные сохранятся, включить обратно можно в любой момент.', ok: 'Приостановить', danger: true }))) return
                 toggle.mutate(t)
@@ -60,28 +66,39 @@ export function PlatformPage() {
       {adding && <AddTenant onClose={() => setAdding(false)} onCreated={c => { setAdding(false); setCreated(c) }} />}
       {created && (
         <Modal title={`«${created.name}» создано`} onClose={() => setCreated(null)} footer={<button className="btn-primary" onClick={() => setCreated(null)}>Готово</button>}>
-          <SecretReveal label="Доступ владельца — передайте клиенту. Пароль больше не покажется." login={created.login} password={created.password} />
+          <div className="grid gap-3">
+            <SecretReveal label="Доступ владельца — передайте клиенту. Пароль больше не покажется." login={created.login} password={created.password} />
+            {created.bot && <p className="text-sm text-ok">Бот @{created.bot} подключён: вебхук и кнопка «ТТК» настроены.</p>}
+            {created.botError && <p className="text-sm text-warn">Заведение создано, но бот не подключился: {created.botError} Подключить можно позже — кнопка «Подключить бота» в списке.</p>}
+          </div>
         </Modal>
       )}
+      {botFor && <BotModal tenant={botFor} onClose={() => setBotFor(null)} />}
       {confirmNode}
     </div>
   )
 }
 
-function AddTenant({ onClose, onCreated }: { onClose: () => void; onCreated: (c: { name: string; login: string; password: string }) => void }) {
+type Created = { name: string; login: string; password: string; bot?: string; botError?: string }
+
+function AddTenant({ onClose, onCreated }: { onClose: () => void; onCreated: (c: Created) => void }) {
   const qc = useQueryClient()
-  const [f, setF] = useState({ name: '', slug: '', ownerName: '', ownerLogin: '' })
+  const [f, setF] = useState({ name: '', slug: '', ownerName: '', ownerLogin: '', botToken: '' })
   const [slugTouched, setSlugTouched] = useState(false)
   const create = useMutation({
-    mutationFn: () => api<{ tenant: PlatformTenant; owner: { login: string; password: string } }>('/platform/tenants', { method: 'POST', body: f }),
-    onSuccess: r => { qc.invalidateQueries({ queryKey: ['platform-tenants'] }); onCreated({ name: r.tenant.name, ...r.owner }) },
+    mutationFn: () => api<{ tenant: PlatformTenant; owner: { login: string; password: string }; bot?: { username: string }; bot_error?: string }>(
+      '/platform/tenants', { method: 'POST', body: { ...f, botToken: f.botToken || undefined } }),
+    onSuccess: r => {
+      qc.invalidateQueries({ queryKey: ['platform-tenants'] })
+      onCreated({ name: r.tenant.name, ...r.owner, bot: r.bot?.username, botError: r.bot_error })
+    },
     onError: e => toast(errText(e), 'error'),
   })
   return (
     <Modal title="Новое заведение" onClose={onClose}
       footer={<>
         <button className="btn-ghost" onClick={onClose}>Отмена</button>
-        <button className="btn-primary" disabled={!f.name.trim() || !f.slug || !f.ownerLogin || create.isPending} onClick={() => create.mutate()}>Создать</button>
+        <button className="btn-primary" disabled={!f.name.trim() || !f.slug || !f.ownerLogin || create.isPending} onClick={() => create.mutate()}>{create.isPending ? 'Создаём…' : 'Создать'}</button>
       </>}>
       <div className="grid gap-4">
         <label><span className="field-label">Название</span>
@@ -97,6 +114,13 @@ function AddTenant({ onClose, onCreated }: { onClose: () => void; onCreated: (c:
             <input className="input" autoCapitalize="none" spellCheck={false} value={f.ownerLogin} onChange={e => setF({ ...f, ownerLogin: e.target.value.toLowerCase() })} />
           </label>
         </div>
+        <details className="rounded-xl border border-line px-3 py-2.5 group" open={!!f.botToken}>
+          <summary className="text-sm font-semibold cursor-pointer select-none">Telegram-бот <span className="muted font-normal">— можно подключить и позже</span></summary>
+          <div className="grid gap-3 mt-3">
+            <BotFatherHelp />
+            <TokenField value={f.botToken} onChange={v => setF({ ...f, botToken: v })} />
+          </div>
+        </details>
       </div>
     </Modal>
   )

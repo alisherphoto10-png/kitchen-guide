@@ -28,7 +28,7 @@ async function authenticate(req, res, next) {
     }
 
     const { rows: [user] } = await pool.query(
-      `SELECT u.id, u.tenant_id, u.login, u.name, u.role, u.is_platform_admin, u.is_active,
+      `SELECT u.id, u.tenant_id, u.login, u.name, u.role, u.is_platform_admin, u.is_active, u.tg_id, u.tg_username,
               t.is_active AS tenant_active
          FROM users u LEFT JOIN tenants t ON t.id = u.tenant_id
         WHERE u.id = $1`,

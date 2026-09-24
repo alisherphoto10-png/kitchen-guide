@@ -46,6 +46,7 @@ function publicUser(u) {
   return {
     id: u.id, login: u.login, name: u.name, role: u.role, tenant_id: u.tenant_id,
     is_platform_admin: u.is_platform_admin, is_active: u.is_active, last_login_at: u.last_login_at,
+    tg_linked: u.tg_id != null, tg_username: u.tg_username || null,
   };
 }
 

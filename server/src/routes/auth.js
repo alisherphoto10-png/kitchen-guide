@@ -4,6 +4,8 @@ const { ah, HttpError } = require('../utils/http');
 const { signToken, authenticate } = require('../middleware/auth');
 const users = require('../services/users');
 const tenants = require('../services/tenants');
+const bots = require('../services/bots');
+const telegramLink = require('../services/telegramLink');
 
 // 10 неудачных попыток с одного IP за 15 минут. Успешные входы не считаются.
 const loginLimiter = rateLimit({
@@ -23,13 +25,29 @@ router.post('/login', loginLimiter, ah(async (req, res) => {
   res.json({ token: signToken(user), user: users.publicUser(user) });
 }));
 
+// Вход из мини-аппа. tenant — slug из ссылки (?t= или startapp); по нему
+// находим бота клиента и его токеном проверяем подпись initData.
+router.post('/telegram', loginLimiter, ah(async (req, res) => {
+  const { initData, tenant } = req.body || {};
+  const bot = await bots.getActiveBySlug(tenant);
+  if (!bot) throw new HttpError(404, 'Бот заведения не найден или отключён');
+  const data = telegramLink.verifyInitData(initData, bots.tokenOf(bot));
+  if (!data) throw new HttpError(401, 'Не удалось подтвердить вход через Telegram — откройте приложение заново из бота');
+  if (!bot.tenant_active) throw new HttpError(403, 'Доступ для заведения приостановлен');
+  const user = await telegramLink.findLinkedUser(bot.tenant_id, data.user.id);
+  if (!user) throw new HttpError(403, 'Ваш Telegram не привязан к сотруднику заведения. Попросите владельца прислать ссылку-приглашение.');
+  if (!user.is_active) throw new HttpError(403, 'Доступ отключён — обратитесь к владельцу заведения');
+  await users.touchLogin(user.id);
+  res.json({ token: signToken(user), user: users.publicUser(user) });
+}));
+
 // Кто я и в каком заведении — фронтенд берёт роль отсюда, а не из localStorage.
 router.get('/me', authenticate, ah(async (req, res) => {
   const tenant = req.tenantId ? await tenants.get(req.tenantId) : null;
   res.json({
     user: users.publicUser(req.user),
     role: req.role,
-    tenant: tenant && { id: tenant.id, name: tenant.name, slug: tenant.slug },
+    tenant: tenant && { id: tenant.id, name: tenant.name, slug: tenant.slug, bot: await bots.summary(tenant.id) },
   });
 }));
 
