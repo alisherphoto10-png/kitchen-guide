@@ -7,6 +7,7 @@ const { migrate } = require('./db/migrate');
 const { HttpError, ah } = require('./utils/http');
 const { authenticate, requireTenant } = require('./middleware/auth');
 const guide = require('./services/guide');
+const guideContent = require('./services/guideContent');
 const bots = require('./services/bots');
 
 const app = express();
@@ -21,6 +22,12 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', require('./routes/auth'));
 // Ссылка на гид — публично: нужна и на странице входа.
 app.get('/api/guide', ah(async (req, res) => res.json({ url: await guide.getUrl() })));
+// Своё содержимое страницы гида (фото вместо заглушек, «Частые вопросы») — тоже
+// публично: /guide/ открывают и без входа. Без кеша — правка в админке видна сразу.
+app.get('/api/guide/content', ah(async (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.json(await guideContent.publicContent());
+}));
 app.use('/api/platform/support', authenticate, require('./routes/support').admin);
 app.use('/api/platform', authenticate, require('./routes/platform'));
 app.use('/api/support', authenticate, require('./routes/support').mine);

@@ -1,10 +1,6 @@
 const router = require('express').Router();
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
-const multer = require('multer');
-const config = require('../config');
 const { ah, HttpError, toId } = require('../utils/http');
+const { imageUpload, unlinkUpload } = require('../utils/uploads');
 const { requireRole } = require('../middleware/auth');
 const recipes = require('../services/recipes');
 const exports_ = require('../services/exports');
@@ -104,11 +100,6 @@ router.post('/:id/restore', requireRole('owner'), ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
-function unlinkUpload(publicPath) {
-  if (!publicPath) return;
-  fs.unlink(path.join(config.uploadsDir, path.basename(publicPath)), () => {});
-}
-
 router.delete('/:id', requireRole('owner'), ah(async (req, res) => {
   unlinkUpload(await recipes.remove(req.tenantId, toId(req.params.id)));
   res.json({ ok: true });
@@ -116,17 +107,7 @@ router.delete('/:id', requireRole('owner'), ah(async (req, res) => {
 
 // ── фото ─────────────────────────────────────────────────────────────
 
-const IMAGE_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: config.uploadsDir,
-    // Имя случайное: файлы раздаются без авторизации (<img> не шлёт токен),
-    // поэтому ссылку нельзя угадать перебором.
-    filename: (req, file, cb) => cb(null, `r${req.tenantId}_${crypto.randomBytes(12).toString('hex')}${IMAGE_EXT[file.mimetype]}`),
-  }),
-  fileFilter: (req, file, cb) => cb(IMAGE_EXT[file.mimetype] ? null : new HttpError(400, 'Нужна картинка JPG, PNG или WebP'), !!IMAGE_EXT[file.mimetype]),
-  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
-});
+const upload = imageUpload(req => `r${req.tenantId}`);
 
 router.post('/:id/photo', requireRole('owner'), upload.single('photo'), ah(async (req, res) => {
   if (!req.file) throw new HttpError(400, 'Нет файла');

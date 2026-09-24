@@ -2,12 +2,14 @@
 // Хранится в одном месте — platform_settings, меняет администратор платформы на
 // сайте («Поддержка» → «Гид»). Пустая ссылка = гид скрыт везде: на странице
 // входа, в меню сайта, в профиле мини-аппа и команда /guide у ботов заведений.
+const config = require('../config');
 const { pool } = require('../db/pool');
 const { HttpError } = require('../utils/http');
 const tg = require('./telegram');
 
 const KEY = 'guide_url';
-const DEFAULT_URL = 'https://claude.ai/artifact/2XkkoVWcDHjLzmjLEsokvk';
+// По умолчанию — своя страница гида (web/public/guide, отдаётся на /guide/).
+const DEFAULT_URL = config.publicBaseUrl ? `${config.publicBaseUrl}/guide/` : '';
 
 // Нет строки в настройках = ссылка по умолчанию; строка с '' = гид выключен.
 async function getUrl() {

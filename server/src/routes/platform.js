@@ -1,11 +1,13 @@
 // Администрирование платформы: клиенты (заведение, приостановка) и их боты.
 const router = require('express').Router();
-const { ah, toId } = require('../utils/http');
+const { ah, toId, HttpError } = require('../utils/http');
+const { imageUpload, unlinkUpload } = require('../utils/uploads');
 const { requirePlatformAdmin } = require('../middleware/auth');
 const tenants = require('../services/tenants');
 const bots = require('../services/bots');
 const modules = require('../services/modules');
 const guide = require('../services/guide');
+const guideContent = require('../services/guideContent');
 
 router.use(requirePlatformAdmin);
 
@@ -79,6 +81,42 @@ router.put('/guide', ah(async (req, res) => {
   const url = await guide.setUrl((req.body || {}).url);
   const bots_sync = await bots.syncAllCommands();
   res.json({ url, default_url: guide.DEFAULT_URL, bots_sync });
+}));
+
+// Содержимое страницы гида: фото по слотам (data-guide-slot) и «Частые вопросы».
+router.get('/guide/photos', ah(async (req, res) => res.json(await guideContent.photos())));
+
+const guideUpload = imageUpload(() => 'guide');
+router.post('/guide/photos/:slot', ah(async (req, res, next) => {
+  // Слот проверяем до приёма файла, чтобы не писать на диск лишнее.
+  if (!guideContent.SLOTS.some(s => s.slot === req.params.slot)) throw new HttpError(400, 'Неизвестное место для фото');
+  next();
+}), guideUpload.single('photo'), ah(async (req, res) => {
+  if (!req.file) throw new HttpError(400, 'Нет файла');
+  const publicPath = '/uploads/' + req.file.filename;
+  try {
+    unlinkUpload(await guideContent.setPhoto(req.params.slot, publicPath));
+  } catch (e) {
+    unlinkUpload(publicPath);
+    throw e;
+  }
+  res.json(await guideContent.photos());
+}));
+
+router.delete('/guide/photos/:slot', ah(async (req, res) => {
+  unlinkUpload(await guideContent.setPhoto(req.params.slot, null));
+  res.json(await guideContent.photos());
+}));
+
+router.get('/guide/faq', ah(async (req, res) => res.json(await guideContent.faqList())));
+router.post('/guide/faq', ah(async (req, res) => res.status(201).json(await guideContent.faqCreate(req.body))));
+router.put('/guide/faq/:id', ah(async (req, res) => res.json(await guideContent.faqUpdate(toId(req.params.id), req.body))));
+router.delete('/guide/faq/:id', ah(async (req, res) => {
+  await guideContent.faqRemove(toId(req.params.id));
+  res.json({ ok: true });
+}));
+router.post('/guide/faq/:id/move', ah(async (req, res) => {
+  res.json(await guideContent.faqMove(toId(req.params.id), (req.body || {}).dir === 'up' ? 'up' : 'down'));
 }));
 
 module.exports = router;
