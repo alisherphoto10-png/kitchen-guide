@@ -325,6 +325,15 @@
     .handoff-banner { transition: none; }
     .handoff-below { transition: opacity 200ms ease; }
   }
+  /* Полная перезагрузка страницы (переход на настоящий сайт) сама по
+     себе рвёт кадр в WebView — обрывок старого фото накладывается на
+     ещё не отрисованную новую страницу. Прячем этот момент под ровный
+     фон, а не пытаемся анимировать саму навигацию (это невозможно). */
+  .nav-veil {
+    position: fixed; inset: 0; z-index: 30; background: var(--bg);
+    opacity: 0; pointer-events: none; transition: opacity 320ms ease;
+  }
+  .nav-veil.show { opacity: 1; }
 </style>
 </head>
 <body>
@@ -555,6 +564,8 @@
       <div class="search-text">Открываем KitchenDesk…</div>
     </div>
   </div>
+
+  <div class="nav-veil" id="navVeil"></div>
 
 <script>
   var TARGET_URL = "https://kitchendesk.chefplan.ru/web";
@@ -884,6 +895,8 @@
   document.getElementById("successContinue").addEventListener("click", function () {
     var banner = document.getElementById("handoffBanner");
     var below = document.getElementById("handoffBelow");
+    var veil = document.getElementById("navVeil");
+    veil.classList.remove("show");
     banner.style.backgroundImage = "url('" + MOCK_VENUE.photo + "')";
     banner.classList.remove("collapsed");
     below.classList.remove("show");
@@ -892,9 +905,15 @@
       banner.classList.add("collapsed");
       below.classList.add("show");
     }, 250);
+    // Сама перезагрузка страницы (полная навигация в WebView) не
+    // может быть плавной — рвёт кадр. Прячем этот момент под ровный
+    // фон и переходим, только когда он уже полностью закрыл экран.
+    setTimeout(function () {
+      veil.classList.add("show");
+    }, 1300);
     setTimeout(function () {
       window.location.href = TARGET_URL;
-    }, 1500);
+    }, 1650);
   });
 
   // Для тестирования: на быстром PIN-экране можно сбросить и заново
