@@ -139,6 +139,9 @@
     font: 600 16px/1.3 "Inter", sans-serif; color: var(--text);
   }
   .field-input::placeholder { color: var(--muted); font-weight: 400; }
+  .phone-row { display: flex; align-items: center; gap: 10px; }
+  .phone-code { font: 600 16px "Inter", sans-serif; color: var(--text); flex: none; padding-right: 10px; border-right: 1px solid var(--border); }
+  .phone-row .field-input { flex: 1; min-width: 0; }
   .field-eye {
     flex: none; background: none; border: none; color: var(--muted); cursor: pointer;
     display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
@@ -201,7 +204,7 @@
   .landing-copy { flex: none; padding: 0 24px; margin-bottom: 26px; }
   .landing-copy .h1 { max-width: 280px; }
   .landing-copy .sub { max-width: 280px; margin-bottom: 0; }
-  .landing-actions { flex: none; padding: 0 24px calc(28px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; }
+  .landing-actions { flex: none; padding: 0 24px calc(64px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; }
 
   /* ---------- найдено заведение ---------- */
   #foundScreen { padding: 0; justify-content: flex-end; align-items: stretch; transition: opacity 150ms ease; }
@@ -243,8 +246,7 @@
     padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px;
   }
   .role-label { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
-  .role-value { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
-  .role-value svg { color: var(--muted); }
+  .role-value { font-size: 15px; font-weight: 700; }
 
   /* ---------- PIN ---------- */
   .dots { display: flex; gap: 14px; margin-bottom: 30px; align-self: center; }
@@ -291,7 +293,10 @@
     box-shadow: 0 0 32px rgba(77,127,255,0.35);
     animation: successIn 480ms var(--ease-out);
   }
-  .success-check svg { width: 38px; height: 38px; color: var(--accent); stroke-width: 2.25; }
+  .success-check svg {
+    width: 38px; height: 38px; color: var(--accent);
+    fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round;
+  }
   @keyframes successIn {
     0% { transform: scale(0.85); opacity: 0; }
     100% { transform: scale(1); opacity: 1; }
@@ -331,7 +336,6 @@
       <symbol id="ic-hash" viewBox="0 0 24 24"><path d="M5 9h14M5 15h14M9 4l-2 16M17 4l-2 16"/></symbol>
       <symbol id="ic-doc" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/></symbol>
       <symbol id="ic-chev-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
-      <symbol id="ic-chev-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
       <symbol id="ic-check" viewBox="0 0 24 24"><path d="M5 13l4 4 10-11"/></symbol>
     </defs>
   </svg>
@@ -371,7 +375,10 @@
       <svg class="icon field-icon"><use href="#ic-phone"/></svg>
       <div class="field-body">
         <label class="field-label" for="loginInput">Логин или телефон</label>
-        <input class="field-input" id="loginInput" type="text" inputmode="tel" autocomplete="username" />
+        <div class="phone-row">
+          <span class="phone-code">+998</span>
+          <input class="field-input" id="loginInput" type="text" inputmode="numeric" autocomplete="username" placeholder="90 927 35 25" />
+        </div>
       </div>
     </div>
     <div class="field" id="passwordField">
@@ -404,7 +411,10 @@
       <svg class="icon field-icon"><use href="#ic-phone"/></svg>
       <div class="field-body">
         <label class="field-label" for="phoneInput">Телефон</label>
-        <input class="field-input" id="phoneInput" type="tel" inputmode="tel" autocomplete="tel" />
+        <div class="phone-row">
+          <span class="phone-code">+998</span>
+          <input class="field-input" id="phoneInput" type="tel" inputmode="numeric" autocomplete="tel" placeholder="90 927 35 25" />
+        </div>
       </div>
     </div>
     <div class="field">
@@ -448,7 +458,6 @@
           <div class="role-label">Вы подключаетесь как</div>
           <div class="role-value">Сотрудник кухни</div>
         </div>
-        <svg class="icon" viewBox="0 0 24 24"><use href="#ic-chev-down"/></svg>
       </div>
       <button class="btn btn-primary" id="foundContinue">Продолжить<span class="arrow">→</span></button>
       <button class="btn-plain" id="notMyVenueBtn">Это не моё заведение</button>
@@ -674,6 +683,21 @@
     startPinFlow("create");
   });
 
+  // Маска телефона: только цифры, группировка "90 927 35 25" (код
+  // страны — отдельный неизменяемый префикс перед полем).
+  function formatUzPhone(raw) {
+    var digits = raw.replace(/\D/g, "").slice(0, 9);
+    var groups = [digits.slice(0, 2), digits.slice(2, 5), digits.slice(5, 7), digits.slice(7, 9)];
+    return groups.filter(function (g) { return g.length; }).join(" ");
+  }
+  function wirePhoneMask(input) {
+    input.addEventListener("input", function () {
+      var atEnd = input.selectionStart === input.value.length;
+      input.value = formatUzPhone(input.value);
+      if (atEnd) input.setSelectionRange(input.value.length, input.value.length);
+    });
+  }
+
   // ---------- Старт / Вход / Регистрация ----------
   document.getElementById("landingLoginBtn").addEventListener("click", function () {
     show("codeScreen");
@@ -693,8 +717,9 @@
   document.getElementById("forgotPasswordBtn").addEventListener("click", function () {
     document.getElementById("loginInfo").textContent = "Восстановление пароля скоро заработает — пока входите по коду приглашения от администратора заведения.";
   });
+  var loginInput = document.getElementById("loginInput");
+  wirePhoneMask(loginInput);
   document.getElementById("loginSubmit").addEventListener("click", function () {
-    var loginInput = document.getElementById("loginInput");
     var loginInfo = document.getElementById("loginInfo");
     if (!loginInput.value.trim() || !passwordInput.value.trim()) {
       loginInfo.textContent = "Заполните логин и пароль";
@@ -705,6 +730,7 @@
 
   var nameInput = document.getElementById("nameInput");
   var phoneInput = document.getElementById("phoneInput");
+  wirePhoneMask(phoneInput);
   var codeInput = document.getElementById("codeInput");
   var codeErr = document.getElementById("codeErr");
   document.getElementById("codeSubmit").addEventListener("click", function () {
