@@ -4,142 +4,222 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>KitchenDesk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <style>
+  /* Industrial Digital — токены дизайн-системы из ТЗ на редизайн
+     экранов первого запуска. */
   :root {
-    --bg:#0a0e1a; --card:#141b2c; --border:#232c42;
-    --text:#eef1f7; --muted:#8791a8; --dim:#5b6478; --accent:#4d7cfe; --accent-soft:#17233d;
-    --bad:#e0663f;
+    --bg:#070B12; --surface:#0D1420; --card:#151E2D; --border:#253044;
+    --text:#FFFFFF; --muted:#A0A9BA; --accent:#4D7FFF; --accent-active:#6C96FF;
+    --bad:#FF6B6B; --good:#34D399;
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --enter-offset: 14px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; margin: 0; }
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
   }
+  svg.icon { width: 20px; height: 20px; flex: none; stroke: currentColor; stroke-width: 1.75; fill: none; stroke-linecap: round; stroke-linejoin: round; display: block; }
+
   .screen {
     position: fixed; inset: 0;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
     padding: 24px;
     padding-top: calc(24px + env(safe-area-inset-top, 0px));
     padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
     opacity: 0; pointer-events: none;
-    transition: opacity 380ms ease;
+    transform: translateX(var(--enter-offset));
+    transition: opacity 260ms var(--ease-out), transform 260ms var(--ease-out);
   }
-  .screen.active { opacity: 1; pointer-events: auto; }
+  .screen.active { opacity: 1; pointer-events: auto; transform: translateX(0); }
+  /* Экраны с плавающей панелью "Назад / 0X/05" не могут центрировать
+     контент по всей высоте — сверху нужен зазор под панель, иначе
+     заголовок оказывается у неё под низом. */
+  .screen.has-flowbar { justify-content: flex-start; padding-top: calc(112px + env(safe-area-inset-top, 0px)); }
+  @media (prefers-reduced-motion: reduce) {
+    .screen { transition: opacity 180ms ease; transform: none; }
+  }
 
-  /* ---------- фирменный фон KitchenDesk ----------
-     Настоящая кухня — видна на "своих" экранах (загрузка, код, поиск,
-     PIN); на экране найденного заведения перекрывается его собственным
-     фото (found-photo/found-overlay, см. ниже). */
+  /* ---------- фирменный фон KitchenDesk ---------- */
   .kd-bg {
     position: fixed; inset: 0;
     background-image: url('assets/kd-bg.jpg');
     background-size: cover; background-position: center;
     animation: kdBgPan 22s ease-in-out infinite alternate;
   }
-  @keyframes kdBgPan { from { transform: scale(1); } to { transform: scale(1.07); } }
+  @keyframes kdBgPan { from { transform: scale(1); } to { transform: scale(1.06); } }
   @media (prefers-reduced-motion: reduce) { .kd-bg { animation: none; } }
   .kd-bg-overlay {
     position: fixed; inset: 0;
-    background: linear-gradient(180deg, rgba(10,14,26,0.68) 0%, rgba(10,14,26,0.8) 100%);
+    background: linear-gradient(180deg, rgba(7,11,18,0.7) 0%, rgba(7,11,18,0.86) 100%);
   }
 
-  /* ---------- preloader ---------- */
+  /* ---------- навигация: назад + прогресс ---------- */
+  #flowBar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    display: flex; flex-direction: column; gap: 10px;
+    padding: calc(18px + env(safe-area-inset-top, 0px)) 24px 0;
+    background: linear-gradient(180deg, rgba(7,11,18,0.9) 0%, rgba(7,11,18,0.5) 70%, transparent 100%);
+    padding-bottom: 14px;
+  }
+  #flowBar[hidden] { display: none; }
+  .flow-row { display: flex; align-items: center; justify-content: space-between; }
+  .back-btn {
+    display: flex; align-items: center; gap: 2px; background: none; border: none;
+    color: var(--text); font: 600 15px/1 "Inter", sans-serif; cursor: pointer; padding: 6px 4px 6px 0;
+  }
+  .back-btn[hidden] { visibility: hidden; }
+  .progress-label { font: 600 12px/1 "Inter", sans-serif; color: var(--muted); letter-spacing: 0.04em; }
+  .progress-track { height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .progress-track[hidden] { display: none; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 320ms var(--ease-out); }
+
+  /* ---------- бренд-плашка (заставка / вход по PIN / главный) ---------- */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    display: flex; align-items: center; gap: 7px;
+    padding: calc(20px + env(safe-area-inset-top, 0px)) 24px 14px;
+    opacity: 0; pointer-events: none; transition: opacity 260ms ease;
+  }
+  #topbar.show { opacity: 1; }
+  .topbar-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .topbar-word { font: 700 14px/1 "Inter", sans-serif; letter-spacing: -0.01em; }
+
+  /* ---------- preloader / search ring ---------- */
   .preloader-ring {
-    width: 88px; height: 88px; border-radius: 50%;
-    border: 2px solid rgba(217,162,74,0.16); border-top-color: var(--accent);
+    width: 80px; height: 80px; border-radius: 50%;
+    border: 2px solid rgba(77,127,255,0.16); border-top-color: var(--accent);
     animation: spin 900ms linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .preloader-ring { animation: none; } }
-  .wordmark { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em; margin-top: 22px; }
-  .wordmark-tag { font-size: 0.688rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-top: 6px; }
-
-  /* ---------- code entry ---------- */
-  .headline { font-size: 1.4rem; font-weight: 800; line-height: 1.3; text-align: center; margin: 0 0 8px; text-wrap: balance; }
-  .sub { font-size: 0.875rem; color: var(--muted); text-align: center; margin: 0 0 28px; line-height: 1.5; max-width: 32ch; }
-  .code-field {
-    width: 100%; max-width: 280px;
-    background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 14px; padding: 15px 16px; font-size: 1.1rem; letter-spacing: 0.08em;
-    color: var(--text); text-align: center; text-transform: uppercase;
-  }
-  .code-field:focus { outline: none; border-color: var(--accent); }
-  .code-field::placeholder { color: var(--dim); letter-spacing: normal; text-transform: none; }
-  .primary-btn {
-    width: 100%; max-width: 280px; margin-top: 16px;
-    background: linear-gradient(160deg, #7da2ff 0%, var(--accent) 100%);
-    color: #ffffff; border: none; border-radius: 100px; padding: 15px;
-    font-size: 0.95rem; font-weight: 800; cursor: pointer;
-  }
-  .primary-btn:disabled { opacity: 0.4; }
-  .secondary-btn {
-    width: 100%; max-width: 280px; margin-top: 12px;
-    background: transparent; border: 1px solid var(--border); color: var(--text);
-    border-radius: 100px; padding: 14px; font-size: 0.88rem; font-weight: 700;
-    font-family: inherit; cursor: pointer;
-  }
-  .secondary-btn:active { background: var(--card); }
-  .err-msg { min-height: 18px; font-size: 0.8rem; color: var(--bad); margin-top: 10px; }
-  .info-msg { font-size: 0.8rem; color: var(--muted); margin-top: 10px; text-align: center; max-width: 280px; line-height: 1.5; }
-  .code-field.plain { text-transform: none; letter-spacing: normal; margin-bottom: 12px; }
-  .text-link {
-    margin-top: 16px; background: none; border: none; color: var(--accent);
-    font-size: 0.82rem; font-weight: 700; font-family: inherit; cursor: pointer; padding: 6px;
-  }
-
-  /* ---------- searching ---------- */
-  .search-text { font-size: 0.95rem; color: var(--muted); margin-top: 20px; }
-
-  /* Кольцо поиска: сначала лого KitchenDesk, в момент "находки" —
-     плавно меняется на лого заведения (или остаётся KitchenDesk, если
-     у заведения своего лого нет). */
-  .search-ring { position: relative; width: 88px; height: 88px; }
+  .search-ring { position: relative; width: 80px; height: 80px; align-self: center; }
   .search-ring .preloader-ring { position: absolute; inset: 0; }
-  .search-logo {
-    position: absolute; inset: 16px;
-    display: flex; align-items: center; justify-content: center; overflow: hidden;
-  }
+  .search-logo { position: absolute; inset: 15px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
   .search-logo img { width: 74%; height: 74%; object-fit: contain; }
-  .search-logo span { font-size: 0.8rem; font-weight: 800; letter-spacing: 0.02em; color: var(--accent); }
+  .search-logo span { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.02em; color: var(--accent); }
   .search-logo.pop img, .search-logo.pop span { animation: logoPop 420ms ease; }
   @keyframes logoPop {
     0% { transform: scale(0.55); opacity: 0; }
     60% { transform: scale(1.15); opacity: 1; }
     100% { transform: scale(1); opacity: 1; }
   }
+  #splashScreen, #searchScreen { align-items: center; justify-content: center; }
+  .wordmark { font: 800 1.15rem/1 "Inter", sans-serif; letter-spacing: -0.01em; margin-top: 20px; }
+  .wordmark-tag { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-top: 6px; }
+  .search-text { font-size: 0.95rem; color: var(--muted); margin-top: 20px; }
 
-  /* ---------- found venue ---------- */
-  /* Экран-открытие: обложка и лого заведения — редкий, "праздничный"
-     момент (первый вход), поэтому мотору можно быть чуть дольше и
-     заметнее, чем в обычном UI. Сама рамка экрана переключается быстро
-     (150ms) — всё движение несут обложка/тёмная подложка/карточка ниже,
-     а не сам фейд контейнера (иначе получается двойное наложение и
-     ощущение рывка). */
+  /* ---------- типографика ---------- */
+  .h1 { font: 800 34px/1.15 "Inter", sans-serif; letter-spacing: -0.02em; margin: 0 0 10px; text-wrap: balance; max-width: 320px; }
+  .sub { font: 400 17px/1.5 "Inter", sans-serif; color: var(--muted); margin: 0 0 28px; max-width: 320px; }
+  .caption { font: 600 13px/1.4 "Inter", sans-serif; color: var(--muted); }
+
+  /* ---------- поле ввода ---------- */
+  .field {
+    width: 100%; max-width: 340px; min-height: 60px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 15px;
+    padding: 9px 16px; display: flex; align-items: center; gap: 12px;
+    margin-bottom: 12px; transition: border-color 200ms ease;
+  }
+  .field:focus-within { border-color: var(--accent); }
+  .field.error { border-color: var(--bad); }
+  .field-icon { color: var(--muted); transition: color 200ms ease; }
+  .field:focus-within .field-icon { color: var(--accent); }
+  .field-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .field-label { font-size: 12px; color: var(--muted); line-height: 1; }
+  .field-input {
+    border: none; background: none; outline: none; padding: 0; margin: 0; width: 100%;
+    font: 600 16px/1.3 "Inter", sans-serif; color: var(--text);
+  }
+  .field-input::placeholder { color: var(--muted); font-weight: 400; }
+  .field-eye {
+    flex: none; background: none; border: none; color: var(--muted); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
+  }
+  .field-err { font-size: 13px; color: var(--bad); margin: -6px 0 14px; max-width: 340px; width: 100%; min-height: 16px; }
+  .field-info { font-size: 13px; color: var(--muted); margin: 2px 0 14px; max-width: 340px; width: 100%; line-height: 1.5; }
+
+  /* ---------- кнопки ---------- */
+  .btn {
+    width: 100%; max-width: 340px; height: 54px; border-radius: 17px;
+    display: flex; align-items: center; justify-content: space-between; padding: 0 20px;
+    font: 600 16px/1 "Inter", sans-serif; cursor: pointer; border: none; margin-top: 4px;
+  }
+  .btn .arrow { font-size: 17px; margin-left: 10px; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:active { background: var(--accent-active); }
+  .btn-primary:disabled { opacity: 0.4; }
+  .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:active { background: var(--card); }
+  .btn-plain {
+    background: none; border: none; color: var(--accent); font: 600 14px "Inter", sans-serif;
+    cursor: pointer; padding: 10px 2px; align-self: flex-start;
+  }
+  .checkbox-row {
+    display: flex; align-items: flex-start; gap: 10px; width: 100%; max-width: 340px;
+    margin: 4px 0 20px; font-size: 14px; color: var(--muted); line-height: 1.4; cursor: pointer;
+  }
+  .checkbox-row input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--accent); flex: none; }
+
+  /* ---------- карточки (документы) ---------- */
+  .card-list { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
+  .doc-card {
+    background: var(--surface); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px;
+    padding: 16px 18px; display: flex; align-items: center; gap: 12px;
+    color: var(--text); font: 600 15px "Inter", sans-serif; text-align: left; cursor: pointer;
+  }
+  .doc-card .field-icon { color: var(--accent); }
+  .doc-card span.grow { flex: 1; }
+  .doc-card svg.chev { color: var(--muted); }
+
+  /* ---------- экран "просмотр документа" ---------- */
+  #docViewScreen { padding: 0; }
+  .doc-view-header {
+    flex: none; width: 100%; display: flex; align-items: center; gap: 14px;
+    padding: calc(20px + env(safe-area-inset-top, 0px)) 24px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .doc-view-title { font: 700 16px "Inter", sans-serif; }
+  .doc-view-body {
+    flex: 1 1 auto; min-height: 0; width: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 22px 24px calc(30px + env(safe-area-inset-bottom, 0px));
+    font-size: 16.5px; line-height: 1.65; color: var(--muted); white-space: pre-line;
+    background: var(--bg);
+  }
+
+  /* ---------- главный экран (Старт) ---------- */
+  #landingScreen { padding: 0; align-items: stretch; justify-content: flex-start; }
+  .landing-topbar { flex: none; padding: calc(20px + env(safe-area-inset-top, 0px)) 24px 0; display: flex; align-items: center; gap: 7px; }
+  .landing-spacer { flex: 1 1 auto; }
+  .landing-copy { flex: none; padding: 0 24px; margin-bottom: 26px; }
+  .landing-copy .h1 { max-width: 280px; }
+  .landing-copy .sub { max-width: 280px; margin-bottom: 0; }
+  .landing-actions { flex: none; padding: 0 24px calc(28px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; }
+
+  /* ---------- найдено заведение ---------- */
   #foundScreen { padding: 0; justify-content: flex-end; align-items: stretch; transition: opacity 150ms ease; }
   .found-photo {
-    position: absolute; inset: 0; z-index: -2;
-    background-size: cover; background-position: center;
-    opacity: 0; transform: scale(1.06);
-    transition: opacity 900ms var(--ease-out), transform 900ms var(--ease-out);
+    position: absolute; inset: 0; z-index: -2; background-size: cover; background-position: center;
+    opacity: 0; transform: scale(1.06); transition: opacity 900ms var(--ease-out), transform 900ms var(--ease-out);
   }
   .found-photo.active { opacity: 1; transform: scale(1); }
   .found-overlay {
-    position: absolute; inset: 0; z-index: -1;
-    opacity: 0;
-    transition: opacity 900ms var(--ease-out);
+    position: absolute; inset: 0; z-index: -1; opacity: 0; transition: opacity 900ms var(--ease-out);
     background:
-      radial-gradient(120% 55% at 50% -5%, rgba(10,14,26,0.75), transparent 60%),
-      linear-gradient(180deg, rgba(10,14,26,0.1) 0%, rgba(10,14,26,0.55) 55%, rgba(10,14,26,0.94) 100%);
+      radial-gradient(120% 55% at 50% -5%, rgba(7,11,18,0.78), transparent 60%),
+      linear-gradient(180deg, rgba(7,11,18,0.1) 0%, rgba(7,11,18,0.6) 55%, rgba(7,11,18,0.95) 100%);
   }
   .found-overlay.active { opacity: 1; }
   .found-content {
-    padding: 24px 24px calc(36px + env(safe-area-inset-bottom, 0px));
-    display: flex; flex-direction: column; align-items: center; text-align: center;
+    width: 100%; padding: 24px 24px calc(30px + env(safe-area-inset-bottom, 0px));
+    display: flex; flex-direction: column; align-items: flex-start;
     opacity: 0; transform: translateY(28px);
     transition: opacity 420ms ease 220ms, transform 500ms var(--ease-out) 220ms;
   }
@@ -150,144 +230,195 @@
     .found-content { transition: opacity 200ms ease; transform: none; }
     #foundScreen.active .found-content { transform: none; }
   }
-  .found-eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
-  /* Лого заведения — крупно и по центру: это "витрина" самого момента
-     находки. KitchenDesk сверху (#topbar) всё равно держит идентику
-     платформы на каждом экране, так что здесь можно дать заведению
-     побыть главным на секунду. */
-  .found-venue-row { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 26px; }
-  .found-logo { height: 68px; width: 68px; object-fit: contain; }
-  .found-name { font-size: 1.3rem; font-weight: 800; }
-  .found-sub { font-size: 0.875rem; color: var(--muted); margin: 0 0 26px; }
+  .found-eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+  .found-card {
+    width: 100%; background: var(--surface); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px;
+    padding: 16px; display: flex; align-items: center; gap: 14px; margin-bottom: 12px;
+  }
+  .found-logo { height: 52px; width: 52px; object-fit: contain; flex: none; }
+  .found-name { font: 800 1.15rem "Inter", sans-serif; }
+  .found-type { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+  .role-row {
+    width: 100%; background: var(--surface); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;
+    padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px;
+  }
+  .role-label { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+  .role-value { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+  .role-value svg { color: var(--muted); }
 
-  /* ---------- документы (согласие) ---------- */
-  .docs-list { width: 100%; max-width: 280px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
-  .docs-link {
-    background: var(--card); border: 1px solid var(--border); color: var(--text);
-    border-radius: 14px; padding: 14px 16px; font-size: 0.9rem; font-weight: 700;
-    text-align: left; font-family: inherit; cursor: pointer;
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  .docs-link::after { content: "→"; color: var(--dim); }
-  .docs-agree {
-    display: flex; align-items: flex-start; gap: 10px; width: 100%; max-width: 280px;
-    margin-bottom: 22px; font-size: 0.82rem; color: var(--muted); line-height: 1.4; cursor: pointer;
-  }
-  .docs-agree input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--accent); flex: none; }
-
-  /* ---------- просмотр документа ---------- */
-  #docViewScreen { padding: 0; justify-content: flex-start; align-items: stretch; }
-  .doc-view-header {
-    flex: none; display: flex; align-items: center; gap: 12px;
-    padding: calc(20px + env(safe-area-inset-top, 0px)) 20px 16px;
-    border-bottom: 1px solid var(--border);
-  }
-  .doc-back {
-    background: none; border: none; color: var(--accent); font-size: 0.9rem; font-weight: 700;
-    font-family: inherit; cursor: pointer; padding: 6px 0;
-  }
-  .doc-view-title { font-size: 1rem; font-weight: 800; }
-  .doc-view-body {
-    flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
-    padding: 20px 20px calc(28px + env(safe-area-inset-bottom, 0px));
-    font-size: 0.85rem; color: var(--muted); line-height: 1.6; white-space: pre-line;
-  }
-
-  /* ---------- PIN screen ---------- */
-  .dots { display: flex; gap: 14px; margin-bottom: 28px; }
-  .dot { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--dim); background: transparent; transition: background 0.12s, border-color 0.12s; }
-  .dot.filled { background: var(--accent); border-color: var(--accent); }
+  /* ---------- PIN ---------- */
+  .dots { display: flex; gap: 14px; margin-bottom: 30px; align-self: center; }
+  .dot { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--border); background: transparent; transition: border-color 0.12s; }
+  .dot.filled { background: var(--accent); border-color: var(--accent); animation: dotPop 240ms var(--ease-out); }
   .dot.err { border-color: var(--bad); background: var(--bad); }
-  .pad { display: grid; grid-template-columns: repeat(3, 68px); gap: 14px; margin-bottom: 20px; }
-  .key {
-    width: 68px; height: 68px; border-radius: 50%; border: 1px solid var(--border); background: var(--card);
-    color: var(--text); font-size: 22px; display: flex; align-items: center; justify-content: center; user-select: none;
+  @keyframes dotPop {
+    0% { transform: scale(0.75); }
+    55% { transform: scale(1.2); }
+    100% { transform: scale(1); }
   }
-  .key:active { background: #1b2338; }
+  .dots.shake { animation: dotsShake 360ms ease; }
+  @keyframes dotsShake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-8px); }
+    40% { transform: translateX(7px); }
+    60% { transform: translateX(-5px); }
+    80% { transform: translateX(4px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dot.filled { animation: none; }
+    .dots.shake { animation: none; }
+  }
+  .pad { display: grid; grid-template-columns: repeat(3, 70px); gap: 16px; margin-bottom: 8px; align-self: center; }
+  .key {
+    width: 70px; height: 70px; border-radius: 50%; border: 1px solid var(--border); background: var(--card);
+    color: var(--text); font: 500 22px "Inter", sans-serif; display: flex; align-items: center; justify-content: center; user-select: none;
+  }
+  .key:active { background: #1c2740; }
   .key.ghost { border: none; background: transparent; }
-  .note { position: fixed; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); font-size: 11px; color: var(--dim); text-align: center; padding: 0 24px; }
+  #pinScreen { align-items: center; }
+  #pinScreen .h1, #pinScreen .sub { text-align: center; align-self: center; }
+  .pin-msg { min-height: 18px; font-size: 0.85rem; color: var(--bad); margin-top: 4px; margin-bottom: 6px; text-align: center; }
   .reset-link {
-    margin-top: 20px; background: none; border: none; color: var(--dim);
+    margin-top: 22px; background: none; border: none; color: var(--muted);
     font-size: 12px; text-decoration: underline; font-family: inherit; cursor: pointer; padding: 8px;
   }
 
-  /* ---------- постоянная шапка KitchenDesk ----------
-     Видна на всех экранах, КРОМЕ заставки (там и так на весь экран
-     "KitchenDesk") — идентика платформы всегда на месте, даже когда
-     фон — фото конкретного заведения. Заведение — контекст, не бренд. */
-  #topbar {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
-    display: flex; align-items: center; justify-content: center; gap: 7px;
-    padding: 14px 16px calc(14px + env(safe-area-inset-top, 0px));
-    background: linear-gradient(to bottom, rgba(10,14,26,0.75), transparent);
-    pointer-events: none; opacity: 0; transition: opacity 380ms ease;
+  /* ---------- успех ---------- */
+  #successScreen { align-items: center; justify-content: center; text-align: center; }
+  .success-check {
+    width: 84px; height: 84px; border-radius: 50%; border: 2px solid var(--accent);
+    display: flex; align-items: center; justify-content: center; margin-bottom: 26px;
+    box-shadow: 0 0 32px rgba(77,127,255,0.35);
+    animation: successIn 480ms var(--ease-out);
   }
-  #topbar.show { opacity: 1; }
-  .topbar-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-  .topbar-word { font-size: 0.8rem; font-weight: 800; letter-spacing: -0.01em; }
+  .success-check svg { width: 38px; height: 38px; color: var(--accent); stroke-width: 2.25; }
+  @keyframes successIn {
+    0% { transform: scale(0.85); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) { .success-check { animation: none; } }
+  #successScreen .h1, #successScreen .sub { text-align: center; align-self: center; }
 </style>
 </head>
 <body>
 
   <div class="kd-bg"><div class="kd-bg-overlay"></div></div>
 
+  <div id="flowBar" hidden>
+    <div class="flow-row">
+      <button class="back-btn" id="backBtn" type="button" hidden>
+        <svg class="icon" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+        Назад
+      </button>
+      <div class="progress-label" id="progressLabel"></div>
+    </div>
+    <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+
   <div id="topbar">
     <div class="topbar-dot"></div>
     <div class="topbar-word">KitchenDesk</div>
   </div>
 
-  <!-- 1. Заставка -->
+  <!-- SVG-иконки переиспользуются через <use> -->
+  <svg style="position:absolute;width:0;height:0" aria-hidden="true">
+    <defs>
+      <symbol id="ic-phone" viewBox="0 0 24 24"><path d="M6.6 3h3l1.4 4-2 1.6a12.5 12.5 0 0 0 5.9 5.9l1.6-2 4 1.4v3a2 2 0 0 1-2 2A16.5 16.5 0 0 1 4.6 5a2 2 0 0 1 2-2z"/></symbol>
+      <symbol id="ic-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></symbol>
+      <symbol id="ic-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+      <symbol id="ic-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 10.6a3 3 0 0 0 4.24 4.24"/><path d="M9.5 4.2A11 11 0 0 1 12 4c6 0 10 7 10 7a17.6 17.6 0 0 1-3.1 3.9M6 6.1A17.6 17.6 0 0 0 2 11s4 7 10 7c1.1 0 2.2-.2 3.2-.5"/></symbol>
+      <symbol id="ic-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></symbol>
+      <symbol id="ic-hash" viewBox="0 0 24 24"><path d="M5 9h14M5 15h14M9 4l-2 16M17 4l-2 16"/></symbol>
+      <symbol id="ic-doc" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/></symbol>
+      <symbol id="ic-chev-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+      <symbol id="ic-chev-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+      <symbol id="ic-check" viewBox="0 0 24 24"><path d="M5 13l4 4 10-11"/></symbol>
+    </defs>
+  </svg>
+
+  <!-- Заставка -->
   <div class="screen active" id="splashScreen">
     <div class="search-ring">
       <div class="preloader-ring"></div>
-      <div class="search-logo" id="splashLogoBadge" hidden>
-        <img id="splashLogoImg" alt="">
-      </div>
+      <div class="search-logo" id="splashLogoBadge" hidden><img id="splashLogoImg" alt=""></div>
     </div>
     <div class="wordmark">KitchenDesk</div>
     <div class="wordmark-tag">Система для кухни</div>
   </div>
 
-  <!-- 1.5 Главный экран (до кода — ждёт нажатия) -->
+  <!-- Экран 1: Старт -->
   <div class="screen" id="landingScreen">
-    <div class="wordmark" style="font-size:1.7rem;">KitchenDesk</div>
-    <div class="wordmark-tag" style="margin-top:10px;">Операционная система вашей кухни</div>
-    <button class="primary-btn" id="landingLoginBtn" style="margin-top:36px;">Войти по коду приглашения</button>
-    <button class="secondary-btn" id="landingRegisterVenueBtn">Зарегистрировать заведение</button>
-    <button class="text-link" id="landingAccountLoginBtn">Уже есть аккаунт? Войти по логину и паролю</button>
+    <div class="landing-topbar">
+      <div class="topbar-dot"></div>
+      <div class="topbar-word">KitchenDesk</div>
+    </div>
+    <div class="landing-spacer"></div>
+    <div class="landing-copy">
+      <div class="h1">Операционная система вашей кухни</div>
+      <div class="sub">Простое управление. Больше порядка. Больше времени на главное.</div>
+    </div>
+    <div class="landing-actions">
+      <button class="btn btn-primary" id="landingLoginBtn">Войти по коду приглашения<span class="arrow">→</span></button>
+      <button class="btn btn-secondary" id="landingAccountLoginBtn">У меня уже есть аккаунт<span class="arrow">→</span></button>
+    </div>
   </div>
 
-  <!-- Вход по логину/паролю — для случая смены телефона (заглушка,
-       без реальной проверки, пока нет бэкенда учётных записей) -->
-  <div class="screen" id="loginScreen">
-    <div class="headline">Вход по логину и паролю</div>
-    <div class="sub">Если вы уже работали в KitchenDesk на другом устройстве</div>
-    <input class="code-field plain" id="loginInput" placeholder="Логин или телефон" />
-    <input class="code-field plain" id="passwordInput" type="password" placeholder="Пароль" />
-    <button class="primary-btn" id="loginSubmit">Войти</button>
-    <div class="info-msg" id="loginInfo"></div>
-    <button class="secondary-btn" id="loginBack">Назад</button>
+  <!-- Экран 2: Вход -->
+  <div class="screen has-flowbar" id="loginScreen" data-back="landingScreen" data-progress="1">
+    <div class="h1">Вход</div>
+    <div class="sub">Введите логин и пароль от вашей учётной записи</div>
+    <div class="field" id="loginField">
+      <svg class="icon field-icon"><use href="#ic-phone"/></svg>
+      <div class="field-body">
+        <label class="field-label" for="loginInput">Логин или телефон</label>
+        <input class="field-input" id="loginInput" type="text" inputmode="tel" autocomplete="username" />
+      </div>
+    </div>
+    <div class="field" id="passwordField">
+      <svg class="icon field-icon"><use href="#ic-lock"/></svg>
+      <div class="field-body">
+        <label class="field-label" for="passwordInput">Пароль</label>
+        <input class="field-input" id="passwordInput" type="password" autocomplete="current-password" />
+      </div>
+      <button class="field-eye" id="passwordToggle" type="button" aria-label="Показать пароль">
+        <svg class="icon"><use href="#ic-eye"/></svg>
+      </button>
+    </div>
+    <div class="field-info" id="loginInfo"></div>
+    <button class="btn btn-primary" id="loginSubmit">Войти<span class="arrow">→</span></button>
+    <button class="btn-plain" id="forgotPasswordBtn">Забыли пароль?</button>
   </div>
 
-  <!-- 2. Регистрация (первый вход) -->
-  <div class="screen" id="codeScreen">
-    <div class="headline">Регистрация</div>
+  <!-- Экран 3: Регистрация -->
+  <div class="screen has-flowbar" id="codeScreen" data-back="landingScreen" data-progress="2">
+    <div class="h1">Регистрация</div>
     <div class="sub">Код приглашения выдаёт администратор вашего заведения</div>
-    <input class="code-field plain" id="nameInput" placeholder="Имя" />
-    <input class="code-field plain" id="phoneInput" type="tel" placeholder="Телефон" />
-    <input class="code-field" id="codeInput" placeholder="Код приглашения" maxlength="8" autocapitalize="characters" />
-    <button class="primary-btn" id="codeSubmit">Продолжить</button>
-    <div class="err-msg" id="codeErr"></div>
+    <div class="field">
+      <svg class="icon field-icon"><use href="#ic-user"/></svg>
+      <div class="field-body">
+        <label class="field-label" for="nameInput">Имя</label>
+        <input class="field-input" id="nameInput" type="text" autocomplete="given-name" />
+      </div>
+    </div>
+    <div class="field">
+      <svg class="icon field-icon"><use href="#ic-phone"/></svg>
+      <div class="field-body">
+        <label class="field-label" for="phoneInput">Телефон</label>
+        <input class="field-input" id="phoneInput" type="tel" inputmode="tel" autocomplete="tel" />
+      </div>
+    </div>
+    <div class="field">
+      <svg class="icon field-icon"><use href="#ic-hash"/></svg>
+      <div class="field-body">
+        <label class="field-label" for="codeInput">Код приглашения</label>
+        <input class="field-input" id="codeInput" type="text" maxlength="8" autocapitalize="characters" />
+      </div>
+    </div>
+    <div class="field-err" id="codeErr"></div>
+    <button class="btn btn-primary" id="codeSubmit">Продолжить<span class="arrow">→</span></button>
   </div>
 
-  <!-- Заглушка: регистрация нового заведения -->
-  <div class="screen" id="venueRegisterScreen">
-    <div class="headline">Регистрация заведения</div>
-    <div class="sub">Этот раздел ещё в разработке. Скоро здесь можно будет подключить новое заведение к KitchenDesk самостоятельно.</div>
-    <button class="secondary-btn" id="venueRegisterBack">Назад</button>
-  </div>
-
-  <!-- 3. Поиск -->
+  <!-- Поиск -->
   <div class="screen" id="searchScreen">
     <div class="search-ring">
       <div class="preloader-ring"></div>
@@ -299,99 +430,117 @@
     <div class="search-text">Ищём ваше заведение…</div>
   </div>
 
-  <!-- 4. Нашли заведение -->
-  <div class="screen" id="foundScreen">
+  <!-- Экран 4: Заведение найдено -->
+  <div class="screen" id="foundScreen" data-progress="3">
     <div class="found-photo" id="foundPhoto"></div>
     <div class="found-overlay" id="foundOverlay"></div>
     <div class="found-content">
       <div class="found-eyebrow">Заведение найдено</div>
-      <div class="found-venue-row">
+      <div class="found-card">
         <img class="found-logo" id="foundLogo" alt="">
-        <div class="found-name" id="foundName"></div>
+        <div>
+          <div class="found-name" id="foundName"></div>
+          <div class="found-type" id="foundType">Гастробар</div>
+        </div>
       </div>
-      <div class="found-sub">Осталось задать код быстрого входа</div>
-      <button class="primary-btn" id="foundContinue">Продолжить</button>
+      <div class="role-row">
+        <div>
+          <div class="role-label">Вы подключаетесь как</div>
+          <div class="role-value">Сотрудник кухни</div>
+        </div>
+        <svg class="icon" viewBox="0 0 24 24"><use href="#ic-chev-down"/></svg>
+      </div>
+      <button class="btn btn-primary" id="foundContinue">Продолжить<span class="arrow">→</span></button>
+      <button class="btn-plain" id="notMyVenueBtn">Это не моё заведение</button>
     </div>
   </div>
 
-  <!-- 4.5 Документы (согласие) -->
-  <div class="screen" id="docsScreen">
-    <div class="headline">Документы</div>
-    <div class="sub">Перед тем как продолжить, ознакомьтесь и согласитесь с условиями</div>
-    <div class="docs-list">
-      <button class="docs-link" data-doc="privacy" type="button">Политика конфиденциальности</button>
-      <button class="docs-link" data-doc="offer" type="button">Публичная оферта</button>
+  <!-- Экран 5: Документы -->
+  <div class="screen has-flowbar" id="docsScreen" data-back="foundScreen" data-progress="4">
+    <div class="h1">Документы</div>
+    <div class="sub">Перед тем как продолжить, ознакомьтесь с условиями</div>
+    <div class="card-list">
+      <button class="doc-card" data-doc="privacy" type="button">
+        <svg class="icon field-icon"><use href="#ic-doc"/></svg>
+        <span class="grow">Политика конфиденциальности</span>
+        <svg class="icon chev" viewBox="0 0 24 24"><use href="#ic-chev-right"/></svg>
+      </button>
+      <button class="doc-card" data-doc="offer" type="button">
+        <svg class="icon field-icon"><use href="#ic-doc"/></svg>
+        <span class="grow">Публичная оферта</span>
+        <svg class="icon chev" viewBox="0 0 24 24"><use href="#ic-chev-right"/></svg>
+      </button>
     </div>
-    <label class="docs-agree">
+    <label class="checkbox-row">
       <input type="checkbox" id="docsAgree" />
       <span>Я прочитал(а) и согласен(на) с условиями</span>
     </label>
-    <button class="primary-btn" id="docsSubmit" disabled>Продолжить</button>
+    <button class="btn btn-primary" id="docsSubmit" disabled>Продолжить<span class="arrow">→</span></button>
   </div>
 
-  <!-- Просмотр документа (открывается с экрана "Документы") -->
+  <!-- Экран документа -->
   <div class="screen" id="docViewScreen">
     <div class="doc-view-header">
-      <button class="doc-back" id="docViewBack" type="button">← Назад</button>
+      <button class="back-btn" id="docViewBack" type="button" style="padding:0;">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
       <div class="doc-view-title" id="docViewTitle"></div>
     </div>
     <div class="doc-view-body" id="docViewBody"></div>
   </div>
 
-  <!-- 5. PIN (уже привычный экран) -->
-  <div class="screen" id="pinScreen">
-    <div class="headline" id="pinHeadline" style="margin-bottom:6px;">Придумайте PIN</div>
-    <div class="sub" id="pinSub">Тестовая заглушка — сейчас подходит 2606, дальше подключим настоящую проверку</div>
+  <!-- PIN: создание / повтор / возврат (одна разметка, состояние меняется в JS) -->
+  <div class="screen has-flowbar" id="pinScreen" data-back="docsScreen" data-progress="5">
+    <div class="h1" id="pinHeadline">Придумайте PIN</div>
+    <div class="sub" id="pinSub">PIN нужен для быстрого входа в приложение</div>
     <div class="dots" id="dots">
       <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
     </div>
+    <div class="pin-msg" id="pinMsg"></div>
     <div class="pad" id="pad">
       <div class="key" data-k="1">1</div><div class="key" data-k="2">2</div><div class="key" data-k="3">3</div>
       <div class="key" data-k="4">4</div><div class="key" data-k="5">5</div><div class="key" data-k="6">6</div>
       <div class="key" data-k="7">7</div><div class="key" data-k="8">8</div><div class="key" data-k="9">9</div>
       <div class="key ghost"></div><div class="key" data-k="0">0</div><div class="key ghost" id="back">⌫</div>
     </div>
-    <div class="err-msg" id="pinMsg"></div>
     <button class="reset-link" id="resetOnboarding" hidden>Сбросить и посмотреть первый вход заново</button>
   </div>
 
-  <div class="note" id="note">Демо-сценарий входа — код и поиск заведения пока не настоящие, ведут к тестовому заведению ОКО. При повторном открытии приложение запомнит это и сразу покажет PIN.</div>
+  <!-- Экран: успешная настройка -->
+  <div class="screen" id="successScreen">
+    <div class="success-check"><svg viewBox="0 0 24 24"><use href="#ic-check"/></svg></div>
+    <div class="h1">Готово!</div>
+    <div class="sub">Ваш аккаунт настроен. Теперь вы можете входить в KitchenDesk по PIN.</div>
+    <button class="btn btn-primary" id="successContinue">Перейти к входу<span class="arrow">→</span></button>
+  </div>
 
 <script>
-  // Демонстрация "изюминки" первого входа: код → поиск → нашли заведение →
-  // PIN. Реального бэкенда для поиска заведения по коду ЕЩЁ НЕТ — здесь
-  // подставлена ОДНА тестовая находка (ОКО), чтобы увидеть и обкатать
-  // саму последовательность/анимацию до того, как строить сервер под неё.
-  // Финальный шаг (адрес сайта после PIN) не менялся — см. TARGET_URL.
-
-  var TEST_PIN = "2606";
   var TARGET_URL = "https://kitchendesk.chefplan.ru/web";
+  var TOTAL_STEPS = 5;
 
   var MOCK_VENUE = {
     name: "ОКО",
+    type: "Гастробар",
     logo: "https://kitchendesk.chefplan.ru/waiter-guide/logo.jpg",
     photo: "https://kitchendesk.chefplan.ru/waiter-guide/hero/hero-1.jpg",
   };
 
-  // Лого KitchenDesk — на заставке, в кольце поиска и как запасной
-  // вариант, когда у заведения своего лого нет.
   var KD_LOGO_URL = "assets/kd-logo.png";
 
-  // На этом устройстве уже проходили код+поиск раньше? Тогда это уже не
-  // первый вход: пропускаем код/поиск/находку и сразу идём к PIN на
-  // фоне KitchenDesk (не заведения) — см. описание сценария выше.
-  var STORAGE_KEY = "kd_onboarded_venue";
-  function getStoredVenue() {
+  // Устройство уже прошло регистрацию: заведение + PIN, который
+  // пользователь сам придумал и подтвердил на экранах создания PIN.
+  var STORAGE_KEY = "kd_onboarding";
+  function getStoredOnboarding() {
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
       return raw ? JSON.parse(raw) : null;
     } catch (e) { return null; }
   }
-  function storeVenue(v) {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(v)); } catch (e) {}
+  function storeOnboarding(data) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
   }
-  var storedVenue = getStoredVenue();
-  var isReturning = !!storedVenue;
+  var stored = getStoredOnboarding();
+  var isReturning = !!stored;
 
   function resolveLogo(venueLogo) { return venueLogo || KD_LOGO_URL || ""; }
 
@@ -423,18 +572,62 @@
     badge.classList.add("pop");
   }
 
+  // ---------- Навигация: назад / прогресс / бренд-плашка ----------
+  // Каждый экран сам объявляет своё поведение через data-back и
+  // data-progress; show() просто их читает — не нужно перечислять
+  // экраны в самой функции.
+  var flowBar = document.getElementById("flowBar");
+  var backBtn = document.getElementById("backBtn");
+  var progressLabel = document.getElementById("progressLabel");
+  var progressTrack = document.getElementById("progressTrack");
+  var progressFill = document.getElementById("progressFill");
   var topbar = document.getElementById("topbar");
-  function show(id) {
-    document.querySelectorAll(".screen").forEach(function (el) { el.classList.remove("active"); });
-    document.getElementById(id).classList.add("active");
-    // Шапка с брендом KitchenDesk — на всех экранах, КРОМЕ заставки и
-    // главного экрана (там и так крупно написано "KitchenDesk", шапка
-    // была бы лишней).
-    topbar.classList.toggle("show", id !== "splashScreen" && id !== "landingScreen");
-  }
 
-  // Черновик типовых документов — нужна проверка юристом перед
-  // публикацией в Google Play, но UI и сам шаг согласия уже рабочие.
+  function show(id, direction) {
+    document.documentElement.style.setProperty("--enter-offset", direction === "back" ? "-14px" : "14px");
+    document.querySelectorAll(".screen").forEach(function (el) { el.classList.remove("active"); });
+    var el = document.getElementById(id);
+    el.classList.add("active");
+
+    // Экран PIN один и тот же для создания/подтверждения и для
+    // быстрого возврата — но у возврата свой минимальный хром (только
+    // бренд-плашка, без "Назад"/прогресса), поэтому его нужно явно
+    // подавлять здесь, а не через статичные data-атрибуты в разметке.
+    var isReturningPin = id === "pinScreen" && pinMode === "returning";
+    var back = el.getAttribute("data-back");
+    var progress = el.getAttribute("data-progress");
+    if (!isReturningPin && (back || progress)) {
+      flowBar.hidden = false;
+      backBtn.hidden = !back;
+      backBtn.setAttribute("data-target", back || "");
+      if (progress) {
+        progressLabel.hidden = false;
+        progressLabel.textContent = ("0" + progress).slice(-2) + " / 0" + TOTAL_STEPS;
+        progressTrack.hidden = false;
+        progressFill.style.width = (progress / TOTAL_STEPS * 100) + "%";
+      } else {
+        progressLabel.hidden = true;
+        progressTrack.hidden = true;
+      }
+    } else {
+      flowBar.hidden = true;
+    }
+
+    topbar.classList.toggle("show", isReturningPin);
+  }
+  backBtn.addEventListener("click", function () {
+    // Из подтверждения PIN "Назад" возвращает к первому вводу PIN, а
+    // не перескакивает через шаг сразу к документам.
+    if (document.getElementById("pinScreen").classList.contains("active") && pinMode === "confirm") {
+      startPinFlow("create");
+      return;
+    }
+    var target = backBtn.getAttribute("data-target");
+    if (target) show(target, "back");
+  });
+
+  // ---------- Документы (черновой типовой текст — нужна проверка
+  // юристом перед публикацией) ----------
   var DOC_TEXT = {
     privacy: {
       title: "Политика конфиденциальности",
@@ -458,16 +651,18 @@
         "7. Реквизиты\n[наименование юр. лица, ИНН, адрес, контакты]",
     },
   };
-  document.querySelectorAll(".docs-link").forEach(function (btn) {
+  var docReturnTo = "docsScreen";
+  document.querySelectorAll(".doc-card").forEach(function (btn) {
     btn.addEventListener("click", function () {
       var doc = DOC_TEXT[btn.getAttribute("data-doc")];
       document.getElementById("docViewTitle").textContent = doc.title;
       document.getElementById("docViewBody").textContent = doc.body;
+      docReturnTo = "docsScreen";
       show("docViewScreen");
     });
   });
   document.getElementById("docViewBack").addEventListener("click", function () {
-    show("docsScreen");
+    show(docReturnTo, "back");
   });
   var docsAgree = document.getElementById("docsAgree");
   var docsSubmit = document.getElementById("docsSubmit");
@@ -476,31 +671,30 @@
   });
   docsSubmit.addEventListener("click", function () {
     if (!docsAgree.checked) return;
-    show("pinScreen");
+    startPinFlow("create");
   });
 
-  // Главный экран: "Войти по коду приглашения" ведёт к регистрации,
-  // "Зарегистрировать заведение" — заглушка для новых потенциальных
-  // клиентов, "Уже есть аккаунт" — заглушка для входа при смене
-  // телефона (нужен реальный бэкенд учётных записей, которого пока нет).
+  // ---------- Старт / Вход / Регистрация ----------
   document.getElementById("landingLoginBtn").addEventListener("click", function () {
     show("codeScreen");
-  });
-  document.getElementById("landingRegisterVenueBtn").addEventListener("click", function () {
-    show("venueRegisterScreen");
-  });
-  document.getElementById("venueRegisterBack").addEventListener("click", function () {
-    show("landingScreen");
   });
   document.getElementById("landingAccountLoginBtn").addEventListener("click", function () {
     show("loginScreen");
   });
-  document.getElementById("loginBack").addEventListener("click", function () {
-    show("landingScreen");
+
+  var passwordInput = document.getElementById("passwordInput");
+  var passwordToggle = document.getElementById("passwordToggle");
+  passwordToggle.addEventListener("click", function () {
+    var showing = passwordInput.type === "text";
+    passwordInput.type = showing ? "password" : "text";
+    passwordToggle.querySelector("use").setAttribute("href", showing ? "#ic-eye" : "#ic-eye-off");
+    passwordToggle.setAttribute("aria-label", showing ? "Показать пароль" : "Скрыть пароль");
+  });
+  document.getElementById("forgotPasswordBtn").addEventListener("click", function () {
+    document.getElementById("loginInfo").textContent = "Восстановление пароля скоро заработает — пока входите по коду приглашения от администратора заведения.";
   });
   document.getElementById("loginSubmit").addEventListener("click", function () {
     var loginInput = document.getElementById("loginInput");
-    var passwordInput = document.getElementById("passwordInput");
     var loginInfo = document.getElementById("loginInfo");
     if (!loginInput.value.trim() || !passwordInput.value.trim()) {
       loginInfo.textContent = "Заполните логин и пароль";
@@ -509,25 +703,6 @@
     loginInfo.textContent = "Эта проверка ещё не подключена к серверу — пока входите по коду приглашения от администратора заведения.";
   });
 
-  var pinHeadline = document.getElementById("pinHeadline");
-  var pinSub = document.getElementById("pinSub");
-
-  // 1 → 1.5 → 2: заставка держится немного, потом — главный экран
-  // (первый вход) или сразу PIN (уже зарегистрирован на этом устройстве)
-  show("splashScreen");
-  if (isReturning) {
-    pinHeadline.textContent = "Введите PIN";
-    pinSub.textContent = "Быстрый вход в KitchenDesk";
-    setTimeout(function () { show("pinScreen"); }, 650);
-  } else {
-    pinHeadline.textContent = "Придумайте PIN";
-    pinSub.textContent = "Тестовая заглушка — сейчас подходит 2606, дальше подключим настоящую проверку";
-    setTimeout(function () { show("landingScreen"); }, 1100);
-  }
-
-  // 2 → 3 → 4: имя + телефон + код (пока без СМС — код выдаёт админ
-  // заведения лично; всё это ещё заглушка, принимает любые непустые
-  // значения)
   var nameInput = document.getElementById("nameInput");
   var phoneInput = document.getElementById("phoneInput");
   var codeInput = document.getElementById("codeInput");
@@ -536,20 +711,16 @@
     if (!nameInput.value.trim()) { codeErr.textContent = "Введите имя"; return; }
     if (!phoneInput.value.trim()) { codeErr.textContent = "Введите телефон"; return; }
     var val = codeInput.value.trim();
-    if (!val) {
-      codeErr.textContent = "Введите код";
-      return;
-    }
+    if (!val) { codeErr.textContent = "Введите код приглашения"; return; }
     codeErr.textContent = "";
     show("searchScreen");
     showKdLogoInRing();
-    setTimeout(function () {
-      showVenueLogoInRing(MOCK_VENUE.logo);
-    }, 850);
+    setTimeout(function () { showVenueLogoInRing(MOCK_VENUE.logo); }, 850);
     setTimeout(function () {
       document.getElementById("foundPhoto").style.backgroundImage = "url('" + MOCK_VENUE.photo + "')";
       document.getElementById("foundLogo").src = resolveLogo(MOCK_VENUE.logo);
       document.getElementById("foundName").textContent = MOCK_VENUE.name;
+      document.getElementById("foundType").textContent = MOCK_VENUE.type;
       show("foundScreen");
       requestAnimationFrame(function () {
         document.getElementById("foundPhoto").classList.add("active");
@@ -557,63 +728,112 @@
       });
     }, 1300);
   });
-
-  // 4 → 4.5 (документы)
+  document.getElementById("notMyVenueBtn").addEventListener("click", function () {
+    show("codeScreen", "back");
+  });
   document.getElementById("foundContinue").addEventListener("click", function () {
     show("docsScreen");
   });
 
-  // Для тестирования: на быстром PIN-экране (когда вход уже запомнен)
-  // можно сбросить и заново пройти первый вход на этом же устройстве.
-  if (isReturning) {
-    document.getElementById("resetOnboarding").hidden = false;
-  }
-  document.getElementById("resetOnboarding").addEventListener("click", function () {
-    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
-    window.location.reload();
-  });
-
-  // 5: PIN-заглушка (как раньше)
-  var entered = "";
-  var dots = document.querySelectorAll("#dots .dot");
+  // ---------- PIN: создание → подтверждение → успех; или быстрый
+  // возврат для уже зарегистрированных на этом устройстве ----------
+  var pinHeadline = document.getElementById("pinHeadline");
+  var pinSub = document.getElementById("pinSub");
   var pinMsg = document.getElementById("pinMsg");
+  var dotsEl = document.getElementById("dots");
+  var dots = dotsEl.querySelectorAll(".dot");
+  var entered = "";
+  var pinMode = "create"; // create | confirm | returning
+  var firstPinEntry = "";
 
   function renderDots() {
     for (var i = 0; i < dots.length; i++) {
       dots[i].className = "dot" + (i < entered.length ? " filled" : "");
     }
   }
-  function failPin() {
-    for (var i = 0; i < dots.length; i++) dots[i].className = "dot err";
-    pinMsg.textContent = "Неверный PIN";
-    setTimeout(function () {
-      entered = "";
-      renderDots();
-      pinMsg.textContent = "";
-    }, 450);
-  }
-  function submitPin() {
-    if (entered === TEST_PIN) {
-      storeVenue(MOCK_VENUE);
-      window.location.href = TARGET_URL;
+  function resetDots() { entered = ""; renderDots(); }
+
+  function startPinFlow(mode) {
+    pinMode = mode;
+    resetDots();
+    pinMsg.textContent = "";
+    if (mode === "create") {
+      pinHeadline.textContent = "Придумайте PIN";
+      pinSub.textContent = "PIN нужен для быстрого входа в приложение";
+      document.getElementById("resetOnboarding").hidden = true;
+      show("pinScreen");
+    } else if (mode === "confirm") {
+      pinHeadline.textContent = "Повторите PIN";
+      pinSub.textContent = "Введите PIN ещё раз для подтверждения";
+      show("pinScreen");
     } else {
-      failPin();
+      pinHeadline.textContent = "Введите PIN";
+      pinSub.textContent = "";
+      document.getElementById("resetOnboarding").hidden = false;
+      show("pinScreen");
+    }
+  }
+
+  function failPin(message) {
+    for (var i = 0; i < dots.length; i++) dots[i].className = "dot err";
+    dotsEl.classList.remove("shake");
+    void dotsEl.offsetWidth;
+    dotsEl.classList.add("shake");
+    pinMsg.textContent = message;
+    setTimeout(function () {
+      resetDots();
+      pinMsg.textContent = "";
+    }, 480);
+  }
+
+  function submitPin() {
+    if (pinMode === "create") {
+      firstPinEntry = entered;
+      startPinFlow("confirm");
+    } else if (pinMode === "confirm") {
+      if (entered === firstPinEntry) {
+        storeOnboarding({ venue: MOCK_VENUE, pin: firstPinEntry });
+        show("successScreen");
+      } else {
+        failPin("PIN не совпадает — попробуйте ещё раз");
+      }
+    } else {
+      var savedPin = stored && stored.pin;
+      if (entered === savedPin) {
+        window.location.href = TARGET_URL;
+      } else {
+        failPin("Неверный PIN");
+      }
     }
   }
   document.getElementById("pad").addEventListener("click", function (e) {
     var key = e.target.closest(".key");
     if (!key) return;
-    if (key.id === "back") {
-      entered = entered.slice(0, -1);
-      renderDots();
-      return;
-    }
+    if (key.id === "back") { entered = entered.slice(0, -1); renderDots(); return; }
     var k = key.getAttribute("data-k");
     if (k == null || entered.length >= 4) return;
     entered += k;
     renderDots();
     if (entered.length === 4) setTimeout(submitPin, 120);
   });
+  document.getElementById("successContinue").addEventListener("click", function () {
+    window.location.href = TARGET_URL;
+  });
+
+  // Для тестирования: на быстром PIN-экране можно сбросить и заново
+  // пройти первый вход на этом же устройстве.
+  document.getElementById("resetOnboarding").addEventListener("click", function () {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    window.location.reload();
+  });
+
+  // ---------- Загрузка приложения ----------
+  show("splashScreen");
+  if (isReturning) {
+    setTimeout(function () { startPinFlow("returning"); }, 650);
+  } else {
+    setTimeout(function () { show("landingScreen"); }, 1100);
+  }
 </script>
 </body>
 </html>
