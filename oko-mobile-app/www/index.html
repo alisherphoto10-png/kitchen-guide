@@ -9,6 +9,7 @@
     --bg:#0a0e1a; --card:#141b2c; --border:#232c42;
     --text:#eef1f7; --muted:#8791a8; --dim:#5b6478; --accent:#4d7cfe; --accent-soft:#17233d;
     --bad:#e0663f;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; margin: 0; }
@@ -100,30 +101,50 @@
   }
 
   /* ---------- found venue ---------- */
-  #foundScreen { padding: 0; justify-content: flex-end; align-items: stretch; }
+  /* Экран-открытие: обложка и лого заведения — редкий, "праздничный"
+     момент (первый вход), поэтому мотору можно быть чуть дольше и
+     заметнее, чем в обычном UI. Сама рамка экрана переключается быстро
+     (150ms) — всё движение несут обложка/тёмная подложка/карточка ниже,
+     а не сам фейд контейнера (иначе получается двойное наложение и
+     ощущение рывка). */
+  #foundScreen { padding: 0; justify-content: flex-end; align-items: stretch; transition: opacity 150ms ease; }
   .found-photo {
     position: absolute; inset: 0; z-index: -2;
     background-size: cover; background-position: center;
-    opacity: 0; transition: opacity 900ms ease;
+    opacity: 0; transform: scale(1.06);
+    transition: opacity 900ms var(--ease-out), transform 900ms var(--ease-out);
   }
-  .found-photo.active { opacity: 1; }
+  .found-photo.active { opacity: 1; transform: scale(1); }
   .found-overlay {
     position: absolute; inset: 0; z-index: -1;
+    opacity: 0;
+    transition: opacity 900ms var(--ease-out);
     background:
       radial-gradient(120% 55% at 50% -5%, rgba(10,14,26,0.75), transparent 60%),
       linear-gradient(180deg, rgba(10,14,26,0.1) 0%, rgba(10,14,26,0.55) 55%, rgba(10,14,26,0.94) 100%);
   }
+  .found-overlay.active { opacity: 1; }
   .found-content {
     padding: 24px 24px calc(36px + env(safe-area-inset-bottom, 0px));
     display: flex; flex-direction: column; align-items: center; text-align: center;
+    opacity: 0; transform: translateY(28px);
+    transition: opacity 420ms ease 220ms, transform 500ms var(--ease-out) 220ms;
   }
-  .found-eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
-  /* Логотип и название заведения — скромно, это контекст ("вы вошли
-     как"), не главный бренд экрана. KitchenDesk сверху (#topbar) уже
-     держит идентику платформы. */
-  .found-venue-row { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; }
-  .found-logo { height: 30px; width: 30px; object-fit: contain; flex: none; }
-  .found-name { font-size: 1.05rem; font-weight: 700; }
+  #foundScreen.active .found-content { opacity: 1; transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce) {
+    .found-photo { transition: opacity 200ms ease; transform: none; }
+    .found-photo.active { transform: none; }
+    .found-content { transition: opacity 200ms ease; transform: none; }
+    #foundScreen.active .found-content { transform: none; }
+  }
+  .found-eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+  /* Лого заведения — крупно и по центру: это "витрина" самого момента
+     находки. KitchenDesk сверху (#topbar) всё равно держит идентику
+     платформы на каждом экране, так что здесь можно дать заведению
+     побыть главным на секунду. */
+  .found-venue-row { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 26px; }
+  .found-logo { height: 68px; width: 68px; object-fit: contain; }
+  .found-name { font-size: 1.3rem; font-weight: 800; }
   .found-sub { font-size: 0.875rem; color: var(--muted); margin: 0 0 26px; }
 
   /* ---------- PIN screen ---------- */
@@ -201,7 +222,7 @@
   <!-- 4. Нашли заведение -->
   <div class="screen" id="foundScreen">
     <div class="found-photo" id="foundPhoto"></div>
-    <div class="found-overlay"></div>
+    <div class="found-overlay" id="foundOverlay"></div>
     <div class="found-content">
       <div class="found-eyebrow">Заведение найдено</div>
       <div class="found-venue-row">
@@ -344,6 +365,7 @@
       show("foundScreen");
       requestAnimationFrame(function () {
         document.getElementById("foundPhoto").classList.add("active");
+        document.getElementById("foundOverlay").classList.add("active");
       });
     }, 1300);
   });
