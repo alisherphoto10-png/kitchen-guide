@@ -303,11 +303,33 @@
   }
   @media (prefers-reduced-motion: reduce) { .success-check { animation: none; } }
   #successScreen .h1, #successScreen .sub { text-align: center; align-self: center; }
+
+  /* ---------- переход на сайт (баннер) ---------- */
+  #handoffScreen { padding: 0; align-items: stretch; justify-content: flex-start; }
+  .handoff-banner {
+    position: relative; flex: 0 0 100%; overflow: hidden;
+    background-size: cover; background-position: center;
+    transition: flex-basis 900ms var(--ease-out);
+  }
+  .handoff-banner.collapsed { flex-basis: 140px; }
+  .handoff-banner::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(7,11,18,0.15) 0%, rgba(7,11,18,0.55) 70%, rgba(7,11,18,0.92) 100%);
+  }
+  .handoff-below {
+    flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 500ms ease 400ms;
+  }
+  .handoff-below.show { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .handoff-banner { transition: none; }
+    .handoff-below { transition: opacity 200ms ease; }
+  }
 </style>
 </head>
 <body>
 
-  <div class="kd-bg"><div class="kd-bg-overlay"></div></div>
+  <div class="kd-bg" id="kdBg"><div class="kd-bg-overlay"></div></div>
 
   <div id="flowBar" hidden>
     <div class="flow-row">
@@ -521,6 +543,17 @@
     <div class="h1">Готово!</div>
     <div class="sub">Ваш аккаунт настроен. Теперь вы можете входить в KitchenDesk по PIN.</div>
     <button class="btn btn-primary" id="successContinue">Перейти к входу<span class="arrow">→</span></button>
+  </div>
+
+  <!-- Переход на сайт: обложка заведения сворачивается в баннер,
+       пока идёт "загрузка" — та же обложка, что была на экране
+       находки, здесь не пропадает, а плавно уезжает наверх. -->
+  <div class="screen" id="handoffScreen">
+    <div class="handoff-banner" id="handoffBanner"></div>
+    <div class="handoff-below" id="handoffBelow">
+      <div class="preloader-ring"></div>
+      <div class="search-text">Открываем KitchenDesk…</div>
+    </div>
   </div>
 
 <script>
@@ -744,6 +777,12 @@
     setTimeout(function () { showVenueLogoInRing(MOCK_VENUE.logo); }, 850);
     setTimeout(function () {
       document.getElementById("foundPhoto").style.backgroundImage = "url('" + MOCK_VENUE.photo + "')";
+      // Общий фон KitchenDesk (за кадром, сейчас скрыт под обложкой
+      // экрана находки) тоже переключаем на фото заведения — оно
+      // остаётся фоном на документах/PIN/"Готово!" вместо возврата
+      // на нейтральный фон кухни, чтобы ничего не "мигало" при смене
+      // экранов до самого перехода на сайт.
+      document.getElementById("kdBg").style.backgroundImage = "url('" + MOCK_VENUE.photo + "')";
       document.getElementById("foundLogo").src = resolveLogo(MOCK_VENUE.logo);
       document.getElementById("foundName").textContent = MOCK_VENUE.name;
       document.getElementById("foundType").textContent = MOCK_VENUE.type;
@@ -843,7 +882,19 @@
     if (entered.length === 4) setTimeout(submitPin, 120);
   });
   document.getElementById("successContinue").addEventListener("click", function () {
-    window.location.href = TARGET_URL;
+    var banner = document.getElementById("handoffBanner");
+    var below = document.getElementById("handoffBelow");
+    banner.style.backgroundImage = "url('" + MOCK_VENUE.photo + "')";
+    banner.classList.remove("collapsed");
+    below.classList.remove("show");
+    show("handoffScreen");
+    setTimeout(function () {
+      banner.classList.add("collapsed");
+      below.classList.add("show");
+    }, 250);
+    setTimeout(function () {
+      window.location.href = TARGET_URL;
+    }, 1500);
   });
 
   // Для тестирования: на быстром PIN-экране можно сбросить и заново
