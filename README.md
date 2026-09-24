@@ -16,7 +16,7 @@
 |---|---|
 | Код на сервере | `/root/zhiguli` (отдельный git-репозиторий) |
 | Git | ветка `zhiguli` в `github.com/alisherphoto10-png/kitchen-guide` — orphan, без общей истории с остальными ветками |
-| Адрес | **https://jigulibar.chefplan.ru** (nginx `/etc/nginx/sites-available/zhiguli` → `127.0.0.1:3008`, сертификат Let's Encrypt через certbot, автопродление) |
+| Адрес | **https://calc.chefplan.ru** с 2026-09-24 (nginx `/etc/nginx/sites-available/calc` → `127.0.0.1:3008`, сертификат Let's Encrypt через certbot, автопродление). Старый `jigulibar.chefplan.ru` (`sites-available/zhiguli`) пока тоже проксирует на :3008 — см. «Домен и nginx» |
 | Процесс | pm2 `zhiguli`, `127.0.0.1:3008` (сам порт наружу закрыт ufw) |
 | База | Postgres `zhiguli`, роль `zhiguli_user` (владелец базы) |
 | Секреты | `server/.env` (в git не попадает) |
@@ -96,7 +96,17 @@ cd /root/zhiguli/server && node scripts/create-platform-admin.js <login> "<Им�
 `/etc/nginx/sites-available/zhiguli` — простой `proxy_pass` на `127.0.0.1:3008` с
 `X-Forwarded-For`/`X-Forwarded-Proto`, `client_max_body_size 10m` (фото до 8 МБ). HTTP → 301 на HTTPS.
 `trust proxy` на loopback — лимит попыток входа считает реальные IP клиентов (проверено).
-Вебхуки ботов (шаг 2) пойдут на этот же домен: `https://jigulibar.chefplan.ru/tg/<id>`.
+Вебхуки ботов (шаг 2) идут на этот же домен: `<PUBLIC_BASE_URL>/tg/<id>`.
+
+**Смена домена 2026-09-24: `jigulibar.chefplan.ru` → `calc.chefplan.ru`.** Новый конфиг
+`/etc/nginx/sites-available/calc` (такой же `proxy_pass`, свой сертификат certbot, HTTP → 301 на HTTPS),
+`PUBLIC_BASE_URL=https://calc.chefplan.ru` в `server/.env` (копия прежнего — `.env.bak-20260924-calc`).
+Адрес сайта в коде нигде не зашит — вебхуки, кнопка мини-аппа и ссылка гида по умолчанию строятся из
+`PUBLIC_BASE_URL`, но **уже подключённые боты держат старый адрес, пока их не перенастроить**
+(«Заведения» → бот → «Отключить» → «Включить» или заново токен — `configureTelegram` ставит новый вебхук
+и кнопку). Поэтому старый домен оставлен рабочим (не редиректом: Telegram не идёт по редиректу вебхука).
+Когда все боты и ссылка гида переедут — старый `sites-available/zhiguli` можно заменить на 301 на новый домен.
+Входы на сайте привязаны к домену (localStorage) — на новом адресе нужно войти заново.
 
 ## Что сделано (шаг 1 — сайт)
 
