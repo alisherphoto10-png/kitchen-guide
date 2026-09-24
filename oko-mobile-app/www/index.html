@@ -83,8 +83,12 @@
     display: flex; flex-direction: column; align-items: center; text-align: center;
   }
   .found-eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
-  .found-logo { height: 56px; width: auto; margin-bottom: 14px; mix-blend-mode: screen; border-radius: 12px; }
-  .found-name { font-size: 1.6rem; font-weight: 800; margin: 0 0 6px; }
+  /* Логотип и название заведения — скромно, это контекст ("вы вошли
+     как"), не главный бренд экрана. KitchenDesk сверху (#topbar) уже
+     держит идентику платформы. */
+  .found-venue-row { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; }
+  .found-logo { height: 30px; width: 30px; object-fit: cover; border-radius: 8px; flex: none; }
+  .found-name { font-size: 1.05rem; font-weight: 700; }
   .found-sub { font-size: 0.875rem; color: var(--muted); margin: 0 0 26px; }
 
   /* ---------- PIN screen ---------- */
@@ -100,9 +104,29 @@
   .key:active { background: #241d16; }
   .key.ghost { border: none; background: transparent; }
   .note { position: fixed; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); font-size: 11px; color: var(--dim); text-align: center; padding: 0 24px; }
+
+  /* ---------- постоянная шапка KitchenDesk ----------
+     Видна на всех экранах, КРОМЕ заставки (там и так на весь экран
+     "KitchenDesk") — идентика платформы всегда на месте, даже когда
+     фон — фото конкретного заведения. Заведение — контекст, не бренд. */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 14px 16px calc(14px + env(safe-area-inset-top, 0px));
+    background: linear-gradient(to bottom, rgba(15,12,9,0.75), transparent);
+    pointer-events: none; opacity: 0; transition: opacity 380ms ease;
+  }
+  #topbar.show { opacity: 1; }
+  .topbar-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .topbar-word { font-size: 0.8rem; font-weight: 800; letter-spacing: -0.01em; }
 </style>
 </head>
 <body>
+
+  <div id="topbar">
+    <div class="topbar-dot"></div>
+    <div class="topbar-word">KitchenDesk</div>
+  </div>
 
   <!-- 1. Заставка -->
   <div class="screen active" id="splashScreen">
@@ -132,8 +156,10 @@
     <div class="found-overlay"></div>
     <div class="found-content">
       <div class="found-eyebrow">Заведение найдено</div>
-      <img class="found-logo" id="foundLogo" alt="">
-      <div class="found-name" id="foundName"></div>
+      <div class="found-venue-row">
+        <img class="found-logo" id="foundLogo" alt="">
+        <div class="found-name" id="foundName"></div>
+      </div>
       <div class="found-sub">Осталось задать код быстрого входа</div>
       <button class="primary-btn" id="foundContinue">Продолжить</button>
     </div>
@@ -173,9 +199,13 @@
     photo: "https://kitchendesk.chefplan.ru/waiter-guide/hero/hero-1.jpg",
   };
 
+  var topbar = document.getElementById("topbar");
   function show(id) {
     document.querySelectorAll(".screen").forEach(function (el) { el.classList.remove("active"); });
     document.getElementById(id).classList.add("active");
+    // Шапка с брендом KitchenDesk — на всех экранах, КРОМЕ заставки (там
+    // и так на весь экран написано "KitchenDesk", шапка была бы лишней).
+    topbar.classList.toggle("show", id !== "splashScreen");
   }
 
   // 1 → 2: заставка держится немного, потом просит код
