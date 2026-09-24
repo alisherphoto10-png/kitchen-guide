@@ -19,14 +19,17 @@ function useSupportWaiting(enabled: boolean) {
 
 function useNav() {
   const { me, can } = useSession()
-  const waiting = useSupportWaiting(!!me?.user.is_platform_admin)
+  // Пункты уровня платформы — только когда админ НЕ зашёл внутрь заведения,
+  // иначе «Заведения»/«Поддержка» ошибочно виснут в меню и внутри заведения.
+  const atPlatformLevel = me?.user.is_platform_admin && !me?.tenant
+  const waiting = useSupportWaiting(!!atPlatformLevel)
   const items = [] as { to: string; label: string; Icon: typeof BookOpen; badge?: number }[]
   if (me?.tenant) {
     items.push({ to: '/recipes', label: 'ТТК', Icon: BookOpen })
     if (can('owner')) items.push({ to: '/categories', label: 'Категории', Icon: Tags })
     if (can('owner')) items.push({ to: '/team', label: 'Команда', Icon: Users })
   }
-  if (me?.user.is_platform_admin) {
+  if (atPlatformLevel) {
     items.push({ to: '/platform', label: 'Заведения', Icon: Building2 })
     items.push({ to: '/support', label: 'Поддержка', Icon: LifeBuoy, badge: waiting })
   }
