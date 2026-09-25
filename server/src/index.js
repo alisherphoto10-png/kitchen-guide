@@ -9,6 +9,7 @@ const { authenticate, requireTenant } = require('./middleware/auth');
 const guide = require('./services/guide');
 const guideContent = require('./services/guideContent');
 const bots = require('./services/bots');
+const iikoAuto = require('./services/iikoAuto');
 
 const app = express();
 app.disable('x-powered-by');
@@ -75,5 +76,6 @@ migrate()
     bots.syncAllCommands()
       .then(r => r.total && console.log(`Меню команд ботов: ${r.total} всего, обновлено ${r.changed}, ошибок ${r.failed}`))
       .catch(e => console.error('Меню команд ботов не обновилось:', e.message));
+    iikoAuto.start();
   }))
   .catch(e => { console.error('Миграции не применились:', e.message); process.exit(1); });

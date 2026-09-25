@@ -102,19 +102,24 @@ async function withSession(connection, fn) {
 // Всё, что нужно для импорта ТТК, одним заходом.
 // assemblyCharts — все версии карт с dateFrom (год назад — с запасом);
 // products — блюда, товары и полуфабрикаты (тип — поле type: DISH/GOODS/PREPARED/…);
-// measureUnits — справочник единиц (id → «кг»/«л»/«шт»/«порц»).
+// measureUnits — справочник единиц (id → «кг»/«л»/«шт»/«порц»);
+// group/list — папки номенклатуры (products.parent → id папки).
 async function fetchCatalog(connection) {
   return withSession(connection, async key => {
     const dateFrom = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
-    const [charts, products, units] = await Promise.all([
+    const [charts, products, units, groups] = await Promise.all([
       requestJson(connection, '/api/v2/assemblyCharts/getAll', { key, dateFrom }),
       requestJson(connection, '/api/v2/entities/products/list', { key }),
       requestJson(connection, '/api/v2/entities/list', { key, rootType: 'MeasureUnit' }),
+      // Папки нужны только для фильтра по выбранным (см. services/iiko.js);
+      // нет прав на них — импорт без выбора папок всё равно работает.
+      requestJson(connection, '/api/v2/entities/products/group/list', { key }).catch(() => null),
     ]);
     return {
       charts: Array.isArray(charts?.assemblyCharts) ? charts.assemblyCharts : [],
       products: Array.isArray(products) ? products : [],
       units: Array.isArray(units) ? units : [],
+      groups: Array.isArray(groups) ? groups : null,
     };
   });
 }
@@ -146,4 +151,23 @@ function currentCharts(charts, asOf = new Date()) {
   return out;
 }
 
-module.exports = { sha1, normalizeBaseUrl, withSession, fetchCatalog, pickCurrentChart, currentCharts };
+// Папки номенклатуры для выбора «что импортировать»: группы (плоский список,
+// parent → id другой группы) плюс техкарты и товары — чтобы показать, сколько
+// карт лежит в каждой папке.
+async function fetchGroups(connection) {
+  return withSession(connection, async key => {
+    const dateFrom = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+    const [groups, charts, products] = await Promise.all([
+      requestJson(connection, '/api/v2/entities/products/group/list', { key }),
+      requestJson(connection, '/api/v2/assemblyCharts/getAll', { key, dateFrom }),
+      requestJson(connection, '/api/v2/entities/products/list', { key }),
+    ]);
+    return {
+      groups: Array.isArray(groups) ? groups : [],
+      charts: Array.isArray(charts?.assemblyCharts) ? charts.assemblyCharts : [],
+      products: Array.isArray(products) ? products : [],
+    };
+  });
+}
+
+module.exports = { sha1, normalizeBaseUrl, withSession, fetchCatalog, fetchGroups, pickCurrentChart, currentCharts };

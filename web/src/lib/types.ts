@@ -196,11 +196,23 @@ export interface IikoImportResult {
   updated: number
   unchanged: number
   skipped: number
+  skipped_group: number
   skipped_rows: number
   linked: number
   created_names: string[]
   updated_names: string[]
   skipped_names: string[]
+  skipped_group_names: string[]
+  source?: 'manual' | 'auto'
+  at?: string
+}
+
+export interface IikoGroup {
+  id: string
+  name: string
+  count: number // техкарт прямо в этой папке
+  total: number // во всей ветке
+  children: IikoGroup[]
 }
 
 export interface IikoConnection {
@@ -210,5 +222,9 @@ export interface IikoConnection {
   last_error: string | null
   last_import_at: string | null
   last_import_result: IikoImportResult | null
+  group_ids: string[] | null
+  auto_attempt_at: string | null
+  auto_ok_at: string | null
+  auto_error: string | null
   updated_at: string
 }

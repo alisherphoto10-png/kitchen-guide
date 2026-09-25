@@ -28,6 +28,10 @@ function view(row) {
     last_error: row.last_error,
     last_import_at: row.last_import_at,
     last_import_result: row.last_import_result,
+    group_ids: row.group_ids,
+    auto_attempt_at: row.auto_attempt_at,
+    auto_ok_at: row.auto_ok_at,
+    auto_error: row.auto_error,
     updated_at: row.updated_at,
   };
 }
@@ -44,7 +48,7 @@ async function get(tenantId) {
 async function connectionOf(tenantId) {
   const row = await getRow(tenantId);
   if (!row) throw new HttpError(404, 'Подключение к iiko не настроено');
-  return { base_url: row.base_url, login: row.login, password: secretBox.decrypt(row.password_encrypted) };
+  return { base_url: row.base_url, login: row.login, password: secretBox.decrypt(row.password_encrypted), group_ids: row.group_ids };
 }
 
 // Сохраняет подключение только если iiko его принял — неверные данные не
@@ -96,6 +100,69 @@ async function remove(tenantId) {
   if (!rowCount) throw new HttpError(404, 'Подключение к iiko не настроено');
 }
 
+// ── папки (что импортировать) ────────────────────────────────────────
+// Схема — как в KitchenDesk (oko-iiko-integration/PART-13): дерево групп iiko
+// с галочками, сохраняется набор id, импорт берёт карту, только если parent
+// её товара в наборе. Отличие: пока владелец ничего не выбирал (group_ids
+// NULL), импортируется всё — в дереве по умолчанию всё отмечено.
+
+// Товары вне любой группы (parent пустой или указывает на неизвестную группу).
+// В KitchenDesk такие просто пропускались, но на демо-стенде iiko групп нет
+// вообще — все блюда там без папки, и любой сохранённый выбор отрезал бы всё.
+// Поэтому «Без папки» — отдельный пункт дерева со своей галочкой.
+const NO_GROUP = 'no-group';
+
+function groupKey(product, groupIds) {
+  return product?.parent && groupIds.has(product.parent) ? product.parent : NO_GROUP;
+}
+
+async function groupsTree(tenantId) {
+  const connection = await connectionOf(tenantId);
+  const { groups, charts, products } = await remember(tenantId, () => iikoApi.fetchGroups(connection));
+  const live = groups.filter(g => g?.id && !g.deleted);
+  const ids = new Set(live.map(g => g.id));
+  const productById = new Map(products.map(p => [p.id, p]));
+
+  // Сколько актуальных техкарт лежит прямо в каждой папке.
+  const count = new Map();
+  for (const productId of iikoApi.currentCharts(charts).keys()) {
+    const p = productById.get(productId);
+    if (!p || p.deleted) continue;
+    const k = groupKey(p, ids);
+    count.set(k, (count.get(k) || 0) + 1);
+  }
+
+  const nodes = new Map(live.map(g => [g.id, { id: g.id, name: String(g.name || '').trim() || 'Без названия', count: count.get(g.id) || 0, children: [] }]));
+  const roots = [];
+  for (const g of live) {
+    const parent = g.parent && g.parent !== g.id ? nodes.get(g.parent) : null;
+    (parent ? parent.children : roots).push(nodes.get(g.id));
+  }
+  // total — карт во всей ветке: папки без техкарт можно показать бледнее.
+  const byName = (a, b) => a.name.localeCompare(b.name, 'ru');
+  const seen = new Set();
+  const finish = n => {
+    if (seen.has(n.id)) return 0; // защита от цикла в данных iiko
+    seen.add(n.id);
+    n.children.sort(byName);
+    n.total = n.count + n.children.reduce((s, c) => s + finish(c), 0);
+    return n.total;
+  };
+  roots.sort(byName).forEach(finish);
+  if (count.get(NO_GROUP)) roots.push({ id: NO_GROUP, name: 'Без папки', count: count.get(NO_GROUP), total: count.get(NO_GROUP), children: [] });
+
+  return { tree: roots, selected: Array.isArray(connection.group_ids) ? connection.group_ids : null };
+}
+
+async function saveGroups(tenantId, groupIds) {
+  if (!Array.isArray(groupIds) || groupIds.length > 10000 || groupIds.some(id => typeof id !== 'string' || !id || id.length > 100)) {
+    throw new HttpError(400, 'Некорректный список папок');
+  }
+  const { rowCount } = await pool.query('UPDATE tenant_iiko SET group_ids = $2, updated_at = NOW() WHERE tenant_id = $1', [tenantId, JSON.stringify([...new Set(groupIds)])]);
+  if (!rowCount) throw new HttpError(404, 'Подключение к iiko не настроено');
+  return get(tenantId);
+}
+
 // ── импорт ───────────────────────────────────────────────────────────
 
 const WEIGHT_UNITS = ['кг', 'л'];
@@ -104,11 +171,17 @@ const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const round4 = v => (v == null ? null : Math.round(v * 10000) / 10000);
 
 // Каталог iiko → список карт для записи (ещё без id наших рецептов).
-function buildCards(catalog) {
+// groupIds — выбранные папки (null — все). Карта из невыбранной папки не
+// импортируется и попадает в skippedGroup.
+function buildCards(catalog, groupIds = null) {
   const productById = new Map(catalog.products.map(p => [p.id, p]));
   const unitName = new Map(catalog.units.map(u => [u.id, String(u.name || '').trim()]));
+  const selected = Array.isArray(groupIds) ? new Set(groupIds) : null;
+  if (selected && !catalog.groups) throw new HttpError(502, 'iiko не отдал список папок — импорт по выбранным папкам невозможен, проверьте права пользователя iiko');
+  const liveGroups = new Set((catalog.groups || []).filter(g => g?.id && !g.deleted).map(g => g.id));
   const cards = [];
   const skipped = [];
+  const skippedGroup = [];
   let skippedRows = 0;
 
   for (const [productId, chart] of iikoApi.currentCharts(catalog.charts)) {
@@ -116,6 +189,7 @@ function buildCards(catalog) {
     const name = String(product?.name || '').trim().slice(0, 300);
     if (!product || !name) { skipped.push(`id ${productId} — нет в номенклатуре iiko`); continue; }
     if (product.deleted) { skipped.push(`${name} — удалён в iiko`); continue; }
+    if (selected && !selected.has(groupKey(product, liveGroups))) { skippedGroup.push(name); continue; }
 
     const mainUnit = unitName.get(product.mainUnit) || null;
     const amount = num(chart.assembledAmount);
@@ -144,15 +218,16 @@ function buildCards(catalog) {
     }
     cards.push(card);
   }
-  return { cards, skipped, skippedRows };
+  return { cards, skipped, skippedGroup, skippedRows };
 }
 
 const rowsSig = rows => JSON.stringify(rows.map(r => [r.name, r.brutto, r.netto, r.loss_percent, r.unit, r.linked_recipe_id]));
 
-async function runImport(tenantId, userId) {
+// source: 'manual' (кнопка) или 'auto' (ночное автообновление, userId = null).
+async function runImport(tenantId, userId, { source = 'manual' } = {}) {
   const connection = await connectionOf(tenantId);
   const catalog = await remember(tenantId, () => iikoApi.fetchCatalog(connection));
-  const { cards, skipped, skippedRows } = buildCards(catalog);
+  const { cards, skipped, skippedGroup, skippedRows } = buildCards(catalog, connection.group_ids);
 
   return withTransaction(async db => {
     // Двойное нажатие «Импорт» не должно создать карты дважды.
@@ -233,8 +308,9 @@ async function runImport(tenantId, userId) {
     const summary = {
       total: cards.length,
       created: created.length, updated: updated.length, unchanged: unchanged.length,
-      skipped: skipped.length, skipped_rows: skippedRows, linked,
-      created_names: created, updated_names: updated, skipped_names: skipped,
+      skipped: skipped.length, skipped_group: skippedGroup.length, skipped_rows: skippedRows, linked,
+      created_names: created, updated_names: updated, skipped_names: skipped, skipped_group_names: skippedGroup,
+      source, at: new Date().toISOString(),
     };
     await db.query(
       `UPDATE tenant_iiko SET last_import_at = NOW(), last_import_result = $2, last_test_ok_at = NOW(), last_error = NULL
@@ -245,4 +321,4 @@ async function runImport(tenantId, userId) {
   });
 }
 
-module.exports = { get, save, test, remove, runImport, buildCards };
+module.exports = { get, save, test, remove, groupsTree, saveGroups, runImport, buildCards, NO_GROUP };

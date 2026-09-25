@@ -19,6 +19,11 @@ router.delete('/', ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Папки номенклатуры iiko деревом + сохранённый выбор (null — ещё не выбирали, всё).
+router.get('/groups', ah(async (req, res) => res.json(await iiko.groupsTree(req.tenantId))));
+
+router.put('/groups', ah(async (req, res) => res.json(await iiko.saveGroups(req.tenantId, req.body?.group_ids))));
+
 router.post('/import', ah(async (req, res) => res.json(await iiko.runImport(req.tenantId, req.user.id))));
 
 module.exports = router;
