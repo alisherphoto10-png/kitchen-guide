@@ -20,7 +20,10 @@ const allowLocal = process.env.IIKO_ALLOW_LOCAL === '1';
 const blocked = new net.BlockList();
 for (const [a, p] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16],
   ['172.16.0.0', 12], ['192.168.0.0', 16], ['224.0.0.0', 4], ['240.0.0.0', 4]]) blocked.addSubnet(a, p, 'ipv4');
-for (const [a, p] of [['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['::ffff:0:0', 96]]) blocked.addSubnet(a, p, 'ipv6');
+// Правила ::ffff:0:0/96 здесь быть не должно: BlockList сверяет IPv4 и с ним
+// (как IPv4-mapped) — и блокировал бы вообще любой адрес. Mapped-адреса
+// (::ffff:10.0.0.1) BlockList и так сверяет с IPv4-правилами выше.
+for (const [a, p] of [['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10]]) blocked.addSubnet(a, p, 'ipv6');
 
 const sha1 = text => crypto.createHash('sha1').update(String(text), 'utf8').digest('hex');
 
