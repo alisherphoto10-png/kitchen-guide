@@ -34,6 +34,7 @@ app.use('/api/support', authenticate, require('./routes/support').mine);
 app.use('/api/recipes', authenticate, requireTenant, require('./routes/recipes'));
 app.use('/api/categories', authenticate, requireTenant, require('./routes/categories'));
 app.use('/api/team', authenticate, requireTenant, require('./routes/team'));
+app.use('/api/iiko', authenticate, requireTenant, require('./routes/iiko'));
 app.use('/tg', require('./routes/webhook'));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Не найдено' }));
 

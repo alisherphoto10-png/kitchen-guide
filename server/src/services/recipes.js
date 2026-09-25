@@ -9,6 +9,7 @@
 
 const { pool, withTransaction } = require('../db/pool');
 const { HttpError, toNum } = require('../utils/http');
+const modules = require('./modules');
 
 const YIELD_UNITS = ['кг', 'г', 'л', 'мл'];
 const MAX_INGREDIENTS = 200;
@@ -29,7 +30,7 @@ async function list(tenantId, { q = '', categoryId = null, status = 'active', ki
 
   const { rows } = await pool.query(
     `SELECT r.id, r.name, r.kind, r.category_id, c.name AS category_name, r.photo, r.status,
-            r.yield_weight, r.yield_unit, r.yield_count, r.updated_at,
+            r.yield_weight, r.yield_unit, r.yield_count, r.updated_at, r.iiko_managed_at,
             (SELECT COUNT(*)::int FROM recipe_ingredients i WHERE i.recipe_id = r.id) AS ingredient_count
        FROM recipes r LEFT JOIN categories c ON c.id = r.category_id
       WHERE ${where.join(' AND ')}
@@ -62,7 +63,14 @@ async function get(tenantId, id) {
       WHERE i.linked_recipe_id = $1 AND r.tenant_id = $2 ORDER BY r.name`,
     [id, tenantId]
   );
-  return { ...recipe, ingredients, used_in: usedIn };
+  return { ...recipe, iiko_locked: await iikoLocked(tenantId, recipe), ingredients, used_in: usedIn };
+}
+
+// Карта из iiko заблокирована для ручной правки состава/выхода, пока модуль
+// iiko включён. Выключили модуль — синхронизации больше нет, и карту снова
+// можно править руками (метка iiko остаётся; включат обратно — импорт перезапишет).
+async function iikoLocked(tenantId, recipe) {
+  return !!recipe.iiko_managed_at && modules.isEnabled(tenantId, 'iiko');
 }
 
 // ── запись ───────────────────────────────────────────────────────────
@@ -229,10 +237,21 @@ async function create(tenantId, userId, data) {
 
 async function update(tenantId, userId, id, data) {
   const recipe = normalizeRecipe(data);
-  const ingredients = normalizeIngredients(data.ingredients);
+  let ingredients = normalizeIngredients(data.ingredients);
   await withTransaction(async db => {
-    const { rows: [old] } = await db.query('SELECT kind FROM recipes WHERE id = $1 AND tenant_id = $2 FOR UPDATE', [id, tenantId]);
+    const { rows: [old] } = await db.query(
+      'SELECT kind, name, yield_weight, yield_unit, yield_count, iiko_managed_at FROM recipes WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
+      [id, tenantId]
+    );
     if (!old) throw new HttpError(404, 'ТТК не найдена');
+    // Карта из iiko: название, тип, выход и состав приходят только повторным
+    // импортом — присланное клиентом молча заменяем прежним (закрывает и
+    // прямой запрос в API в обход интерфейса). Остальное правится как обычно.
+    const locked = await iikoLocked(tenantId, old);
+    if (locked) {
+      Object.assign(recipe, { name: old.name, kind: old.kind, yield_weight: old.yield_weight, yield_unit: old.yield_unit, yield_count: old.yield_count });
+      ingredients = null;
+    }
     if (old.kind === 'semi' && recipe.kind === 'dish') {
       const { rows } = await db.query('SELECT 1 FROM recipe_ingredients WHERE linked_recipe_id = $1 LIMIT 1', [id]);
       if (rows.length) throw new HttpError(409, 'Этот полуфабрикат входит в другие ТТК — сначала уберите его оттуда');
@@ -246,8 +265,8 @@ async function update(tenantId, userId, id, data) {
        recipe.yield_weight, recipe.yield_unit, recipe.yield_count,
        recipe.calories, recipe.protein, recipe.fat, recipe.carbs, userId]
     );
-    await writeIngredients(db, id, await resolveLinks(db, tenantId, id, ingredients));
-    if (recipe.kind === 'semi') await linkExistingRows(db, tenantId, id, recipe.name);
+    if (ingredients) await writeIngredients(db, id, await resolveLinks(db, tenantId, id, ingredients));
+    if (recipe.kind === 'semi' && !locked) await linkExistingRows(db, tenantId, id, recipe.name);
   });
   return get(tenantId, id);
 }
@@ -322,5 +341,5 @@ function scale(recipe, k) {
 
 module.exports = {
   list, get, create, update, setStatus, remove, setPhoto, importMany, scale,
-  completeIngredient, YIELD_UNITS,
+  completeIngredient, writeIngredients, linkExistingRows, YIELD_UNITS,
 };

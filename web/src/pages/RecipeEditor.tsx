@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Trash2, ArrowUp, ArrowDown, ImagePlus, X } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, ArrowUp, ArrowDown, ImagePlus, X, Lock } from 'lucide-react'
 import { api, upload } from '../lib/api'
 import { fmt, parseNum } from '../lib/format'
 import type { Category, Recipe, RecipeKind, RecipeListItem } from '../lib/types'
@@ -75,6 +75,9 @@ function Editor({ recipe }: { recipe: Recipe | null }) {
   const [photo, setPhoto] = useState<string | null>(recipe?.photo || null)
   const [dirty, setDirty] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  // Карта из iiko: название, тип, выход и состав — только повторным импортом
+  // (сервер всё равно проигнорирует присланное).
+  const locked = !!recipe?.iiko_locked
 
   const { data: categories = [] } = useQuery({ queryKey: ['categories'], queryFn: () => api<Category[]>('/categories') })
   const { data: semis = [] } = useQuery({ queryKey: ['recipes', 'semis'], queryFn: () => api<RecipeListItem[]>('/recipes?kind=semi') })
@@ -164,16 +167,22 @@ function Editor({ recipe }: { recipe: Recipe | null }) {
     <form className="max-w-4xl mx-auto px-4 lg:px-8 pt-4 lg:pt-6 pb-28 lg:pb-12" onSubmit={e => { e.preventDefault(); if (!invalid) save.mutate() }}>
       <Link to={recipe ? `/recipes/${recipe.id}` : '/recipes'} className="btn-ghost btn-sm -ml-2 mb-3"><ArrowLeft className="h-4 w-4" />{recipe ? 'К карте' : 'Все ТТК'}</Link>
       <h1 className="h-page mb-5">{recipe ? 'Редактирование ТТК' : 'Новая ТТК'}</h1>
+      {locked && (
+        <p className="flex items-start gap-2 rounded-xl bg-paper-2 px-3 py-2.5 text-[13px] text-ink-2 mb-4">
+          <Lock className="h-4 w-4 flex-shrink-0 mt-0.5 text-ink-muted" />
+          <span>Карта синхронизируется с iiko: название, тип, выход и состав меняются в iiko и приходят повторным импортом. Здесь можно править категорию, фото, технологию, примечание и КБЖУ.</span>
+        </p>
+      )}
 
       {/* основное */}
       <section className="card p-4 sm:p-5 grid gap-4 sm:grid-cols-[1fr_auto]">
         <div className="grid gap-4">
-          <label>
+          <label className={locked ? 'opacity-60' : ''}>
             <span className="field-label">Название *</span>
-            <input className="input text-base font-semibold" value={form.name} onChange={e => set({ name: e.target.value })} autoFocus={!recipe} maxLength={300} />
+            <input className="input text-base font-semibold" value={form.name} onChange={e => set({ name: e.target.value })} autoFocus={!recipe} maxLength={300} disabled={locked} />
           </label>
           <div className="grid sm:grid-cols-2 gap-4">
-            <div>
+            <fieldset disabled={locked} className={locked ? 'opacity-60' : ''}>
               <span className="field-label">Тип</span>
               <div className="inline-flex rounded-xl bg-paper-2 p-0.5 text-[13px] font-semibold w-full">
                 {([['dish', 'Блюдо'], ['semi', 'Полуфабрикат']] as const).map(([v, l]) => (
@@ -181,7 +190,7 @@ function Editor({ recipe }: { recipe: Recipe | null }) {
                     className={`flex-1 h-9 rounded-[10px] transition-colors ${form.kind === v ? 'bg-paper-card shadow-card text-ink' : 'text-ink-muted'}`}>{l}</button>
                 ))}
               </div>
-            </div>
+            </fieldset>
             <label>
               <span className="field-label">Категория</span>
               <select className="input" value={form.category_id} onChange={e => set({ category_id: e.target.value })}>
@@ -212,7 +221,7 @@ function Editor({ recipe }: { recipe: Recipe | null }) {
       </section>
 
       {/* выход */}
-      <section className="card p-4 sm:p-5 mt-4">
+      <fieldset disabled={locked} className={`card p-4 sm:p-5 mt-4 min-w-0 ${locked ? 'opacity-60' : ''}`}>
         <h2 className="font-bold mb-3">Выход</h2>
         <div className="grid grid-cols-2 sm:grid-cols-[180px_100px_180px] gap-3 items-end">
           <label><span className="field-label">По весу / объёму</span>{numInput('yield_weight', '—')}</label>
@@ -224,13 +233,13 @@ function Editor({ recipe }: { recipe: Recipe | null }) {
           <label className="col-span-2 sm:col-span-1"><span className="field-label">Порций</span>{numInput('yield_count', '—')}</label>
         </div>
         <p className="text-xs muted mt-2">Нужен для калькулятора: «пересчитать на 40 порций» или «на 5 кг».</p>
-      </section>
+      </fieldset>
 
       {/* состав */}
-      <section className="card mt-4 overflow-hidden">
+      <fieldset disabled={locked} className={`card mt-4 overflow-hidden min-w-0 ${locked ? 'opacity-60' : ''}`}>
         <div className="px-4 sm:px-5 pt-4 pb-2 flex items-baseline justify-between gap-2">
           <h2 className="font-bold">Состав</h2>
-          <p className="text-xs muted">Заполните две из трёх величин — третья посчитается сама</p>
+          <p className="text-xs muted">{locked ? 'Из iiko' : 'Заполните две из трёх величин — третья посчитается сама'}</p>
         </div>
         <datalist id="semis">{[...semiByName.values()].map(x => <option key={x.id} value={x.name} />)}</datalist>
 
@@ -257,7 +266,7 @@ function Editor({ recipe }: { recipe: Recipe | null }) {
                 <span className="sm:hidden text-[11px] font-semibold text-ink-muted">Ед.</span>
                 <select className="input px-2" value={r.unit} onChange={e => setRow(r.key, { unit: e.target.value })}>
                   <option value="">—</option>
-                  {UNITS.map(u => <option key={u}>{u}</option>)}
+                  {(r.unit && !UNITS.includes(r.unit) ? [...UNITS, r.unit] : UNITS).map(u => <option key={u}>{u}</option>)}
                 </select>
               </label>
               <div className="col-span-4 sm:col-span-1 flex justify-end gap-0.5 -mt-1 sm:mt-0">
@@ -271,7 +280,7 @@ function Editor({ recipe }: { recipe: Recipe | null }) {
         <div className="px-4 sm:px-5 py-3 border-t border-line">
           <button type="button" className="btn-ghost btn-sm" onClick={() => setRows(rs => [...rs, emptyRow(rs[rs.length - 1]?.unit || 'кг')])}><Plus className="h-4 w-4" />Строка</button>
         </div>
-      </section>
+      </fieldset>
 
       {/* технология */}
       <section className="card p-4 sm:p-5 mt-4 grid gap-4">

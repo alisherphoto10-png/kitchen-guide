@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Pencil, MoreHorizontal, FileText, FileSpreadsheet, Archive, ArchiveRestore, Trash2, Calculator, RotateCcw, Lock } from 'lucide-react'
 import { api, download } from '../lib/api'
 import { useSession } from '../lib/session'
-import { fmt, yieldLabel } from '../lib/format'
+import { fmt, yieldLabel, relDate } from '../lib/format'
 import { INITIAL_CALC, coefficient, isActive, scaleValue, nettoSum, ingredientBase, type CalcMode, type CalcState } from '../lib/calc'
 import type { Recipe } from '../lib/types'
 import { MODULE_LOCKED_TEXT, useModule } from '../lib/modules'
@@ -44,6 +44,7 @@ export function RecipeDetail({ id, onBack }: { id: number; onBack?: () => void }
             <span className={`tag ${recipe.kind === 'semi' ? 'bg-warn-soft text-warn' : 'bg-paper-2 text-ink-2'}`}>{recipe.kind === 'semi' ? 'Полуфабрикат' : 'Блюдо'}</span>
             {recipe.category_name && <span className="tag bg-paper-2 text-ink-2">{recipe.category_name}</span>}
             {recipe.status === 'archived' && <span className="tag bg-ink text-paper">В архиве</span>}
+            {recipe.iiko_managed_at && <span className="tag bg-paper-2 text-ink-2" title={recipe.iiko_locked ? 'Состав и выход меняются только повторным импортом из iiko' : undefined}>из iiko · {relDate(recipe.iiko_managed_at)}</span>}
           </div>
           <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight leading-tight">{recipe.name}</h1>
           <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">

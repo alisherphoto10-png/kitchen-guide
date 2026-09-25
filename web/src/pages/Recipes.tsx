@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Plus, FileUp, BookOpen, Archive } from 'lucide-react'
+import { Search, Plus, FileUp, BookOpen, Archive, Link2 } from 'lucide-react'
 import { api } from '../lib/api'
 import { useSession } from '../lib/session'
 import { yieldLabel, plural } from '../lib/format'
@@ -9,6 +9,7 @@ import type { Category, RecipeListItem } from '../lib/types'
 import { Empty, ErrorBox, Spinner } from '../components/ui'
 import { RecipeDetail } from '../components/RecipeDetail'
 import { ImportModal } from '../components/ImportModal'
+import { IikoModal } from '../components/IikoModal'
 import { useIsDesktop } from '../hooks/useMedia'
 
 type Kind = '' | 'dish' | 'semi'
@@ -39,6 +40,7 @@ export function RecipesPage() {
   const kind = (params.get('kind') || '') as Kind
   const archived = params.get('archived') === '1'
   const [importOpen, setImportOpen] = useState(false)
+  const [iikoOpen, setIikoOpen] = useState(false)
   const isDesktop = useIsDesktop()
   const dq = useDebounced(q, 250)
 
@@ -68,6 +70,9 @@ export function RecipesPage() {
           <h1 className="h-page">{archived ? 'Архив ТТК' : 'ТТК'}</h1>
           {can('owner') && !archived && (
             <div className="flex gap-1.5">
+              <button className="btn-outline btn-icon h-9 w-9 lg:w-auto lg:px-3" onClick={() => setIikoOpen(true)} title="Подключение к iiko">
+                <Link2 className="h-4 w-4" /><span className="hidden lg:inline">iiko</span>
+              </button>
               <button className="btn-outline btn-icon h-9 w-9 lg:w-auto lg:px-3" onClick={() => setImportOpen(true)} title="Импорт из Excel">
                 <FileUp className="h-4 w-4" /><span className="hidden lg:inline">Импорт</span>
               </button>
@@ -134,6 +139,7 @@ export function RecipesPage() {
                           .filter(Boolean).join(' · ')}
                       </p>
                     </div>
+                    {r.iiko_managed_at && <span className="tag bg-paper-2 text-ink-2" title="Синхронизируется с iiko">iiko</span>}
                     {r.kind === 'semi' && <span className="tag bg-warn-soft text-warn">п/ф</span>}
                   </Link>
                 </li>
@@ -161,6 +167,7 @@ export function RecipesPage() {
         <RecipeDetail key={selectedId} id={selectedId} onBack={() => navigate('/recipes' + search)} />
       ) : list}
       {importOpen && <ImportModal categories={categories} onClose={() => setImportOpen(false)} />}
+      {iikoOpen && <IikoModal onClose={() => setIikoOpen(false)} />}
     </>
   )
 }

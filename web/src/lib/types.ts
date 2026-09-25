@@ -52,6 +52,8 @@ export interface RecipeListItem {
   yield_count: number | null
   ingredient_count: number
   updated_at: string
+  // Карта пришла из iiko (модуль «Интеграция с iiko»): когда синхронизирована.
+  iiko_managed_at: string | null
 }
 
 export interface Ingredient {
@@ -73,6 +75,9 @@ export interface Recipe extends RecipeListItem {
   fat: number | null
   carbs: number | null
   created_at: string
+  iiko_product_id: string | null
+  // Название, тип, выход и состав правятся только повторным импортом из iiko.
+  iiko_locked: boolean
   ingredients: Ingredient[]
   used_in: { id: number; name: string }[]
 }
@@ -183,4 +188,27 @@ export interface NotifyChat {
   type: string
   title: string
   topic: string | null
+}
+
+export interface IikoImportResult {
+  total: number
+  created: number
+  updated: number
+  unchanged: number
+  skipped: number
+  skipped_rows: number
+  linked: number
+  created_names: string[]
+  updated_names: string[]
+  skipped_names: string[]
+}
+
+export interface IikoConnection {
+  base_url: string
+  login: string
+  last_test_ok_at: string | null
+  last_error: string | null
+  last_import_at: string | null
+  last_import_result: IikoImportResult | null
+  updated_at: string
 }
