@@ -16,9 +16,10 @@ function splitEmojiLabel(text) {
 
 // Владелец — единый пароль из .env, логин НЕ вводит (пустое поле логина на
 // экране входа = "это я"). Именованные сотрудники (data/users.json) входят
-// логином+паролем, их роль (kitchen/bar/both) даёт req.allowedGroups.
-// Общий пароль бара (OKO_BAR_PASSWORD, выдан раньше сегодняшним доступом)
-// оставлен как запасной вариант — ничего не ломаем из уже выданного.
+// логином+паролем: рабочая зона (kitchen/bar/both) даёт req.allowedGroups,
+// а персональные права (store.PERMISSIONS) — req.permissions. Общий пароль
+// бара (OKO_BAR_PASSWORD) с 2026-09-26 больше не пускает — по решению
+// владельца у всех теперь личные учётки с правами.
 function authenticate(req, res, next) {
   const password = req.header("X-Admin-Password");
   const login = (req.header("X-Admin-Login") || "").trim();
@@ -33,18 +34,12 @@ function authenticate(req, res, next) {
     const user = store.verifyUserPassword(login, password);
     if (user) {
       req.scope = "user";
-      req.allowedGroups = user.role === "both" ? ["kitchen", "bar"] : [user.role];
+      req.allowedGroups = user.zone === "both" ? ["kitchen", "bar"] : [user.zone];
+      req.permissions = new Set(user.permissions);
       req.userId = user.id;
       req.userName = user.name;
       return next();
     }
-  }
-  if (!login && process.env.OKO_BAR_PASSWORD && password === process.env.OKO_BAR_PASSWORD) {
-    req.scope = "user";
-    req.allowedGroups = ["bar"];
-    req.userId = null;
-    req.userName = "Бар (общий доступ)";
-    return next();
   }
   return res.status(401).json({ error: "Неверный логин или пароль" });
 }
@@ -53,6 +48,44 @@ function requireOwner(req, res, next) {
   if (req.scope !== "all") return res.status(403).json({ error: "Доступно только владельцу" });
   next();
 }
+
+function can(req, key) {
+  return req.scope === "all" || Boolean(req.permissions && req.permissions.has(key));
+}
+function requirePerm(key) {
+  return (req, res, next) => {
+    if (!can(req, key)) return res.status(403).json({ error: "Нет прав на это действие" });
+    next();
+  };
+}
+
+// Какое право нужно на каждое поле PATCH /dishes/:id. Поля, которых здесь
+// нет (sectionId, order и любые неизвестные), сотруднику не разрешены
+// вообще — перенос блюда в другую категорию только у владельца.
+const DISH_FIELD_PERMS = {
+  name: "name",
+  subtitle: "subtitle",
+  description: "description",
+  warning: "warning",
+  allergens: "allergens",
+  features: "allergens",
+  history: "history",
+  historyQuote: "history",
+  servingSteps: "serving",
+  waiterPhrase: "serving",
+  howToServe: "serving",
+  recommendations: "serving",
+  faq: "faq",
+  addPhoto: "photos",
+  removePhotoIndex: "photos",
+  photosOrder: "photos",
+  photo: "photos",
+  removePhoto: "photos",
+  status: "status",
+  hidden: "hidden",
+  calcTables: "composition",
+};
+const SECTION_FIELDS_FOR_STAFF = new Set(["name", "icon", "photo", "removePhoto", "note", "order"]);
 
 // scope "all" (владелец) может всё; иначе — только внутри groups, входящих
 // в req.allowedGroups. Раздел "без раздела" (null/не найден) сотруднику
@@ -149,14 +182,19 @@ function createOkoWaiterGuideRouter(bot) {
   admin.use(authenticate);
 
   admin.get("/whoami", (req, res) => {
-    res.json({ scope: req.scope, name: req.userName, allowedGroups: req.allowedGroups || null });
+    res.json({
+      scope: req.scope,
+      name: req.userName,
+      allowedGroups: req.allowedGroups || null,
+      permissions: req.scope === "all" ? store.PERMISSIONS.map((p) => p.key) : [...req.permissions],
+    });
   });
 
   admin.get("/sections", (req, res) => {
     const all = store.getSectionsShaped();
     res.json(req.scope === "all" ? all : all.filter((s) => (req.allowedGroups || []).includes(store.sectionGroup(s))));
   });
-  admin.post("/sections", (req, res) => {
+  admin.post("/sections", requirePerm("categories"), (req, res) => {
     const { name, icon, group, parentId, note } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: "Укажите название раздела" });
     if (parentId && !sectionAllowed(parentId, req)) return res.status(403).json({ error: "Нет доступа к этому разделу" });
@@ -170,25 +208,27 @@ function createOkoWaiterGuideRouter(bot) {
     store.logActivity({ userId: req.userId, userName: req.userName, action: "section_created", targetName: section.name });
     res.json(section);
   });
-  admin.patch("/sections/:id", async (req, res) => {
+  admin.patch("/sections/:id", requirePerm("categories"), async (req, res) => {
     const existing = store.readSections().find((s) => s.id === req.params.id);
     if (!existing || !sectionAllowed(existing.id, req)) return res.status(404).json({ error: "Раздел не найден" });
     const patch = Object.assign({}, req.body || {});
-    // Сотрудник с ОДНОЙ ролью не может перевесить раздел в другую зону;
-    // с "both" (или владелец) — может.
-    if (req.scope !== "all" && (req.allowedGroups || []).length <= 1) delete patch.group;
+    // Зона Кухня/Бар у категории — только владелец (пакет "Категории" её не
+    // включает, решение владельца 2026-09-26).
+    if (req.scope !== "all" && Object.keys(patch).some((k) => !SECTION_FIELDS_FOR_STAFF.has(k))) {
+      return res.status(403).json({ error: "Нет прав на это действие" });
+    }
     const section = await store.updateSection(req.params.id, patch);
     store.logActivity({ userId: req.userId, userName: req.userName, action: "section_updated", targetName: section.name });
     res.json(section);
   });
-  admin.delete("/sections/:id", (req, res) => {
+  admin.delete("/sections/:id", requireOwner, (req, res) => {
     const existing = store.readSections().find((s) => s.id === req.params.id);
     if (!existing || !sectionAllowed(existing.id, req)) return res.status(404).json({ error: "Раздел не найден" });
     store.deleteSection(req.params.id);
     store.logActivity({ userId: req.userId, userName: req.userName, action: "section_deleted", targetName: existing.name });
     res.json({ ok: true });
   });
-  admin.post("/sections/reorder", (req, res) => {
+  admin.post("/sections/reorder", requirePerm("categories"), (req, res) => {
     const { orderedIds } = req.body || {};
     if (!Array.isArray(orderedIds)) return res.status(400).json({ error: "Нужен orderedIds" });
     if (req.scope !== "all" && orderedIds.some((id) => !sectionAllowed(id, req))) {
@@ -202,11 +242,16 @@ function createOkoWaiterGuideRouter(bot) {
     const all = store.getAllDishesShaped();
     res.json(req.scope === "all" ? all : all.filter((d) => sectionAllowed(d.sectionId, req)));
   });
-  admin.post("/dishes", (req, res) => {
+  // Новое блюдо — часть пакета "Состав" (без него добавить блюдо нельзя).
+  // Сотрудник задаёт при создании только название, категорию (в своей зоне)
+  // и состав; остальные поля — потом, по своим правам на каждое поле.
+  admin.post("/dishes", requirePerm("composition"), (req, res) => {
     const { name, sectionId } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: "Укажите название блюда" });
     if (!sectionAllowed(sectionId, req)) return res.status(403).json({ error: "Нет доступа к этому разделу" });
-    const dish = store.addDish(req.body || {});
+    const body = req.body || {};
+    const input = req.scope === "all" ? body : { name, sectionId, calcTables: body.calcTables };
+    const dish = store.addDish(input);
     const section = store.readSections().find((s) => s.id === sectionId);
     store.logActivity({ userId: req.userId, userName: req.userName, action: "dish_created", targetName: dish.name, sectionName: section && section.name });
     res.json(dish);
@@ -215,6 +260,10 @@ function createOkoWaiterGuideRouter(bot) {
     const existing = store.readDishes().find((d) => d.id === req.params.id);
     if (!existing || !sectionAllowed(existing.sectionId, req)) return res.status(404).json({ error: "Блюдо не найдено" });
     const patch = req.body || {};
+    if (req.scope !== "all") {
+      const denied = Object.keys(patch).filter((k) => !DISH_FIELD_PERMS[k] || !can(req, DISH_FIELD_PERMS[k]));
+      if (denied.length) return res.status(403).json({ error: "Нет прав на изменение этого поля", fields: denied });
+    }
     if (patch.sectionId !== undefined && !sectionAllowed(patch.sectionId, req)) {
       return res.status(403).json({ error: "Нет доступа к этому разделу" });
     }
@@ -223,7 +272,7 @@ function createOkoWaiterGuideRouter(bot) {
     store.logActivity({ userId: req.userId, userName: req.userName, action: "dish_updated", targetName: dish.name, sectionName: section && section.name });
     res.json(dish);
   });
-  admin.delete("/dishes/:id", (req, res) => {
+  admin.delete("/dishes/:id", requireOwner, (req, res) => {
     const existing = store.readDishes().find((d) => d.id === req.params.id);
     if (!existing || !sectionAllowed(existing.sectionId, req)) return res.status(404).json({ error: "Блюдо не найдено" });
     store.deleteDish(req.params.id);
@@ -231,7 +280,7 @@ function createOkoWaiterGuideRouter(bot) {
     store.logActivity({ userId: req.userId, userName: req.userName, action: "dish_deleted", targetName: existing.name, sectionName: section && section.name });
     res.json({ ok: true });
   });
-  admin.post("/dishes/reorder", (req, res) => {
+  admin.post("/dishes/reorder", requireOwner, (req, res) => {
     const { orderedIds } = req.body || {};
     if (!Array.isArray(orderedIds)) return res.status(400).json({ error: "Нужен orderedIds" });
     if (req.scope !== "all") {
@@ -258,27 +307,27 @@ function createOkoWaiterGuideRouter(bot) {
   admin.get("/statuses", (req, res) => {
     res.json(store.readStatuses());
   });
-  admin.post("/statuses", (req, res) => {
+  admin.post("/statuses", requirePerm("statusTypes"), (req, res) => {
     const { emoji, label } = req.body || {};
     if (!label || !label.trim()) return res.status(400).json({ error: "Укажите название статуса" });
     const status = store.addStatus({ emoji, label });
     store.logActivity({ userId: req.userId, userName: req.userName, action: "status_created", targetName: status.label });
     res.json(status);
   });
-  admin.patch("/statuses/:id", (req, res) => {
+  admin.patch("/statuses/:id", requirePerm("statusTypes"), (req, res) => {
     const status = store.updateStatus(req.params.id, req.body || {});
     if (!status) return res.status(404).json({ error: "Статус не найден" });
     store.logActivity({ userId: req.userId, userName: req.userName, action: "status_updated", targetName: status.label });
     res.json(status);
   });
-  admin.delete("/statuses/:id", (req, res) => {
+  admin.delete("/statuses/:id", requirePerm("statusTypes"), (req, res) => {
     const existing = store.readStatuses().find((s) => s.id === req.params.id);
     const ok = store.deleteStatus(req.params.id);
     if (!ok) return res.status(404).json({ error: "Статус не найден" });
     if (existing) store.logActivity({ userId: req.userId, userName: req.userName, action: "status_deleted", targetName: existing.label });
     res.json({ ok: true });
   });
-  admin.post("/statuses/reorder", (req, res) => {
+  admin.post("/statuses/reorder", requirePerm("statusTypes"), (req, res) => {
     const { orderedIds } = req.body || {};
     if (!Array.isArray(orderedIds)) return res.status(400).json({ error: "Нужен orderedIds" });
     store.reorderStatuses(orderedIds);
@@ -289,32 +338,43 @@ function createOkoWaiterGuideRouter(bot) {
   admin.get("/users", requireOwner, (req, res) => {
     res.json(store.readUsers().map(store.shapeUser));
   });
+  admin.get("/permissions", requireOwner, (req, res) => {
+    res.json(store.PERMISSIONS);
+  });
+  // Пароль генерирует сервер и отдаёт ОДИН раз в ответе — дальше хранится
+  // только хэш (см. store.generatePassword).
   admin.post("/users", requireOwner, (req, res) => {
-    const { name, login, password, role } = req.body || {};
+    const { name, login, position, zone, permissions } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: "Укажите имя" });
     if (!login || !login.trim()) return res.status(400).json({ error: "Укажите логин" });
-    if (!password || String(password).length < 4) return res.status(400).json({ error: "Пароль слишком короткий" });
     try {
-      const user = store.addUser({ name, login, password, role });
+      const { user, password } = store.addUser({ name, login, position, zone, permissions });
       store.logActivity({ userId: req.userId, userName: req.userName, action: "user_created", targetName: user.name });
-      res.json(user);
+      res.json({ user, password });
     } catch (e) {
       if (e.code === "LOGIN_TAKEN") return res.status(409).json({ error: "Логин уже занят" });
       throw e;
     }
   });
   admin.patch("/users/:id", requireOwner, (req, res) => {
+    const { name, login, position, zone, permissions } = req.body || {};
+    if (name !== undefined && !String(name).trim()) return res.status(400).json({ error: "Укажите имя" });
+    if (login !== undefined && !String(login).trim()) return res.status(400).json({ error: "Укажите логин" });
     try {
-      const user = store.updateUser(req.params.id, req.body || {});
+      const user = store.updateUser(req.params.id, { name, login, position, zone, permissions });
       if (!user) return res.status(404).json({ error: "Пользователь не найден" });
-      if (req.body && (req.body.name !== undefined || req.body.login !== undefined || req.body.role !== undefined)) {
-        store.logActivity({ userId: req.userId, userName: req.userName, action: "user_updated", targetName: user.name });
-      }
+      store.logActivity({ userId: req.userId, userName: req.userName, action: "user_updated", targetName: user.name });
       res.json(user);
     } catch (e) {
       if (e.code === "LOGIN_TAKEN") return res.status(409).json({ error: "Логин уже занят" });
       throw e;
     }
+  });
+  admin.post("/users/:id/reset-password", requireOwner, (req, res) => {
+    const result = store.resetUserPassword(req.params.id);
+    if (!result) return res.status(404).json({ error: "Пользователь не найден" });
+    store.logActivity({ userId: req.userId, userName: req.userName, action: "user_password_reset", targetName: result.user.name });
+    res.json(result);
   });
   admin.delete("/users/:id", requireOwner, (req, res) => {
     const target = store.readUsers().find((u) => u.id === req.params.id);
@@ -340,17 +400,17 @@ function createOkoWaiterGuideRouter(bot) {
     res.json({ announcement: store.writeAnnouncement({ title, text }) });
   });
 
-  // ---------- фирменные изображения (только владелец) ----------
+  // ---------- фирменные изображения (владелец или право "branding") ----------
   // Перезаписывают статические файлы прямо во frontend — слайдшоу на
   // главной и логотип захардкожены на эти имена файлов, поэтому фронтенду
   // ничего менять не нужно, просто новые байты на том же пути.
-  admin.post("/settings/logo", requireOwner, async (req, res) => {
+  admin.post("/settings/logo", requirePerm("branding"), async (req, res) => {
     const buf = await store.processImageBuffer((req.body || {}).image, { maxDim: 900, quality: 90, flattenBlack: true });
     if (!buf) return res.status(400).json({ error: "Некорректное изображение" });
     store.saveStaticImage(buf, path.join(store.FRONTEND_DIR, "logo.jpg"));
     res.json({ ok: true });
   });
-  admin.post("/settings/hero/:slot", requireOwner, async (req, res) => {
+  admin.post("/settings/hero/:slot", requirePerm("branding"), async (req, res) => {
     const slot = req.params.slot;
     if (!["1", "2", "3"].includes(slot)) return res.status(400).json({ error: "Некорректный слот" });
     const buf = await store.processImageBuffer((req.body || {}).image, { maxDim: 1800, quality: 82 });
@@ -428,13 +488,14 @@ function createOkoWaiterGuideRouter(bot) {
 
   // ---------- экспорт/импорт блюд через Excel ----------
   // Формат — см. oko-waiter-guide-xlsx.js (лист "ттк", одна строка на
-  // ингредиент, поля блюда — объединённая ячейка на блок). Только владелец:
-  // импорт может создавать разделы/подразделы/статусы по всей системе разом,
-  // это не тот инструмент, который стоит доверять ограниченному бар-доступу.
-  admin.get("/export-xlsx", requireOwner, async (req, res) => {
-    const guideAll = store.getGuideAll();
+  // ингредиент, поля блюда — объединённая ячейка на блок). Выгрузка — пакет
+  // "Состав" (только разделы своей зоны); импорт — только владелец: он может
+  // создавать разделы/подразделы/статусы по всей системе разом и перезаписать
+  // все поля блюд, в обход персональных прав.
+  admin.get("/export-xlsx", requirePerm("composition"), async (req, res) => {
+    const guideAll = store.getGuideAll().filter((s) => sectionAllowed(s.id, req));
     const statuses = store.readStatuses();
-    const orphans = store.getOrphanDishes();
+    const orphans = req.scope === "all" ? store.getOrphanDishes() : [];
     const wb = buildDishesWorkbook(guideAll, statuses, orphans);
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="oko-blyuda-${new Date().toISOString().slice(0, 10)}.xlsx"`);

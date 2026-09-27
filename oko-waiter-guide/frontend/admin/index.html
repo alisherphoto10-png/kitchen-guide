@@ -377,6 +377,34 @@
   .confirm-modal p { font-size: 0.875rem; color: var(--muted); line-height: 1.5; margin: 8px 0 16px; }
   .confirm-modal .row { display: flex; gap: 10px; }
   .confirm-modal button { flex: 1; }
+  .confirm-modal.wide { max-width: 640px; }
+
+  /* ---------- персональные права ---------- */
+  .perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+  .perm-item {
+    display: flex; gap: 9px; align-items: flex-start; background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+    border-radius: 11px; padding: 9px 11px; font-size: 0.813rem; color: var(--text); cursor: pointer; font-weight: 600;
+  }
+  .field .perm-item { margin: 0; color: var(--text); font-size: 0.813rem; }
+  .perm-item input { accent-color: var(--accent); width: 16px; height: 16px; flex: none; margin-top: 1px; }
+  .perm-item.checked { border-color: var(--accent); background: var(--accent-soft); }
+  .perm-item .perm-hint { display: block; font-size: 0.688rem; color: var(--dim); margin-top: 2px; font-weight: 400; line-height: 1.35; }
+  .perm-actions { display: flex; gap: 14px; margin-bottom: 8px; }
+  .link-btn { background: none; border: none; padding: 0; color: var(--accent); font-size: 0.75rem; font-weight: 700; }
+  .confirm-modal .link-btn { flex: none; }
+  .field-note { font-size: 0.719rem; color: var(--dim); margin-top: 5px; line-height: 1.4; }
+  .cred-card { background: var(--card2); border: 1px solid var(--accent); border-radius: 14px; padding: 14px; margin: 10px 0 14px; }
+  .cred-card pre {
+    white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.813rem; line-height: 1.5; color: var(--text); margin: 0; user-select: all;
+  }
+  .user-perms { font-size: 0.719rem; color: var(--dim); margin-top: 2px; }
+  /* Поле, на которое у сотрудника нет права: видно, но не редактируется. */
+  .perm-locked input, .perm-locked textarea, .perm-locked select, .perm-locked .status-pick, .perm-locked .check-item { opacity: 0.5; pointer-events: none; }
+  .perm-locked .btn-add-row, .perm-locked .rm, .perm-locked [data-rm-table], .perm-locked .rm-btn,
+  .perm-locked .main-btn, .perm-locked .photo-add, .perm-locked .grip { display: none !important; }
+  .perm-lock-note { display: inline-block; font-size: 0.656rem; font-weight: 700; color: var(--dim); background: var(--card2); border: 1px solid var(--border); border-radius: 100px; padding: 1px 8px; margin-left: 6px; }
+  .perm-lock-banner { font-size: 0.75rem; color: var(--dim); margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -450,7 +478,23 @@
   let editingDishId = null; // null = list view
   let activeTab = "basic";
   let isDirty = false;
-  let accessScope = "all"; // "all" (владелец/управляющий) | "bar" (ограниченный доступ)
+  let accessScope = "all"; // "all" (владелец) | "user" (сотрудник с персональными правами)
+  let myPermissions = []; // ключи прав из whoami (у владельца — все)
+  function isOwner() { return accessScope === "all"; }
+  function can(key) { return isOwner() || myPermissions.includes(key); }
+  // Права, дающие что-то менять в карточке блюда — если нет ни одного, кнопки
+  // "Редактировать" у сотрудника нет вовсе (только просмотр и предпросмотр).
+  const DISH_EDIT_PERMS = ["name", "subtitle", "description", "warning", "allergens", "history", "serving", "faq", "photos", "status", "hidden", "composition"];
+  function canEditAnyDishField() { return DISH_EDIT_PERMS.some(can); }
+  // Поле PATCH-запроса блюда -> нужное право (зеркало DISH_FIELD_PERMS на
+  // сервере). null — только владелец (перенос в другую категорию).
+  const DISH_BODY_PERMS = {
+    name: "name", subtitle: "subtitle", description: "description", sectionId: null,
+    status: "status", hidden: "hidden", history: "history", historyQuote: "history",
+    servingSteps: "serving", waiterPhrase: "serving", recommendations: "serving",
+    features: "allergens", allergens: "allergens", warning: "warning",
+    calcTables: "composition", faq: "faq",
+  };
 
   const ICONS = {
     all: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
@@ -550,6 +594,7 @@
     const who = await res.json();
     accessScope = who.scope;
     allowedGroups = who.allowedGroups;
+    myPermissions = who.permissions || [];
     sessionStorage.setItem("owg_admin_password", password);
     sessionStorage.setItem("owg_admin_login", login);
     enterApp(who.name);
@@ -573,6 +618,7 @@
         const who = await res.json();
         accessScope = who.scope;
         allowedGroups = who.allowedGroups;
+        myPermissions = who.permissions || [];
         enterApp(who.name);
       }
     });
@@ -629,12 +675,16 @@
       <button class="nav-item ${currentView === "dishes" ? "active" : ""}" onclick="switchView('dishes')${after}">
         ${icon("dishes")}<span>Блюда</span><span class="nav-count">${dishes.length}</span>
       </button>
-      <button class="nav-item ${currentView === "categories" ? "active" : ""}" onclick="switchView('categories')${after}">
-        ${icon("folder")}<span>Категории</span><span class="nav-count">${sections.length}</span>
-      </button>
-      <button class="nav-item ${currentView === "settings" ? "active" : ""}" onclick="switchView('settings')${after}">
-        ${icon("settings")}<span>Настройки</span>
-      </button>
+      ${can("categories") || can("statusTypes") ? `
+        <button class="nav-item ${currentView === "categories" ? "active" : ""}" onclick="switchView('categories')${after}">
+          ${icon("folder")}<span>Категории</span><span class="nav-count">${sections.length}</span>
+        </button>
+      ` : ""}
+      ${can("branding") ? `
+        <button class="nav-item ${currentView === "settings" ? "active" : ""}" onclick="switchView('settings')${after}">
+          ${icon("settings")}<span>Настройки</span>
+        </button>
+      ` : ""}
       ${accessScope === "all" ? `
         <button class="nav-item ${currentView === "users" ? "active" : ""}" onclick="switchView('users')${after}">
           ${icon("edit")}<span>Пользователи</span>
@@ -734,8 +784,8 @@
           <div class="hint">Управление меню и контентом для пособия официанта</div>
         </div>
         <div style="display:flex;gap:8px">
-          <button class="btn-ghost" onclick="openXlsxDialog()">${icon("folder")}Excel</button>
-          <button class="btn-accent" onclick="createDish()">${icon("plus")}Добавить блюдо</button>
+          ${can("composition") ? `<button class="btn-ghost" onclick="openXlsxDialog()">${icon("folder")}Excel</button>
+          <button class="btn-accent" onclick="createDish()">${icon("plus")}Добавить блюдо</button>` : ""}
         </div>
       </div>
       <div class="search-box">
@@ -873,15 +923,18 @@
     overlay.innerHTML = `
       <div class="confirm-modal">
         <h3>Блюда — таблица Excel</h3>
-        <p class="hint">Скачайте текущие блюда таблицей, отредактируйте (или добавьте новые строки по тому же образцу) и загрузите обратно — существующие блюда обновятся, новые заведутся. Ничего не удаляется само.</p>
+        <p class="hint">${isOwner()
+          ? "Скачайте текущие блюда таблицей, отредактируйте (или добавьте новые строки по тому же образцу) и загрузите обратно — существующие блюда обновятся, новые заведутся. Ничего не удаляется само."
+          : "Скачайте блюда своей зоны таблицей Excel (технологические карты с составом). Загружать таблицу обратно может только владелец."}</p>
         <button class="btn-accent" id="xlsxDownloadBtn" style="width:100%;justify-content:center">${icon("photo")}Скачать таблицу (.xlsx)</button>
         <button class="btn-ghost" id="xlsxPreviewBtn" style="width:100%;justify-content:center;margin-top:8px">${icon("eye")}Предпросмотр — что уйдёт в файл</button>
         <div id="xlsxPreviewWrap" style="display:none"></div>
+        ${isOwner() ? `
         <div style="height:14px"></div>
         <p class="hint">Загрузить заполненный файл обратно:</p>
         <input type="file" id="xlsxFileInput" accept=".xlsx">
         <button class="btn-accent" id="xlsxUploadBtn" style="width:100%;justify-content:center;margin-top:8px">Загрузить таблицу</button>
-        <div id="xlsxResult"></div>
+        <div id="xlsxResult"></div>` : ""}
         <div class="row" style="margin-top:14px">
           <button class="btn-ghost" id="xlsxClose" style="flex:1">Закрыть</button>
         </div>
@@ -894,7 +947,7 @@
     document.getElementById("xlsxClose").addEventListener("click", closeDialog);
     document.getElementById("xlsxDownloadBtn").addEventListener("click", (e) => downloadExportXlsx(e.currentTarget));
     document.getElementById("xlsxPreviewBtn").addEventListener("click", (e) => toggleXlsxPreview(e.currentTarget));
-    document.getElementById("xlsxUploadBtn").addEventListener("click", async () => {
+    if (isOwner()) document.getElementById("xlsxUploadBtn").addEventListener("click", async () => {
       const fileInput = document.getElementById("xlsxFileInput");
       const resultEl = document.getElementById("xlsxResult");
       const file = fileInput.files[0];
@@ -958,18 +1011,20 @@
           <button type="button" class="status-pick" data-group="bar">Бар</button>
         </div>
       </div>` : "";
+    const canCats = can("categories");
     main.innerHTML = `
       <div class="view-head"><div><h1>Категории</h1><div class="hint">Разделы меню — каждый показывает количество блюд</div></div></div>
-      <div class="cat-form">
+      ${canCats ? `<div class="cat-form">
         <div class="field"><label>Название категории <span class="req">*</span></label><input type="text" id="newCatName" placeholder="Например: Пасты"></div>
         <div class="field"><label>Иконка</label><div class="icon-grid" id="newCatIconGrid"></div></div>
         ${groupPickerHtml}
         <button class="btn-accent" onclick="addCategory()">${icon("plus")}Добавить категорию</button>
         <div class="status-msg" id="catStatus"></div>
       </div>
-      <div id="catList"></div>
-      <div class="cat-form" id="statusesCard"></div>
+      <div id="catList"></div>` : ""}
+      ${can("statusTypes") ? `<div class="cat-form" id="statusesCard"></div>` : ""}
     `;
+    if (!canCats) { renderStatusesCard(); return; }
     let pickedIcon = "cutlery";
     let pickedGroup = "kitchen";
     const grid = document.getElementById("newCatIconGrid");
@@ -1007,11 +1062,11 @@
           <div class="cat-row-extra">
             ${canPickGroup() ? `<span class="status-tag">${s.group === "bar" ? "Бар" : "Кухня"}</span>` : ""}
             <div class="cat-actions">
-              ${canPickGroup() ? `<button onclick="toggleCategoryGroup('${s.id}')" title="Переключить Кухня/Бар">${icon("settings")}</button>` : ""}
+              ${isOwner() ? `<button onclick="toggleCategoryGroup('${s.id}')" title="Переключить Кухня/Бар">${icon("settings")}</button>` : ""}
               <button onclick="renameCategory('${s.id}')" title="Переименовать">${icon("edit")}</button>
               <button onclick="pickCategoryMediaDialog('${s.id}')" title="Иконка / фото">${icon("folder")}</button>
               <button class="${s.note ? "has-note" : ""}" onclick="editCategoryNoteDialog('${s.id}')" title="Текстовый блок">${icon("note")}</button>
-              <button class="icon-btn danger" style="width:32px;height:32px;border-radius:9px" onclick="removeCategory('${s.id}')" title="Удалить">${icon("trash")}</button>
+              ${isOwner() ? `<button class="icon-btn danger" style="width:32px;height:32px;border-radius:9px" onclick="removeCategory('${s.id}')" title="Удалить">${icon("trash")}</button>` : ""}
             </div>
           </div>
         </div>
@@ -1026,7 +1081,7 @@
                   <button onclick="moveSubsection('${sub.id}', 1)" title="Ниже">↓</button>
                   <button onclick="renameCategory('${sub.id}')" title="Переименовать">${icon("edit")}</button>
                   <button class="${sub.note ? "has-note" : ""}" onclick="editCategoryNoteDialog('${sub.id}')" title="Текстовый блок">${icon("note")}</button>
-                  <button class="icon-btn danger" style="width:32px;height:32px;border-radius:9px" onclick="removeCategory('${sub.id}')" title="Удалить">${icon("trash")}</button>
+                  ${isOwner() ? `<button class="icon-btn danger" style="width:32px;height:32px;border-radius:9px" onclick="removeCategory('${sub.id}')" title="Удалить">${icon("trash")}</button>` : ""}
                 </div>
               </div>
             </div>`).join("")}
@@ -1312,43 +1367,164 @@
     await reload();
   }
 
-  const ROLE_OPTIONS = [["kitchen", "Кухня"], ["bar", "Бар"], ["both", "Оба"]];
-  const ROLE_LABELS = { kitchen: "Кухня", bar: "Бар", both: "Оба" };
+  // Рабочая зона — те же Кухня/Бар, что и у категорий (поле "Зона" при
+  // создании категории): сотрудник видит и правит только категории своей зоны.
+  const ZONE_OPTIONS = [["kitchen", "Кухня"], ["bar", "Бар"], ["both", "Оба"]];
+  const ZONE_LABELS = { kitchen: "Кухня", bar: "Бар", both: "Кухня и бар" };
   const ACTIVITY_LABELS = {
     dish_created: "добавил(а) блюдо", dish_updated: "изменил(а) блюдо", dish_deleted: "удалил(а) блюдо",
     section_created: "добавил(а) категорию", section_updated: "изменил(а) категорию", section_deleted: "удалил(а) категорию",
+    status_created: "добавил(а) статус", status_updated: "изменил(а) статус", status_deleted: "удалил(а) статус",
     user_created: "создал(а) пользователя", user_updated: "изменил(а) пользователя", user_deleted: "удалил(а) пользователя",
+    user_password_reset: "сгенерировал(а) новый пароль для", dishes_imported: "загрузил(а) Excel:",
   };
   function formatActivityAt(ts) {
     return new Date(ts).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   }
 
+  // Список прав приходит с сервера (store.PERMISSIONS) — подписи и порядок
+  // живут в одном месте.
+  let permissionDefs = [];
+  async function loadPermissionDefs() {
+    if (permissionDefs.length) return;
+    const res = await fetch("/api/oko-waiter-guide/admin/permissions", { headers: authHeaders() });
+    permissionDefs = res.ok ? await res.json() : [];
+  }
+  function permissionsSummary(keys) {
+    const labels = permissionDefs.filter((p) => (keys || []).includes(p.key)).map((p) => p.label);
+    return labels.length ? labels.join(", ") : "только просмотр";
+  }
+
+  function zonePickerHtml(id, selected) {
+    return `<div class="status-picker" id="${id}">
+      ${ZONE_OPTIONS.map(([v, label]) => `<button type="button" class="status-pick ${v === selected ? "active" : ""}" data-zone="${v}">${label}</button>`).join("")}
+    </div>`;
+  }
+  function wireZonePicker(id) {
+    const picker = document.getElementById(id);
+    picker.querySelectorAll(".status-pick").forEach((btn) => {
+      btn.addEventListener("click", () => picker.querySelectorAll(".status-pick").forEach((b) => b.classList.toggle("active", b === btn)));
+    });
+  }
+  function readZone(id) {
+    const active = document.querySelector(`#${id} .status-pick.active`);
+    return active ? active.dataset.zone : "kitchen";
+  }
+
+  function permissionsPickerHtml(prefix, selected) {
+    const item = (p) => `
+      <label class="perm-item ${selected.includes(p.key) ? "checked" : ""}">
+        <input type="checkbox" data-perm-key="${p.key}" ${selected.includes(p.key) ? "checked" : ""}>
+        <span>${escapeHtml(p.label)}${p.hint ? `<span class="perm-hint">${escapeHtml(p.hint)}</span>` : ""}</span>
+      </label>`;
+    return `
+      <div class="field" id="${prefix}-fieldPerms"><label>Права — что можно менять в карточке блюда</label>
+        <div class="perm-actions">
+          <button type="button" class="link-btn" data-perm-bulk="on">Отметить все</button>
+          <button type="button" class="link-btn" data-perm-bulk="off">Снять все</button>
+        </div>
+        <div class="perm-grid">${permissionDefs.filter((p) => p.kind === "field").map(item).join("")}</div>
+        <div class="field-note">Без галочек сотрудник может только смотреть блюда своей зоны.</div>
+      </div>
+      <div class="field" id="${prefix}-packagePerms"><label>Расширенные права — давать выборочно</label>
+        <div class="perm-grid">${permissionDefs.filter((p) => p.kind === "package").map(item).join("")}</div>
+      </div>`;
+  }
+  function wirePermissionsPicker(prefix) {
+    [`${prefix}-fieldPerms`, `${prefix}-packagePerms`].forEach((id) => {
+      const wrap = document.getElementById(id);
+      wrap.querySelectorAll("input[data-perm-key]").forEach((input) => {
+        input.addEventListener("change", () => input.closest(".perm-item").classList.toggle("checked", input.checked));
+      });
+    });
+    document.querySelectorAll(`#${prefix}-fieldPerms [data-perm-bulk]`).forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const on = btn.dataset.permBulk === "on";
+        document.querySelectorAll(`#${prefix}-fieldPerms input[data-perm-key]`).forEach((input) => {
+          input.checked = on;
+          input.closest(".perm-item").classList.toggle("checked", on);
+        });
+      });
+    });
+  }
+  function readPermissions(prefix) {
+    return Array.from(document.querySelectorAll(`#${prefix}-fieldPerms input[data-perm-key]:checked, #${prefix}-packagePerms input[data-perm-key]:checked`))
+      .map((input) => input.dataset.permKey);
+  }
+
+  // Готовый текст для пересылки сотруднику (Telegram и т.п.) — одним куском.
+  function credentialsText(user, password) {
+    return [
+      "Доступ к редактированию пособия OKO",
+      "",
+      `Ссылка: ${location.origin}/waiter-guide/admin/`,
+      `Логин: ${user.login}`,
+      `Пароль: ${password}`,
+      "",
+      `Имя: ${user.name}`,
+      user.position ? `Роль: ${user.position}` : null,
+      `Рабочая зона: ${ZONE_LABELS[user.zone] || user.zone}`,
+      `Права: ${permissionsSummary(user.permissions)}`,
+    ].filter((line) => line !== null).join("\n");
+  }
+  function showCredentialsDialog(title, user, password) {
+    const overlay = document.getElementById("confirmOverlay");
+    const text = credentialsText(user, password);
+    overlay.innerHTML = `
+      <div class="confirm-modal wide">
+        <h3>${escapeHtml(title)}</h3>
+        <p>Скопируйте и отправьте сотруднику. Пароль показывается только сейчас — потом его можно только сгенерировать заново.</p>
+        <div class="cred-card"><pre id="credText">${escapeHtml(text)}</pre></div>
+        <div class="row">
+          <button class="btn-ghost" id="credDone">Готово</button>
+          <button class="btn-accent" id="credCopy">${icon("check")}Скопировать</button>
+        </div>
+      </div>`;
+    overlay.classList.add("open");
+    document.getElementById("credDone").addEventListener("click", () => {
+      overlay.classList.remove("open");
+      setTimeout(() => { overlay.innerHTML = ""; }, 200);
+    });
+    document.getElementById("credCopy").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const range = document.createRange();
+        range.selectNodeContents(document.getElementById("credText"));
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+        document.execCommand("copy");
+      }
+      btn.innerHTML = `${icon("check")}Скопировано`;
+      setTimeout(() => { btn.innerHTML = `${icon("check")}Скопировать`; }, 1500);
+    });
+  }
+
   async function renderUsersView() {
+    await loadPermissionDefs();
     const main = document.getElementById("mainContent");
     main.innerHTML = `
-      <div class="view-head"><div><h1>Пользователи</h1><div class="hint">Учётки для персонала — у каждого своё имя, логин и пароль</div></div></div>
+      <div class="view-head"><div><h1>Пользователи</h1><div class="hint">Учётки для сотрудников — у каждого своё имя, логин, пароль и свои права</div></div></div>
       <div class="cat-form">
         <div class="field"><label>Имя <span class="req">*</span></label><input type="text" id="newUserName" placeholder="Например: Николай"></div>
         <div class="field"><label>Логин <span class="req">*</span></label><input type="text" id="newUserLogin" placeholder="nikolay" autocomplete="off"></div>
-        <div class="field"><label>Пароль <span class="req">*</span></label><input type="text" id="newUserPassword" placeholder="Минимум 4 символа" autocomplete="off"></div>
-        <div class="field"><label>Роль</label>
-          <div class="status-picker" id="newUserRolePicker">
-            ${ROLE_OPTIONS.map(([v, label], i) => `<button type="button" class="status-pick ${i === 0 ? "active" : ""}" data-role="${v}">${label}</button>`).join("")}
-          </div>
+        <div class="field"><label>Роль</label><input type="text" id="newUserPosition" placeholder="Например: Шеф-повар, Бармен, Менеджер"></div>
+        <div class="field"><label>Рабочая зона</label>
+          ${zonePickerHtml("newUserZonePicker", "kitchen")}
+          <div class="field-note">Какие категории сотрудник видит и может менять: кухонные, барные или все.</div>
         </div>
-        <button class="btn-accent" onclick="addUser()">${icon("plus")}Добавить пользователя</button>
+        <div class="field"><label>Пароль</label>
+          <div class="field-note" style="margin-top:0">Создаётся автоматически и показывается один раз — сразу после создания. Посмотреть его позже нельзя, можно только сгенерировать новый.</div>
+        </div>
+        ${permissionsPickerHtml("newUser", [])}
+        <button class="btn-accent" id="addUserBtn">${icon("plus")}Создать пользователя</button>
         <div class="status-msg" id="userStatus"></div>
       </div>
       <div id="userList"></div>
     `;
-    let pickedRole = "kitchen";
-    document.querySelectorAll("#newUserRolePicker .status-pick").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        pickedRole = btn.dataset.role;
-        document.querySelectorAll("#newUserRolePicker .status-pick").forEach((b) => b.classList.toggle("active", b === btn));
-      });
-    });
-    window._newUserRole = () => pickedRole;
+    wireZonePicker("newUserZonePicker");
+    wirePermissionsPicker("newUser");
+    document.getElementById("addUserBtn").addEventListener("click", addUser);
 
     const res = await fetch("/api/oko-waiter-guide/admin/users", { headers: authHeaders() });
     const users = res.ok ? await res.json() : [];
@@ -1356,12 +1532,16 @@
     document.getElementById("userList").innerHTML = users.length ? users.map((u) => `
       <div class="cat-row">
         <div class="icon-chip">${icon("edit")}</div>
-        <div class="info"><div class="name">${escapeHtml(u.name)}</div><div class="count">Логин: ${escapeHtml(u.login)}</div></div>
+        <div class="info">
+          <div class="name">${escapeHtml(u.name)}${u.position ? ` <span style="color:var(--dim);font-weight:600">· ${escapeHtml(u.position)}</span>` : ""}</div>
+          <div class="count">Логин: ${escapeHtml(u.login)}</div>
+          <div class="user-perms">Права: ${escapeHtml(permissionsSummary(u.permissions))}</div>
+        </div>
         <div class="cat-row-extra">
-          <span class="status-tag">${ROLE_LABELS[u.role] || u.role}</span>
+          <span class="status-tag">${ZONE_LABELS[u.zone] || u.zone}</span>
           <div class="cat-actions">
             <button onclick="editUser('${u.id}')" title="Редактировать">${icon("edit")}</button>
-            <button class="icon-btn danger" style="width:32px;height:32px;border-radius:9px" onclick="removeUser('${u.id}', '${escapeHtml(u.name)}')" title="Удалить">${icon("trash")}</button>
+            <button class="icon-btn danger" style="width:32px;height:32px;border-radius:9px" onclick="removeUser('${u.id}')" title="Удалить">${icon("trash")}</button>
           </div>
         </div>
       </div>`).join("") : `<div class="empty-note">Пока нет ни одного пользователя</div>`;
@@ -1369,77 +1549,86 @@
   let lastUsers = [];
 
   async function addUser() {
-    const name = document.getElementById("newUserName").value;
-    const login2 = document.getElementById("newUserLogin").value;
-    const pw = document.getElementById("newUserPassword").value;
-    const role = window._newUserRole ? window._newUserRole() : "kitchen";
     const statusEl = document.getElementById("userStatus");
+    const body = {
+      name: document.getElementById("newUserName").value,
+      login: document.getElementById("newUserLogin").value,
+      position: document.getElementById("newUserPosition").value,
+      zone: readZone("newUserZonePicker"),
+      permissions: readPermissions("newUser"),
+    };
     const res = await fetch("/api/oko-waiter-guide/admin/users", {
-      method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ name, login: login2, password: pw, role }),
+      method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(body),
     });
     const data = await res.json();
     if (!res.ok) { statusEl.className = "status-msg error"; statusEl.innerText = data.error || "Не удалось добавить"; return; }
-    renderUsersView();
+    await renderUsersView();
+    showCredentialsDialog("Пользователь создан", data.user, data.password);
   }
+
   async function editUser(id) {
     const user = lastUsers.find((u) => u.id === id);
     if (!user) return;
-    const patch = await editUserDialog(user);
-    if (!patch) return;
-    const res = await fetch(`/api/oko-waiter-guide/admin/users/${id}`, {
-      method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(patch),
-    });
-    const data = await res.json();
-    if (!res.ok) { alert(data.error || "Не удалось сохранить"); return; }
-    renderUsersView();
-  }
-  // resolve(patch object) при сохранении, resolve(null) при отмене
-  function editUserDialog(user) {
-    return new Promise((resolve) => {
-      const overlay = document.getElementById("confirmOverlay");
-      overlay.innerHTML = `
-        <div class="confirm-modal">
-          <h3>Редактировать пользователя</h3>
-          <div class="field"><label>Имя</label><input type="text" id="editUserName" value="${escapeHtml(user.name)}"></div>
-          <div class="field"><label>Логин</label><input type="text" id="editUserLogin" value="${escapeHtml(user.login)}" autocomplete="off"></div>
-          <div class="field"><label>Роль</label>
-            <div class="status-picker" id="editUserRolePicker">
-              ${ROLE_OPTIONS.map(([v, label]) => `<button type="button" class="status-pick ${v === user.role ? "active" : ""}" data-role="${v}">${label}</button>`).join("")}
-            </div>
-          </div>
-          <div class="field"><label>Новый пароль <span style="color:var(--dim);font-weight:normal;font-size:0.813rem">(оставьте пустым, чтобы не менять)</span></label><input type="text" id="editUserPassword" placeholder="Минимум 4 символа" autocomplete="off"></div>
-          <div class="status-msg" id="editUserStatus"></div>
-          <div class="row">
-            <button class="btn-ghost" id="editUserCancel">Отмена</button>
-            <button class="btn-accent" id="editUserSave">Сохранить</button>
-          </div>
-        </div>`;
-      overlay.classList.add("open");
-      let pickedRole = user.role;
-      document.querySelectorAll("#editUserRolePicker .status-pick").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          pickedRole = btn.dataset.role;
-          document.querySelectorAll("#editUserRolePicker .status-pick").forEach((b) => b.classList.toggle("active", b === btn));
-        });
+    const overlay = document.getElementById("confirmOverlay");
+    overlay.innerHTML = `
+      <div class="confirm-modal wide">
+        <h3>Редактировать пользователя</h3>
+        <div class="field" style="margin-top:12px"><label>Имя</label><input type="text" id="editUserName" value="${escapeHtml(user.name)}"></div>
+        <div class="field"><label>Логин</label><input type="text" id="editUserLogin" value="${escapeHtml(user.login)}" autocomplete="off"></div>
+        <div class="field"><label>Роль</label><input type="text" id="editUserPosition" value="${escapeHtml(user.position)}" placeholder="Например: Шеф-повар"></div>
+        <div class="field"><label>Рабочая зона</label>${zonePickerHtml("editUserZonePicker", user.zone)}</div>
+        ${permissionsPickerHtml("editUser", user.permissions)}
+        <div class="field"><label>Пароль</label>
+          <button type="button" class="btn-ghost" id="editUserResetPw" style="flex:none">Сгенерировать новый пароль</button>
+          <div class="field-note">Старый пароль сразу перестанет работать. Новый покажется один раз.</div>
+        </div>
+        <div class="status-msg" id="editUserStatus"></div>
+        <div class="row">
+          <button class="btn-ghost" id="editUserCancel">Отмена</button>
+          <button class="btn-accent" id="editUserSave">Сохранить</button>
+        </div>
+      </div>`;
+    overlay.classList.add("open");
+    wireZonePicker("editUserZonePicker");
+    wirePermissionsPicker("editUser");
+    const close = () => { overlay.classList.remove("open"); setTimeout(() => { overlay.innerHTML = ""; }, 200); };
+    const statusEl = document.getElementById("editUserStatus");
+    document.getElementById("editUserCancel").addEventListener("click", close);
+    document.getElementById("editUserSave").addEventListener("click", async () => {
+      const patch = {
+        name: document.getElementById("editUserName").value.trim(),
+        login: document.getElementById("editUserLogin").value.trim(),
+        position: document.getElementById("editUserPosition").value,
+        zone: readZone("editUserZonePicker"),
+        permissions: readPermissions("editUser"),
+      };
+      if (!patch.name) { statusEl.className = "status-msg error"; statusEl.innerText = "Укажите имя"; return; }
+      if (!patch.login) { statusEl.className = "status-msg error"; statusEl.innerText = "Укажите логин"; return; }
+      const res = await fetch(`/api/oko-waiter-guide/admin/users/${id}`, {
+        method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(patch),
       });
-      const finish = (val) => { overlay.classList.remove("open"); setTimeout(() => { overlay.innerHTML = ""; }, 200); resolve(val); };
-      document.getElementById("editUserCancel").addEventListener("click", () => finish(null));
-      document.getElementById("editUserSave").addEventListener("click", () => {
-        const name = document.getElementById("editUserName").value.trim();
-        const login2 = document.getElementById("editUserLogin").value.trim();
-        const pw = document.getElementById("editUserPassword").value;
-        if (!name) { document.getElementById("editUserStatus").className = "status-msg error"; document.getElementById("editUserStatus").innerText = "Укажите имя"; return; }
-        if (!login2) { document.getElementById("editUserStatus").className = "status-msg error"; document.getElementById("editUserStatus").innerText = "Укажите логин"; return; }
-        if (pw && pw.length < 4) { document.getElementById("editUserStatus").className = "status-msg error"; document.getElementById("editUserStatus").innerText = "Пароль слишком короткий"; return; }
-        const patch = { name, login: login2, role: pickedRole };
-        if (pw) patch.password = pw;
-        finish(patch);
-      });
+      const data = await res.json();
+      if (!res.ok) { statusEl.className = "status-msg error"; statusEl.innerText = data.error || "Не удалось сохранить"; return; }
+      close();
+      renderUsersView();
+    });
+    document.getElementById("editUserResetPw").addEventListener("click", async () => {
+      close();
+      await new Promise((r) => setTimeout(r, 220));
+      const ok = await confirmDialog(`Новый пароль для «${user.name}»?`, "Старый пароль сразу перестанет работать.", { okLabel: "Сгенерировать", danger: false });
+      if (!ok) return;
+      const res = await fetch(`/api/oko-waiter-guide/admin/users/${id}/reset-password`, { method: "POST", headers: authHeaders() });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || "Не удалось"); return; }
+      await new Promise((r) => setTimeout(r, 220));
+      showCredentialsDialog("Новый пароль создан", data.user, data.password);
     });
   }
-  async function removeUser(id, name) {
-    const ok = await confirmDialog(`Удалить пользователя «${name}»?`, "Он больше не сможет войти в админку.");
+
+  async function removeUser(id) {
+    const user = lastUsers.find((u) => u.id === id);
+    if (!user) return;
+    const ok = await confirmDialog(`Удалить пользователя «${user.name}»?`, "Он больше не сможет войти в админку.");
     if (!ok) return;
     await fetch(`/api/oko-waiter-guide/admin/users/${id}`, { method: "DELETE", headers: authHeaders() });
     renderUsersView();
@@ -1466,8 +1655,8 @@
   async function renderSettingsView() {
     const t = Date.now();
     document.getElementById("mainContent").innerHTML = `
-      <div class="view-head"><div><h1>Настройки</h1><div class="hint">Ссылка на пособие официанта, логотип и фото на главном экране</div></div></div>
-      <div class="cat-form">
+      <div class="view-head"><div><h1>Настройки</h1><div class="hint">${isOwner() ? "Ссылка на пособие официанта, логотип и фото на главном экране" : "Логотип и фото на главном экране пособия"}</div></div></div>
+      ${isOwner() ? `<div class="cat-form">
         <div class="field"><label>Публичная ссылка (без пароля)</label>
           <div style="display:flex;gap:8px">
             <input type="text" id="guideLinkInput" readonly value="${location.origin}/waiter-guide/" style="flex:1">
@@ -1490,7 +1679,7 @@
       <div class="cat-form">
         <div class="view-head" style="margin-bottom:12px"><div><h1 style="font-size:1.05rem">Открытия пособия</h1><div class="hint">Страница без логина — узнать, кто именно открыл, нельзя; только сколько раз и когда</div></div></div>
         <div id="guideViewStats"><div class="empty-note">Загрузка…</div></div>
-      </div>
+      </div>` : ""}
 
       <div class="cat-form">
         <div class="settings-media-row">
@@ -1554,6 +1743,7 @@
       });
     });
 
+    if (!isOwner()) return;
     document.getElementById("copyGuideLinkBtn").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
       const input = document.getElementById("guideLinkInput");
@@ -1671,6 +1861,7 @@
   }
 
   async function createDish() {
+    if (!isOwner()) return createDishDialog();
     const sectionId = categoryFilter !== "all" ? categoryFilter : (sections[0] && sections[0].id) || null;
     const res = await fetch("/api/oko-waiter-guide/admin/dishes", {
       method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
@@ -1680,6 +1871,46 @@
     const created = await res.json();
     await reload();
     openEditor(created.id, { startUnlocked: true });
+  }
+
+  // Сотрудник (пакет "Состав") задаёт при создании название и категорию
+  // своей зоны — переименовывать/переносить блюдо потом он может только при
+  // наличии соответствующих прав.
+  function createDishDialog() {
+    const overlay = document.getElementById("confirmOverlay");
+    const preselect = categoryFilter !== "all" ? categoryFilter : "";
+    overlay.innerHTML = `
+      <div class="confirm-modal">
+        <h3>Новое блюдо</h3>
+        <div class="field" style="margin-top:12px"><label>Название <span class="req">*</span></label><input type="text" id="newDishName" placeholder="Например: Салат с киноа"></div>
+        <div class="field"><label>Категория <span class="req">*</span></label>
+          <select id="newDishSection">${sectionsTreeOrdered().map((s) => `<option value="${s.id}" ${s.id === preselect ? "selected" : ""}>${s.parentId ? "└ " : ""}${escapeHtml(s.name)}</option>`).join("")}</select>
+        </div>
+        <div class="field-note">Название и категорию важно указать сразу — потом их может поменять только тот, у кого есть на это права.</div>
+        <div class="status-msg" id="newDishStatus"></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn-ghost" id="newDishCancel">Отмена</button>
+          <button class="btn-accent" id="newDishCreate">Создать</button>
+        </div>
+      </div>`;
+    overlay.classList.add("open");
+    const close = () => { overlay.classList.remove("open"); setTimeout(() => { overlay.innerHTML = ""; }, 200); };
+    document.getElementById("newDishName").focus();
+    document.getElementById("newDishCancel").addEventListener("click", close);
+    document.getElementById("newDishCreate").addEventListener("click", async () => {
+      const name = document.getElementById("newDishName").value.trim();
+      const sectionId = document.getElementById("newDishSection").value;
+      const statusEl = document.getElementById("newDishStatus");
+      if (!name) { statusEl.className = "status-msg error"; statusEl.innerText = "Укажите название"; return; }
+      const res = await fetch("/api/oko-waiter-guide/admin/dishes", {
+        method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ name, sectionId }),
+      });
+      const data = await res.json();
+      if (!res.ok) { statusEl.className = "status-msg error"; statusEl.innerText = data.error || "Не удалось создать"; return; }
+      close();
+      await reload();
+      openEditor(data.id, { startUnlocked: true });
+    });
   }
 
   function localDraftKey(id) { return "owg_admin_draft_" + id; }
@@ -1773,7 +2004,7 @@
         <div class="spacer"></div>
         <span class="save-indicator" id="saveIndicator"></span>
         <button class="icon-btn" onclick="openPreview('${dish.id}')" title="Предпросмотр">${icon("eye")}</button>
-        <button class="icon-btn danger" onclick="deleteDish('${dish.id}')" title="Удалить">${icon("trash")}</button>
+        ${isOwner() ? `<button class="icon-btn danger" onclick="deleteDish('${dish.id}')" title="Удалить">${icon("trash")}</button>` : ""}
       </div>
       <div class="tabs-scroll"><div class="tabs" id="editorTabs"></div></div>
       <div id="editorPanel"></div>
@@ -1800,6 +2031,10 @@
   function renderEditorFooter(dish) {
     const footer = document.getElementById("editorFooter");
     if (!footer) return;
+    if (!canEditAnyDishField()) {
+      footer.innerHTML = `<button class="btn-ghost" onclick="openPreview('${dish.id}')">${icon("eye")}Предпросмотр</button>`;
+      return;
+    }
     footer.innerHTML = editorLocked
       ? `<button class="btn-ghost" onclick="openPreview('${dish.id}')">${icon("eye")}Предпросмотр</button>
          <button class="btn-accent" onclick="unlockEditor()">${icon("edit")}Редактировать</button>`
@@ -1818,10 +2053,29 @@
     else panel.innerHTML = renderFaqTab(dish);
     panel.classList.toggle("panel-locked", editorLocked);
     wirePanelEvents(dish);
+    applyPermLocks(panel);
     if (editorLocked) {
       panel.querySelectorAll("input, textarea, select").forEach((el) => { el.disabled = true; });
     }
     renderEditorFooter(dish);
+  }
+
+  // Блоки с data-perm="<право>" — сотрудник без этого права видит их, но не
+  // может менять ("__owner" — только владелец). Сервер всё равно отклонит
+  // такое поле, это просто чтобы интерфейс не обещал лишнего.
+  function applyPermLocks(panel) {
+    if (isOwner()) return;
+    panel.querySelectorAll("[data-perm]").forEach((block) => {
+      const perm = block.dataset.perm;
+      if (perm !== "__owner" && can(perm)) return;
+      block.classList.add("perm-locked");
+      block.querySelectorAll("input, textarea, select").forEach((el) => { el.disabled = true; });
+      block.querySelectorAll("[draggable]").forEach((el) => { el.draggable = false; });
+      const note = `<span class="perm-lock-note">${perm === "__owner" ? "меняет владелец" : "нет права на правку"}</span>`;
+      const label = block.querySelector(":scope > label");
+      if (label) label.insertAdjacentHTML("beforeend", note);
+      else block.insertAdjacentHTML("afterbegin", `<div class="perm-lock-banner">${note}</div>`);
+    });
   }
 
   function renderBasicTab(dish) {
@@ -1829,25 +2083,25 @@
     const draft = ensureDraft(dish.id);
     return `
       <div class="editor-panel">
-        <div class="field"><label>Фотографии</label>
+        <div class="field" data-perm="photos"><label>Фотографии</label>
           <div class="photo-grid" id="photoGrid"></div>
           <input type="file" id="photoFileInput" accept="image/*" multiple style="display:none">
           <div class="hint" style="font-size:0.719rem;color:var(--dim)">Первое фото — главное, оно используется в списке и карточке блюда. Перетаскивайте, чтобы поменять порядок.</div>
         </div>
       </div>
       <div class="editor-panel">
-        <div class="field"><label>Название <span class="req">*</span></label><input type="text" id="f-name" value="${escapeHtml(draft.name)}"></div>
-        <div class="field"><label>Подзаголовок</label><input type="text" id="f-subtitle" value="${escapeHtml(draft.subtitle)}"></div>
-        <div class="field"><label>Краткое описание <span class="req">*</span></label><textarea id="f-description">${escapeHtml(draft.description)}</textarea></div>
-        <div class="field"><label>Категория <span class="req">*</span></label>
+        <div class="field" data-perm="name"><label>Название <span class="req">*</span></label><input type="text" id="f-name" value="${escapeHtml(draft.name)}"></div>
+        <div class="field" data-perm="subtitle"><label>Подзаголовок</label><input type="text" id="f-subtitle" value="${escapeHtml(draft.subtitle)}"></div>
+        <div class="field" data-perm="description"><label>Краткое описание <span class="req">*</span></label><textarea id="f-description">${escapeHtml(draft.description)}</textarea></div>
+        <div class="field" data-perm="__owner"><label>Категория <span class="req">*</span></label>
           <select id="f-section">${sectionsTreeOrdered().map((s) => `<option value="${s.id}" ${s.id === draft.sectionId ? "selected" : ""}>${s.parentId ? "└ " : ""}${escapeHtml(s.name)}</option>`).join("")}</select>
         </div>
-        <div class="field"><label>Статус</label>
+        <div class="field" data-perm="status"><label>Статус</label>
           <div class="status-picker" id="statusPicker">
             ${statusOptions().map(([v, label]) => `<button type="button" class="status-pick ${v === draft.status ? "active" : ""}" data-status="${escapeHtml(v)}">${escapeHtml(label)}</button>`).join("")}
           </div>
         </div>
-        <div class="field" style="display:flex;align-items:center;gap:8px">
+        <div class="field" data-perm="hidden" style="display:flex;align-items:center;gap:8px">
           <input type="checkbox" id="f-hidden" ${draft.hidden ? "checked" : ""} style="width:16px;height:16px;accent-color:var(--accent)">
           <label for="f-hidden" style="margin:0">Скрыть блюдо (не показывать официантам)</label>
         </div>
@@ -1857,7 +2111,7 @@
 
   function renderCompositionTab(dish) {
     return `
-      <div class="editor-panel">
+      <div class="editor-panel" data-perm="composition">
         <div id="calcTablesWrap"></div>
         <button type="button" class="btn-add-row" onclick="addCalcTable('${dish.id}')">${icon("plus")} Добавить группу ингредиентов</button>
       </div>
@@ -1868,8 +2122,8 @@
     const draft = ensureDraft(dish.id);
     return `
       <div class="editor-panel">
-        <div class="field"><label>История блюда</label><textarea id="f-history" rows="4">${escapeHtml(draft.history)}</textarea></div>
-        <div class="field"><label>Интересный факт (необязательно)</label><input type="text" id="f-historyQuote" value="${escapeHtml(draft.historyQuote)}"></div>
+        <div class="field" data-perm="history"><label>История блюда</label><textarea id="f-history" rows="4">${escapeHtml(draft.history)}</textarea></div>
+        <div class="field" data-perm="history"><label>Интересный факт (необязательно)</label><input type="text" id="f-historyQuote" value="${escapeHtml(draft.historyQuote)}"></div>
       </div>
     `;
   }
@@ -1878,11 +2132,11 @@
     const draft = ensureDraft(dish.id);
     return `
       <div class="editor-panel">
-        <div class="field"><label>Как подаём</label>
+        <div class="field" data-perm="serving"><label>Как подаём</label>
           <textarea id="f-servingSteps" rows="4" placeholder="Подаётся охлаждённым&#10;Украшается микрозеленью">${arrayToLines(draft.servingSteps)}</textarea>
         </div>
-        <div class="field"><label>Что сказать гостю</label><textarea id="f-waiterPhrase" rows="3">${escapeHtml(draft.waiterPhrase)}</textarea></div>
-        <div class="field"><label>Рекомендации</label>
+        <div class="field" data-perm="serving"><label>Что сказать гостю</label><textarea id="f-waiterPhrase" rows="3">${escapeHtml(draft.waiterPhrase)}</textarea></div>
+        <div class="field" data-perm="serving"><label>Рекомендации</label>
           <textarea id="f-recommendations" rows="3" placeholder="По одной на строку">${arrayToLines(draft.recommendations)}</textarea>
         </div>
       </div>
@@ -1893,7 +2147,7 @@
     const draft = ensureDraft(dish.id);
     return `
       <div class="editor-panel">
-        <div class="field"><label>Аллергены</label>
+        <div class="field" data-perm="allergens"><label>Аллергены</label>
           <div class="checkbox-grid" id="allergenGrid">
             ${ALLERGEN_OPTIONS.map((a) => `
               <label class="check-item ${draft.allergensChecked.has(a) ? "checked" : ""}" data-allergen="${escapeHtml(a)}">
@@ -1903,17 +2157,17 @@
           <label style="font-size:0.75rem;color:var(--dim);font-weight:600;display:block;margin-bottom:5px">Другое (по одному на строку)</label>
           <textarea id="f-allergenOther" rows="2">${escapeHtml(draft.allergensOther)}</textarea>
         </div>
-        <div class="field"><label>Особенности</label>
+        <div class="field" data-perm="allergens"><label>Особенности</label>
           <textarea id="f-features" rows="3" placeholder="По одной на строку">${arrayToLines(draft.features)}</textarea>
         </div>
-        <div class="field"><label>Предупреждение</label><input type="text" id="f-warning" value="${escapeHtml(draft.warning)}" placeholder="Например: не рекомендуется гостям с ослабленным иммунитетом"></div>
+        <div class="field" data-perm="warning"><label>Предупреждение</label><input type="text" id="f-warning" value="${escapeHtml(draft.warning)}" placeholder="Например: не рекомендуется гостям с ослабленным иммунитетом"></div>
       </div>
     `;
   }
 
   function renderFaqTab(dish) {
     return `
-      <div class="editor-panel">
+      <div class="editor-panel" data-perm="faq">
         <div id="faqWrap"></div>
         <button type="button" class="btn-add-row" onclick="addFaqRow('${dish.id}')">${icon("plus")} Добавить вопрос</button>
       </div>
@@ -1933,7 +2187,7 @@
       const fileInput = document.getElementById("photoFileInput");
       document.querySelectorAll("#statusPicker .status-pick").forEach((btn) => {
         btn.addEventListener("click", () => {
-          if (editorLocked) return;
+          if (editorLocked || !can("status")) return;
           document.querySelectorAll("#statusPicker .status-pick").forEach((b) => b.classList.remove("active"));
           btn.classList.add("active");
           ensureDraft(id).status = btn.dataset.status;
@@ -1967,14 +2221,18 @@
       bindField("f-allergenOther", "allergensOther");
       bindField("f-features", "features", { lines: true });
       bindField("f-warning", "warning");
+      // Слушаем change самого чекбокса: клик по тексту <label> браузер сам
+      // превращает в клик по input. Раньше обработчик висел на click у label
+      // и срабатывал дважды (клик по тексту + синтетический клик по input) —
+      // галочка по названию аллергена не ставилась вовсе.
       document.querySelectorAll("#allergenGrid .check-item").forEach((label) => {
-        label.addEventListener("click", () => {
-          if (editorLocked) return;
+        const input = label.querySelector("input");
+        input.addEventListener("change", () => {
+          if (editorLocked || !can("allergens")) { input.checked = !input.checked; return; }
           const a = label.dataset.allergen;
           const draft = ensureDraft(id);
-          if (draft.allergensChecked.has(a)) draft.allergensChecked.delete(a); else draft.allergensChecked.add(a);
-          label.classList.toggle("checked", draft.allergensChecked.has(a));
-          label.querySelector("input").checked = draft.allergensChecked.has(a);
+          if (input.checked) draft.allergensChecked.add(a); else draft.allergensChecked.delete(a);
+          label.classList.toggle("checked", input.checked);
           markDirty();
         });
       });
@@ -2027,6 +2285,7 @@
         editingDishId = dishId; renderMain();
       });
     });
+    if (!can("photos")) return;
     let dragEl = null;
     wrap.querySelectorAll(".photo-item").forEach((item) => {
       item.addEventListener("dragstart", () => { dragEl = item; item.classList.add("dragging"); });
@@ -2192,12 +2451,18 @@
       calcTables: draft.calcTables,
       faq: draft.faq.filter((f) => f.question && f.question.trim()),
     };
+    // Сотрудник отправляет только поля, на которые у него есть право — иначе
+    // сервер отклонит весь запрос (см. DISH_FIELD_PERMS в api).
+    if (!isOwner()) {
+      Object.keys(body).forEach((k) => { const perm = DISH_BODY_PERMS[k]; if (!perm || !can(perm)) delete body[k]; });
+    }
 
     const res = await fetch(`/api/oko-waiter-guide/admin/dishes/${dishId}`, {
       method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(body),
     });
     if (!res.ok) {
-      if (statusEl) { statusEl.textContent = "Не удалось сохранить"; statusEl.className = "save-indicator dirty"; }
+      const err = await res.json().catch(() => ({}));
+      if (statusEl) { statusEl.textContent = err.error || "Не удалось сохранить"; statusEl.className = "save-indicator dirty"; }
       return;
     }
     isDirty = false;
@@ -2284,7 +2549,8 @@
   }
 
   // ---------- confirm modal ----------
-  function confirmDialog(title, text) {
+  function confirmDialog(title, text, opts) {
+    opts = opts || {};
     return new Promise((resolve) => {
       const overlay = document.getElementById("confirmOverlay");
       overlay.innerHTML = `
@@ -2293,7 +2559,7 @@
           <p>${escapeHtml(text)}</p>
           <div class="row">
             <button class="btn-ghost" id="confirmCancel">Отмена</button>
-            <button class="btn-accent" id="confirmOk" style="background:var(--bad);color:#fff">Удалить</button>
+            <button class="btn-accent" id="confirmOk" ${opts.danger === false ? "" : 'style="background:var(--bad);color:#fff"'}>${escapeHtml(opts.okLabel || "Удалить")}</button>
           </div>
         </div>`;
       overlay.classList.add("open");

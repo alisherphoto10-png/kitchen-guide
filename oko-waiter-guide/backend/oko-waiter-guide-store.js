@@ -227,7 +227,14 @@ async function updateSection(id, patch) {
   return section;
 }
 
+// Подраздел живёт в зоне своего родителя — его собственное поле group не
+// учитывается (раньше подраздел барного раздела заводился как "kitchen" и
+// пропадал у бар-сотрудника).
 function sectionGroup(section) {
+  if (section && section.parentId) {
+    const parent = readSections().find((s) => s.id === section.parentId);
+    if (parent) return parent.group === "bar" ? "bar" : "kitchen";
+  }
   return section && section.group === "bar" ? "bar" : "kitchen";
 }
 
@@ -535,33 +542,90 @@ function readUsers() {
 function writeUsers(users) {
   writeJson(USERS_PATH, users);
 }
-function normalizeRole(role) {
-  return ["kitchen", "bar", "both"].includes(role) ? role : "kitchen";
+function normalizeZone(zone) {
+  return ["kitchen", "bar", "both"].includes(zone) ? zone : "kitchen";
 }
+
+// Персональные права сотрудника — по умолчанию все выключены. Первая группа
+// ("field") — отдельные поля карточки блюда; вторая ("package") — более
+// закрытые наборы, которые владелец даёт выборочно. Что сюда не входит
+// (удаление блюд/категорий, перенос блюда в другую категорию, зона
+// Кухня/Бар у категории, импорт Excel, уведомление, пользователи,
+// активность) — только владелец. Проверка — в oko-waiter-guide-api.js.
+const PERMISSIONS = [
+  { key: "name", label: "Название", kind: "field" },
+  { key: "subtitle", label: "Подзаголовок", kind: "field" },
+  { key: "description", label: "Краткое описание", kind: "field" },
+  { key: "warning", label: "Важное (предупреждение)", kind: "field" },
+  { key: "allergens", label: "Аллергены и особенности", kind: "field" },
+  { key: "history", label: "История и интересный факт", kind: "field" },
+  { key: "serving", label: "Подача", kind: "field" },
+  { key: "faq", label: "FAQ", kind: "field" },
+  { key: "photos", label: "Фото", kind: "field" },
+  { key: "status", label: "Статус", kind: "field" },
+  { key: "hidden", label: "Скрыть/показать", kind: "field" },
+  { key: "composition", label: "Состав", kind: "package", hint: "Редактирование состава, добавление новых блюд, выгрузка ТТК в Excel" },
+  { key: "categories", label: "Категории", kind: "package", hint: "Создание, переименование и изменение категорий и подкатегорий" },
+  { key: "statusTypes", label: "Виды статусов", kind: "package", hint: "Создание, переименование и удаление статусов (🔥 Хит и т.п.)" },
+  { key: "branding", label: "Логотип и фото главной", kind: "package", hint: "Замена логотипа и трёх фото на главном экране пособия" },
+];
+const PERMISSION_KEYS = new Set(PERMISSIONS.map((p) => p.key));
+function normalizePermissions(list) {
+  return Array.isArray(list) ? [...new Set(list.filter((k) => PERMISSION_KEYS.has(k)))] : [];
+}
+
+// Пароль только генерируется (вручную не задаётся) и показывается владельцу
+// один раз — в ответе на создание/сброс; храним только bcrypt-хэш, так что
+// посмотреть старый пароль задним числом невозможно в принципе. Формат —
+// слоги + цифры ("ramo-kedi-lupa-58"): легко продиктовать и набрать с
+// телефона, без похожих символов, при этом ~10^14 вариантов.
+function generatePassword() {
+  const consonants = "bdfgkmnprstvz";
+  const vowels = "aeiou";
+  const crypto = require("crypto");
+  const pick = (s) => s[crypto.randomInt(s.length)];
+  const syllable = () => pick(consonants) + pick(vowels);
+  const groups = [0, 1, 2].map(() => syllable() + syllable());
+  return `${groups.join("-")}-${String(crypto.randomInt(100)).padStart(2, "0")}`;
+}
+
 function shapeUser(u) {
-  return { id: u.id, name: u.name, login: u.login, role: normalizeRole(u.role), createdAt: u.createdAt };
+  return {
+    id: u.id,
+    name: u.name,
+    login: u.login,
+    position: u.position || "",
+    zone: normalizeZone(u.zone || u.role),
+    permissions: normalizePermissions(u.permissions),
+    createdAt: u.createdAt,
+  };
 }
 function findUserByLogin(login) {
   return readUsers().find((u) => u.login === login) || null;
 }
-function addUser({ name, login, password, role }) {
+// Возвращает { user, password } — password в открытом виде существует только
+// в этом ответе, дальше нигде не сохраняется.
+function addUser({ name, login, position, zone, permissions }) {
   const users = readUsers();
   if (users.some((u) => u.login === login)) {
     const err = new Error("Логин уже занят");
     err.code = "LOGIN_TAKEN";
     throw err;
   }
+  const password = generatePassword();
   const user = {
     id: makeId(),
     name: (name || "").trim(),
     login: (login || "").trim(),
-    passwordHash: bcrypt.hashSync(String(password || ""), 10),
-    role: normalizeRole(role),
+    position: (position || "").trim(),
+    passwordHash: bcrypt.hashSync(password, 10),
+    zone: normalizeZone(zone),
+    permissions: normalizePermissions(permissions),
     createdAt: Date.now(),
   };
   users.push(user);
   writeUsers(users);
-  return shapeUser(user);
+  return { user: shapeUser(user), password };
 }
 function updateUser(id, patch) {
   const users = readUsers();
@@ -577,10 +641,20 @@ function updateUser(id, patch) {
     user.login = login;
   }
   if (patch.name !== undefined) user.name = patch.name.trim();
-  if (patch.role !== undefined) user.role = normalizeRole(patch.role);
-  if (patch.password) user.passwordHash = bcrypt.hashSync(String(patch.password), 10);
+  if (patch.position !== undefined) user.position = String(patch.position).trim();
+  if (patch.zone !== undefined) { user.zone = normalizeZone(patch.zone); delete user.role; }
+  if (patch.permissions !== undefined) user.permissions = normalizePermissions(patch.permissions);
   writeUsers(users);
   return shapeUser(user);
+}
+function resetUserPassword(id) {
+  const users = readUsers();
+  const user = users.find((u) => u.id === id);
+  if (!user) return null;
+  const password = generatePassword();
+  user.passwordHash = bcrypt.hashSync(password, 10);
+  writeUsers(users);
+  return { user: shapeUser(user), password };
 }
 function deleteUser(id) {
   const users = readUsers();
@@ -668,6 +742,8 @@ module.exports = {
   sectionGroup,
   addUser,
   updateUser,
+  resetUserPassword,
+  PERMISSIONS,
   deleteUser,
   readUsers,
   shapeUser,
