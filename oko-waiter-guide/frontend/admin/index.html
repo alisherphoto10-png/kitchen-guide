@@ -394,9 +394,11 @@
   .confirm-modal .link-btn { flex: none; }
   .field-note { font-size: 0.719rem; color: var(--dim); margin-top: 5px; line-height: 1.4; }
   .cred-card { background: var(--card2); border: 1px solid var(--accent); border-radius: 14px; padding: 14px; margin: 10px 0 14px; }
-  .cred-card pre {
-    white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.813rem; line-height: 1.5; color: var(--text); margin: 0; user-select: all;
+  .cred-view { font-size: 0.875rem; line-height: 1.55; color: var(--text); word-break: break-word; }
+  .cred-view b { color: var(--text); }
+  .cred-view code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.844rem; color: var(--accent);
+    background: rgba(255,255,255,0.06); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px;
   }
   .user-perms { font-size: 0.719rem; color: var(--dim); margin-top: 2px; }
   /* Поле, на которое у сотрудника нет права: видно, но не редактируется. */
@@ -1452,29 +1454,76 @@
       .map((input) => input.dataset.permKey);
   }
 
-  // Готовый текст для пересылки сотруднику (Telegram и т.п.) — одним куском.
-  function credentialsText(user, password) {
+  // Карточка доступа для пересылки сотруднику — формат выбран владельцем
+  // (вариант C, 2026-09-27): жирные подписи, логин/пароль моноширинным,
+  // галочками только реально включённые базовые права, пакеты — одной
+  // строкой. Одни и те же данные рендерятся дважды: как текст с разметкой
+  // для вставки в Telegram и как HTML для окна на странице.
+  const CRED_SHORT_LABELS = { warning: "Важное", branding: "Логотип" };
+  function credentialsData(user, password) {
+    const label = (p) => CRED_SHORT_LABELS[p.key] || p.label;
+    const granted = user.permissions || [];
+    const packages = permissionDefs.filter((p) => p.kind === "package");
+    const grantedPackages = packages.filter((p) => granted.includes(p.key));
+    return {
+      link: `${location.origin}/waiter-guide/admin/`,
+      login: user.login,
+      password,
+      position: user.position || "",
+      zone: ZONE_LABELS[user.zone] || user.zone,
+      fields: permissionDefs.filter((p) => p.kind === "field" && granted.includes(p.key)).map(label),
+      packagesLine: grantedPackages.length
+        ? grantedPackages.map(label).join(", ")
+        : `${packages.map(label).join(", ")} — не выданы`,
+    };
+  }
+  // Telegram-клиенты при отправке сами превращают **жирный** и `моно` в
+  // форматирование (одиночные *звёздочки* работают только у ботов).
+  function credentialsMarkdown(d) {
     return [
-      "Доступ к редактированию пособия OKO",
+      "🔑 Доступ в пособие ОКО",
       "",
-      `Ссылка: ${location.origin}/waiter-guide/admin/`,
-      `Логин: ${user.login}`,
-      `Пароль: ${password}`,
+      `**Ссылка:** ${d.link}`,
+      `**Логин:** \`${d.login}\``,
+      `**Пароль:** \`${d.password}\``,
       "",
-      `Имя: ${user.name}`,
-      user.position ? `Роль: ${user.position}` : null,
-      `Рабочая зона: ${ZONE_LABELS[user.zone] || user.zone}`,
-      `Права: ${permissionsSummary(user.permissions)}`,
+      d.position ? `Должность: ${d.position}` : null,
+      `Зона: ${d.zone}`,
+      "",
+      ...(d.fields.length ? ["Можно редактировать:", ...d.fields.map((f) => `✓ ${f}`)] : ["Можно редактировать: ничего (только просмотр)"]),
+      "",
+      "Расширенные права:",
+      d.packagesLine,
     ].filter((line) => line !== null).join("\n");
+  }
+  function credentialsHtml(d) {
+    const e = escapeHtml;
+    return [
+      "<b>🔑 Доступ в пособие ОКО</b>",
+      "",
+      `<b>Ссылка:</b> ${e(d.link)}`,
+      `<b>Логин:</b> <code>${e(d.login)}</code>`,
+      `<b>Пароль:</b> <code>${e(d.password)}</code>`,
+      "",
+      d.position ? `Должность: ${e(d.position)}` : null,
+      `Зона: ${e(d.zone)}`,
+      "",
+      ...(d.fields.length ? ["Можно редактировать:", ...d.fields.map((f) => `✓ ${e(f)}`)] : ["Можно редактировать: ничего (только просмотр)"]),
+      "",
+      "Расширенные права:",
+      e(d.packagesLine),
+    ].filter((line) => line !== null).join("<br>");
   }
   function showCredentialsDialog(title, user, password) {
     const overlay = document.getElementById("confirmOverlay");
-    const text = credentialsText(user, password);
+    const data = credentialsData(user, password);
+    const text = credentialsMarkdown(data);
+    const html = credentialsHtml(data);
     overlay.innerHTML = `
       <div class="confirm-modal wide">
         <h3>${escapeHtml(title)}</h3>
         <p>Скопируйте и отправьте сотруднику. Пароль показывается только сейчас — потом его можно только сгенерировать заново.</p>
-        <div class="cred-card"><pre id="credText">${escapeHtml(text)}</pre></div>
+        <div class="cred-card"><div class="cred-view" id="credText">${html}</div></div>
         <div class="row">
           <button class="btn-ghost" id="credDone">Готово</button>
           <button class="btn-accent" id="credCopy">${icon("check")}Скопировать</button>
@@ -1487,13 +1536,26 @@
     });
     document.getElementById("credCopy").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
+      // Две версии в буфере: text/plain с **разметкой** (её понимает
+      // Telegram при отправке) и text/html с <b>/<code> — для приложений,
+      // которые вставляют форматированный текст.
       try {
-        await navigator.clipboard.writeText(text);
+        if (window.ClipboardItem) {
+          await navigator.clipboard.write([new ClipboardItem({
+            "text/plain": new Blob([text], { type: "text/plain" }),
+            "text/html": new Blob([html], { type: "text/html" }),
+          })]);
+        } else {
+          await navigator.clipboard.writeText(text);
+        }
       } catch {
-        const range = document.createRange();
-        range.selectNodeContents(document.getElementById("credText"));
-        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
         document.execCommand("copy");
+        ta.remove();
       }
       btn.innerHTML = `${icon("check")}Скопировано`;
       setTimeout(() => { btn.innerHTML = `${icon("check")}Скопировать`; }, 1500);
