@@ -32,6 +32,16 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
+      - name: Add Firebase config (google-services.json)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          else
+            echo "::error::Секрет GOOGLE_SERVICES_JSON не задан"; exit 1
+          fi
+
       - name: Sync Capacitor Android project
         run: npx cap sync android
 
