@@ -38,4 +38,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Push-уведомления (FCM, 2026-09-27): на Android 13+ без этого разрешения
+         система не покажет ни одного уведомления, запрос делает сайт /web
+         через Capacitor Push Notifications (utils/nativePush.ts во фронтенде). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>
