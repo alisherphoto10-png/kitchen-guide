@@ -923,7 +923,9 @@
     else api("/api/profile/restaurant", null, token).then(function (r) { remember(r && r.name); }, function () { remember(""); });
 
     show("loaderScreen");
-    var hash = "#kd_auth=" + encodeURIComponent(JSON.stringify({ token: token, user: user }));
+    // device — ключ привязки устройства: сайт шлёт его при регистрации пушей
+    // (сервер доставляет пуши только на привязанные к сотруднику устройства).
+    var hash = "#kd_auth=" + encodeURIComponent(JSON.stringify({ token: token, user: user, device: getDevice() }));
     setTimeout(function () {
       appShell("showLoader").then(function () { window.location.replace(TARGET_URL + hash); });
     }, 340);
