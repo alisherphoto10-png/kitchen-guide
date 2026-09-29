@@ -81,14 +81,7 @@
   .progress-track[hidden] { display: none; }
   .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 320ms var(--ease-out); }
 
-  /* ---------- бренд-плашка (заставка / вход по PIN / главный) ---------- */
-  #topbar {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
-    display: flex; align-items: center; gap: 7px;
-    padding: calc(20px + env(safe-area-inset-top, 0px)) 24px 14px;
-    opacity: 0; pointer-events: none; transition: opacity 260ms ease;
-  }
-  #topbar.show { opacity: 1; }
+  /* ---------- бренд-плашка (главный экран) ---------- */
   .topbar-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
   .topbar-word { font: 700 14px/1 "Inter", sans-serif; letter-spacing: -0.01em; }
 
@@ -139,9 +132,6 @@
     font: 600 16px/1.3 "Inter", sans-serif; color: var(--text);
   }
   .field-input::placeholder { color: var(--muted); font-weight: 400; }
-  .phone-row { display: flex; align-items: center; gap: 10px; }
-  .phone-code { font: 600 16px "Inter", sans-serif; color: var(--text); flex: none; padding-right: 10px; border-right: 1px solid var(--border); }
-  .phone-row .field-input { flex: 1; min-width: 0; }
   .field-eye {
     flex: none; background: none; border: none; color: var(--muted); cursor: pointer;
     display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
@@ -280,10 +270,6 @@
   #pinScreen { align-items: center; }
   #pinScreen .h1, #pinScreen .sub { text-align: center; align-self: center; }
   .pin-msg { min-height: 18px; font-size: 0.85rem; color: var(--bad); margin-top: 4px; margin-bottom: 6px; text-align: center; }
-  .reset-link {
-    margin-top: 22px; background: none; border: none; color: var(--muted);
-    font-size: 12px; text-decoration: underline; font-family: inherit; cursor: pointer; padding: 8px;
-  }
 
   /* ---------- успех ---------- */
   #successScreen { align-items: center; justify-content: center; text-align: center; }
@@ -304,36 +290,30 @@
   @media (prefers-reduced-motion: reduce) { .success-check { animation: none; } }
   #successScreen .h1, #successScreen .sub { text-align: center; align-self: center; }
 
-  /* ---------- переход на сайт (баннер) ---------- */
-  #handoffScreen { padding: 0; align-items: stretch; justify-content: flex-start; }
-  .handoff-banner {
-    position: relative; flex: 0 0 100%; overflow: hidden;
-    background-size: cover; background-position: center;
-    transition: flex-basis 900ms var(--ease-out);
+  /* ---------- переход на сайт: логотип + полоса загрузки ----------
+     Точная копия нативной заставки APK (MainActivity.ensureLoader):
+     логотип 120px, под ним через 28px полоса 120×2 с бегущим отрезком.
+     Пока идёт полная перезагрузка страницы, её держит нативная заставка,
+     а потом плавно гасит, когда сайт отрисовался. */
+  #loaderScreen {
+    align-items: center; justify-content: center; padding: 0;
+    background: var(--bg); transform: none; z-index: 40;
+    transition: opacity 320ms ease;
   }
-  .handoff-banner.collapsed { flex-basis: 140px; }
-  .handoff-banner::after {
-    content: ""; position: absolute; inset: 0;
-    background: linear-gradient(180deg, rgba(7,11,18,0.15) 0%, rgba(7,11,18,0.55) 70%, rgba(7,11,18,0.92) 100%);
+  #loaderScreen img { width: 120px; height: auto; display: block; }
+  .kd-bar {
+    position: relative; overflow: hidden; margin-top: 28px;
+    width: 120px; height: 2px; border-radius: 2px; background: rgba(77,127,255,0.16);
   }
-  .handoff-below {
-    flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    opacity: 0; transition: opacity 500ms ease 400ms;
+  .kd-bar::after {
+    content: ""; position: absolute; top: 0; bottom: 0; left: -40%; width: 40%;
+    border-radius: 2px; background: var(--accent);
+    animation: kdBar 1200ms linear infinite;
   }
-  .handoff-below.show { opacity: 1; }
-  @media (prefers-reduced-motion: reduce) {
-    .handoff-banner { transition: none; }
-    .handoff-below { transition: opacity 200ms ease; }
-  }
-  /* Полная перезагрузка страницы (переход на настоящий сайт) сама по
-     себе рвёт кадр в WebView — обрывок старого фото накладывается на
-     ещё не отрисованную новую страницу. Прячем этот момент под ровный
-     фон, а не пытаемся анимировать саму навигацию (это невозможно). */
-  .nav-veil {
-    position: fixed; inset: 0; z-index: 30; background: var(--bg);
-    opacity: 0; pointer-events: none; transition: opacity 320ms ease;
-  }
-  .nav-veil.show { opacity: 1; }
+  @keyframes kdBar { to { left: 100%; } }
+  .pin-links { display: flex; flex-direction: column; align-items: center; margin-top: 14px; }
+  .pin-links .btn-plain { align-self: center; padding: 8px 2px; }
+  .btn-primary.loading { opacity: 0.6; pointer-events: none; }
 </style>
 </head>
 <body>
@@ -349,11 +329,6 @@
       <div class="progress-label" id="progressLabel"></div>
     </div>
     <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressFill"></div></div>
-  </div>
-
-  <div id="topbar">
-    <div class="topbar-dot"></div>
-    <div class="topbar-word">KitchenDesk</div>
   </div>
 
   <!-- SVG-иконки переиспользуются через <use> -->
@@ -399,17 +374,14 @@
   </div>
 
   <!-- Экран 2: Вход -->
-  <div class="screen has-flowbar" id="loginScreen" data-back="landingScreen" data-progress="1">
-    <div class="h1">Вход</div>
-    <div class="sub">Введите логин и пароль от вашей учётной записи</div>
+  <div class="screen has-flowbar" id="loginScreen" data-back="pinScreen">
+    <div class="h1">Вход по паролю</div>
+    <div class="sub">Для администратора заведения — логин и пароль из Telegram-бота KitchenDesk</div>
     <div class="field" id="loginField">
-      <svg class="icon field-icon"><use href="#ic-phone"/></svg>
+      <svg class="icon field-icon"><use href="#ic-user"/></svg>
       <div class="field-body">
-        <label class="field-label" for="loginInput">Логин или телефон</label>
-        <div class="phone-row">
-          <span class="phone-code">+998</span>
-          <input class="field-input" id="loginInput" type="text" inputmode="numeric" autocomplete="username" placeholder="90 927 35 25" />
-        </div>
+        <label class="field-label" for="loginInput">Логин</label>
+        <input class="field-input" id="loginInput" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" />
       </div>
     </div>
     <div class="field" id="passwordField">
@@ -425,34 +397,18 @@
     <div class="field-info" id="loginInfo"></div>
     <button class="btn btn-primary" id="loginSubmit">Войти<span class="arrow">→</span></button>
     <button class="btn-plain" id="forgotPasswordBtn">Забыли пароль?</button>
+    <button class="btn-plain" id="loginToPin">Войти по PIN</button>
   </div>
 
   <!-- Экран 3: Регистрация -->
-  <div class="screen has-flowbar" id="codeScreen" data-back="landingScreen" data-progress="2">
+  <div class="screen has-flowbar" id="codeScreen" data-back="landingScreen" data-progress="1">
     <div class="h1">Регистрация</div>
-    <div class="sub">Код приглашения выдаёт администратор вашего заведения</div>
-    <div class="field">
-      <svg class="icon field-icon"><use href="#ic-user"/></svg>
-      <div class="field-body">
-        <label class="field-label" for="nameInput">Имя</label>
-        <input class="field-input" id="nameInput" type="text" autocomplete="given-name" />
-      </div>
-    </div>
-    <div class="field">
-      <svg class="icon field-icon"><use href="#ic-phone"/></svg>
-      <div class="field-body">
-        <label class="field-label" for="phoneInput">Телефон</label>
-        <div class="phone-row">
-          <span class="phone-code">+998</span>
-          <input class="field-input" id="phoneInput" type="tel" inputmode="numeric" autocomplete="tel" placeholder="90 927 35 25" />
-        </div>
-      </div>
-    </div>
+    <div class="sub">Код приглашения выдаёт администратор вашего заведения: «Сотрудники» → карточка сотрудника</div>
     <div class="field">
       <svg class="icon field-icon"><use href="#ic-hash"/></svg>
       <div class="field-body">
         <label class="field-label" for="codeInput">Код приглашения</label>
-        <input class="field-input" id="codeInput" type="text" maxlength="8" autocapitalize="characters" />
+        <input class="field-input" id="codeInput" type="text" maxlength="9" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="ABCD-2345" />
       </div>
     </div>
     <div class="field-err" id="codeErr"></div>
@@ -472,7 +428,7 @@
   </div>
 
   <!-- Экран 4: Заведение найдено -->
-  <div class="screen" id="foundScreen" data-progress="3">
+  <div class="screen" id="foundScreen">
     <div class="found-photo" id="foundPhoto"></div>
     <div class="found-overlay" id="foundOverlay"></div>
     <div class="found-content">
@@ -481,13 +437,13 @@
         <img class="found-logo" id="foundLogo" alt="">
         <div>
           <div class="found-name" id="foundName"></div>
-          <div class="found-type" id="foundType">Гастробар</div>
+          <div class="found-type" id="foundType"></div>
         </div>
       </div>
       <div class="role-row">
         <div>
           <div class="role-label">Вы подключаетесь как</div>
-          <div class="role-value">Сотрудник кухни</div>
+          <div class="role-value" id="foundRole"></div>
         </div>
       </div>
       <button class="btn btn-primary" id="foundContinue">Продолжить<span class="arrow">→</span></button>
@@ -496,7 +452,7 @@
   </div>
 
   <!-- Экран 5: Документы -->
-  <div class="screen has-flowbar" id="docsScreen" data-back="foundScreen" data-progress="4">
+  <div class="screen has-flowbar" id="docsScreen" data-back="foundScreen" data-progress="3">
     <div class="h1">Документы</div>
     <div class="sub">Перед тем как продолжить, ознакомьтесь с условиями</div>
     <div class="card-list">
@@ -529,12 +485,13 @@
     <div class="doc-view-body" id="docViewBody"></div>
   </div>
 
-  <!-- PIN: создание / повтор / возврат (одна разметка, состояние меняется в JS) -->
-  <div class="screen has-flowbar" id="pinScreen" data-back="docsScreen" data-progress="5">
+  <!-- PIN: создание / повтор / вход (одна разметка, состояние меняется в JS) -->
+  <div class="screen has-flowbar" id="pinScreen">
     <div class="h1" id="pinHeadline">Придумайте PIN</div>
     <div class="sub" id="pinSub">PIN нужен для быстрого входа в приложение</div>
     <div class="dots" id="dots">
-      <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
     </div>
     <div class="pin-msg" id="pinMsg"></div>
     <div class="pad" id="pad">
@@ -543,62 +500,77 @@
       <div class="key" data-k="7">7</div><div class="key" data-k="8">8</div><div class="key" data-k="9">9</div>
       <div class="key ghost"></div><div class="key" data-k="0">0</div><div class="key ghost" id="back">⌫</div>
     </div>
-    <button class="reset-link" id="resetOnboarding" hidden>Сбросить и посмотреть первый вход заново</button>
+    <div class="pin-links" id="pinLinks" hidden>
+      <button class="btn-plain" id="pinToPassword" type="button">Войти по логину и паролю</button>
+      <button class="btn-plain" id="pinToInvite" type="button">У меня код приглашения</button>
+    </div>
   </div>
 
   <!-- Экран: успешная настройка -->
   <div class="screen" id="successScreen">
     <div class="success-check"><svg viewBox="0 0 24 24"><use href="#ic-check"/></svg></div>
     <div class="h1">Готово!</div>
-    <div class="sub">Ваш аккаунт настроен. Теперь вы можете входить в KitchenDesk по PIN.</div>
-    <button class="btn btn-primary" id="successContinue">Перейти к входу<span class="arrow">→</span></button>
+    <div class="sub">Ваш аккаунт настроен. Дальше входите в KitchenDesk по своему PIN.</div>
+    <button class="btn btn-primary" id="successContinue">Открыть KitchenDesk<span class="arrow">→</span></button>
   </div>
 
-  <!-- Переход на сайт: обложка заведения сворачивается в баннер,
-       пока идёт "загрузка" — та же обложка, что была на экране
-       находки, здесь не пропадает, а плавно уезжает наверх. -->
-  <div class="screen" id="handoffScreen">
-    <div class="handoff-banner" id="handoffBanner"></div>
-    <div class="handoff-below" id="handoffBelow">
-      <div class="preloader-ring"></div>
-      <div class="search-text">Открываем KitchenDesk…</div>
-    </div>
+  <!-- Переход на сайт: логотип + загрузка (см. #loaderScreen в стилях) -->
+  <div class="screen" id="loaderScreen">
+    <img src="assets/kd-logo.png" alt="KitchenDesk">
+    <div class="kd-bar"></div>
   </div>
-
-  <div class="nav-veil" id="navVeil"></div>
 
 <script>
-  var TARGET_URL = "https://kitchendesk.chefplan.ru/web";
-  var TOTAL_STEPS = 5;
-
-  var MOCK_VENUE = {
-    name: "ОКО",
-    type: "Гастробар",
-    logo: "https://kitchendesk.chefplan.ru/waiter-guide/logo.jpg",
-    photo: "https://kitchendesk.chefplan.ru/waiter-guide/hero/hero-1.jpg",
-  };
-
+  // Экран входа APK (2026-09-29): всё проверяет сервер KitchenDesk —
+  // PIN (/api/auth/pin), логин+пароль админа (/api/auth/login), код
+  // приглашения (/api/auth/invite/check → /invite/redeem). Токен уходит
+  // сайту во фрагменте адреса (#kd_auth=...) — у этой страницы
+  // (https://localhost) и сайта разный localStorage; сайт его сразу стирает
+  // из адреса (utils/appShell.ts во фронтенде).
+  var SITE = "https://kitchendesk.chefplan.ru";
+  var TARGET_URL = SITE + "/web";
+  var TOTAL_STEPS = 4;
+  var PIN_LENGTH = 6;
   var KD_LOGO_URL = "assets/kd-logo.png";
+  var KD_BG_URL = "assets/kd-bg.jpg";
 
-  // Устройство уже прошло регистрацию: заведение + PIN, который
-  // пользователь сам придумал и подтвердил на экранах создания PIN.
-  var STORAGE_KEY = "kd_onboarding";
-  function getStoredOnboarding() {
+  // Нативная заставка APK (AppShellPlugin): логотип + загрузка поверх
+  // WebView на время перезагрузки страницы. В браузере — no-op.
+  function appShell(method) {
     try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch (e) { return null; }
+      var cap = window.Capacitor;
+      var has = cap && cap.nativePromise && (cap.PluginHeaders || []).some(function (h) { return h.name === "AppShell"; });
+      return has ? cap.nativePromise("AppShell", method, {}).catch(function () {}) : Promise.resolve();
+    } catch (e) { return Promise.resolve(); }
   }
-  function storeOnboarding(data) {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
-  }
-  var stored = getStoredOnboarding();
-  var isReturning = !!stored;
 
-  function resolveLogo(venueLogo) { return venueLogo || KD_LOGO_URL || ""; }
+  // Кто входил на этом устройстве последним — только чтобы сразу открыть
+  // вход по PIN. Ни PIN, ни токен здесь не хранятся.
+  var PROFILE_KEY = "kd_last_profile";
+  function getLastProfile() {
+    try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || "null"); } catch (e) { return null; }
+  }
+  function setLastProfile(p) {
+    try { if (p) localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); else localStorage.removeItem(PROFILE_KEY); } catch (e) {}
+  }
+  // Макет до 2026-09-29 хранил здесь PIN открытым текстом — убираем.
+  try { localStorage.removeItem("kd_onboarding"); } catch (e) {}
+
+  function absUrl(u) { return !u ? "" : (u.charAt(0) === "/" ? SITE + u : u); }
+
+  function api(path, body, token) {
+    var headers = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = "Bearer " + token;
+    return fetch(SITE + path, { method: body ? "POST" : "GET", headers: headers, body: body ? JSON.stringify(body) : undefined })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          if (!res.ok) throw new Error(data.error || ("Ошибка сервера (" + res.status + ")"));
+          return data;
+        });
+      }, function () { throw new Error("Нет связи с сервером — проверьте интернет"); });
+  }
 
   (function initSplashLogo() {
-    if (!KD_LOGO_URL) return;
     var img = document.getElementById("splashLogoImg");
     img.src = KD_LOGO_URL;
     img.hidden = false;
@@ -610,31 +582,25 @@
     var img = document.getElementById("searchLogoImg");
     var fb = document.getElementById("searchLogoFallback");
     badge.classList.remove("pop");
-    if (KD_LOGO_URL) { img.src = KD_LOGO_URL; img.hidden = false; fb.hidden = true; }
-    else { img.hidden = true; fb.hidden = false; }
+    img.src = KD_LOGO_URL; img.hidden = false; fb.hidden = true;
   }
   function showVenueLogoInRing(venueLogo) {
     var badge = document.getElementById("searchLogo");
     var img = document.getElementById("searchLogoImg");
-    var fb = document.getElementById("searchLogoFallback");
-    var logo = resolveLogo(venueLogo);
-    if (logo) { img.src = logo; img.hidden = false; fb.hidden = true; }
-    else { img.hidden = true; fb.hidden = false; }
+    img.src = venueLogo || KD_LOGO_URL;
     badge.classList.remove("pop");
     void badge.offsetWidth;
     badge.classList.add("pop");
   }
 
-  // ---------- Навигация: назад / прогресс / бренд-плашка ----------
-  // Каждый экран сам объявляет своё поведение через data-back и
-  // data-progress; show() просто их читает — не нужно перечислять
-  // экраны в самой функции.
+  // ---------- Навигация: назад / прогресс ----------
+  // Каждый экран сам объявляет поведение через data-back и data-progress
+  // (у PIN-экрана их выставляет startPinFlow — он общий для нескольких шагов).
   var flowBar = document.getElementById("flowBar");
   var backBtn = document.getElementById("backBtn");
   var progressLabel = document.getElementById("progressLabel");
   var progressTrack = document.getElementById("progressTrack");
   var progressFill = document.getElementById("progressFill");
-  var topbar = document.getElementById("topbar");
 
   function show(id, direction) {
     document.documentElement.style.setProperty("--enter-offset", direction === "back" ? "-14px" : "14px");
@@ -642,40 +608,30 @@
     var el = document.getElementById(id);
     el.classList.add("active");
 
-    // Экран PIN один и тот же для создания/подтверждения и для
-    // быстрого возврата — но у возврата свой минимальный хром (только
-    // бренд-плашка, без "Назад"/прогресса), поэтому его нужно явно
-    // подавлять здесь, а не через статичные data-атрибуты в разметке.
-    var isReturningPin = id === "pinScreen" && pinMode === "returning";
     var back = el.getAttribute("data-back");
     var progress = el.getAttribute("data-progress");
-    if (!isReturningPin && (back || progress)) {
+    if (back || progress) {
       flowBar.hidden = false;
       backBtn.hidden = !back;
       backBtn.setAttribute("data-target", back || "");
+      progressLabel.hidden = !progress;
+      progressTrack.hidden = !progress;
       if (progress) {
-        progressLabel.hidden = false;
         progressLabel.textContent = ("0" + progress).slice(-2) + " / 0" + TOTAL_STEPS;
-        progressTrack.hidden = false;
         progressFill.style.width = (progress / TOTAL_STEPS * 100) + "%";
-      } else {
-        progressLabel.hidden = true;
-        progressTrack.hidden = true;
       }
     } else {
       flowBar.hidden = true;
     }
-
-    topbar.classList.toggle("show", isReturningPin);
   }
   backBtn.addEventListener("click", function () {
-    // Из подтверждения PIN "Назад" возвращает к первому вводу PIN, а
-    // не перескакивает через шаг сразу к документам.
+    // Из подтверждения PIN "Назад" — к первому вводу PIN, а не к документам.
     if (document.getElementById("pinScreen").classList.contains("active") && pinMode === "confirm") {
-      startPinFlow("create");
+      startPinFlow("create", "back");
       return;
     }
     var target = backBtn.getAttribute("data-target");
+    if (target === "pinScreen") { startPinFlow("login", "back"); return; }
     if (target) show(target, "back");
   });
 
@@ -704,18 +660,16 @@
         "7. Реквизиты\n[наименование юр. лица, ИНН, адрес, контакты]",
     },
   };
-  var docReturnTo = "docsScreen";
   document.querySelectorAll(".doc-card").forEach(function (btn) {
     btn.addEventListener("click", function () {
       var doc = DOC_TEXT[btn.getAttribute("data-doc")];
       document.getElementById("docViewTitle").textContent = doc.title;
       document.getElementById("docViewBody").textContent = doc.body;
-      docReturnTo = "docsScreen";
       show("docViewScreen");
     });
   });
   document.getElementById("docViewBack").addEventListener("click", function () {
-    show(docReturnTo, "back");
+    show("docsScreen", "back");
   });
   var docsAgree = document.getElementById("docsAgree");
   var docsSubmit = document.getElementById("docsSubmit");
@@ -727,31 +681,16 @@
     startPinFlow("create");
   });
 
-  // Маска телефона: только цифры, группировка "90 927 35 25" (код
-  // страны — отдельный неизменяемый префикс перед полем).
-  function formatUzPhone(raw) {
-    var digits = raw.replace(/\D/g, "").slice(0, 9);
-    var groups = [digits.slice(0, 2), digits.slice(2, 5), digits.slice(5, 7), digits.slice(7, 9)];
-    return groups.filter(function (g) { return g.length; }).join(" ");
-  }
-  function wirePhoneMask(input) {
-    input.addEventListener("input", function () {
-      var atEnd = input.selectionStart === input.value.length;
-      input.value = formatUzPhone(input.value);
-      if (atEnd) input.setSelectionRange(input.value.length, input.value.length);
-    });
-  }
+  // ---------- Старт ----------
+  document.getElementById("landingLoginBtn").addEventListener("click", function () { openInvite(); });
+  document.getElementById("landingAccountLoginBtn").addEventListener("click", function () { startPinFlow("login"); });
 
-  // ---------- Старт / Вход / Регистрация ----------
-  document.getElementById("landingLoginBtn").addEventListener("click", function () {
-    show("codeScreen");
-  });
-  document.getElementById("landingAccountLoginBtn").addEventListener("click", function () {
-    show("loginScreen");
-  });
-
+  // ---------- Вход по логину и паролю (сервер пускает так только админа) ----------
+  var loginInput = document.getElementById("loginInput");
   var passwordInput = document.getElementById("passwordInput");
   var passwordToggle = document.getElementById("passwordToggle");
+  var loginInfo = document.getElementById("loginInfo");
+  var loginSubmit = document.getElementById("loginSubmit");
   passwordToggle.addEventListener("click", function () {
     var showing = passwordInput.type === "text";
     passwordInput.type = showing ? "password" : "text";
@@ -759,68 +698,96 @@
     passwordToggle.setAttribute("aria-label", showing ? "Показать пароль" : "Скрыть пароль");
   });
   document.getElementById("forgotPasswordBtn").addEventListener("click", function () {
-    document.getElementById("loginInfo").textContent = "Восстановление пароля скоро заработает — пока входите по коду приглашения от администратора заведения.";
+    loginInfo.textContent = "Пароль и PIN сбрасывает администратор заведения (или поддержка KitchenDesk для главного администратора).";
   });
-  var loginInput = document.getElementById("loginInput");
-  wirePhoneMask(loginInput);
-  document.getElementById("loginSubmit").addEventListener("click", function () {
-    var loginInfo = document.getElementById("loginInfo");
-    if (!loginInput.value.trim() || !passwordInput.value.trim()) {
-      loginInfo.textContent = "Заполните логин и пароль";
-      return;
-    }
-    loginInfo.textContent = "Эта проверка ещё не подключена к серверу — пока входите по коду приглашения от администратора заведения.";
-  });
+  document.getElementById("loginToPin").addEventListener("click", function () { startPinFlow("login", "back"); });
+  function submitPassword() {
+    var login = loginInput.value.trim();
+    if (!login || !passwordInput.value) { loginInfo.textContent = "Заполните логин и пароль"; return; }
+    loginInfo.textContent = "";
+    loginSubmit.classList.add("loading");
+    api("/api/auth/login", { login: login, password: passwordInput.value })
+      .then(function (data) { enterSite(data.token, data.user); })
+      .catch(function (e) { loginInfo.textContent = e.message; loginSubmit.classList.remove("loading"); });
+  }
+  loginSubmit.addEventListener("click", submitPassword);
+  passwordInput.addEventListener("keydown", function (e) { if (e.key === "Enter") submitPassword(); });
 
-  var nameInput = document.getElementById("nameInput");
-  var phoneInput = document.getElementById("phoneInput");
-  wirePhoneMask(phoneInput);
+  // ---------- Регистрация по коду приглашения ----------
   var codeInput = document.getElementById("codeInput");
   var codeErr = document.getElementById("codeErr");
+  var invite = null; // { code, venue, employee } после проверки на сервере
+
+  function openInvite(direction) {
+    codeErr.textContent = "";
+    show("codeScreen", direction);
+  }
+  // "abcd2345" → "ABCD-2345", как код показывает админка
+  codeInput.addEventListener("input", function () {
+    var raw = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+    codeInput.value = raw.length > 4 ? raw.slice(0, 4) + "-" + raw.slice(4) : raw;
+  });
   document.getElementById("codeSubmit").addEventListener("click", function () {
-    if (!nameInput.value.trim()) { codeErr.textContent = "Введите имя"; return; }
-    if (!phoneInput.value.trim()) { codeErr.textContent = "Введите телефон"; return; }
-    var val = codeInput.value.trim();
-    if (!val) { codeErr.textContent = "Введите код приглашения"; return; }
+    var code = codeInput.value.replace(/[^A-Z0-9]/gi, "");
+    if (code.length !== 8) { codeErr.textContent = "Код — 8 символов, например ABCD-2345"; return; }
     codeErr.textContent = "";
     show("searchScreen");
     showKdLogoInRing();
-    setTimeout(function () { showVenueLogoInRing(MOCK_VENUE.logo); }, 850);
-    setTimeout(function () {
-      document.getElementById("foundPhoto").style.backgroundImage = "url('" + MOCK_VENUE.photo + "')";
-      // Общий фон KitchenDesk (за кадром, сейчас скрыт под обложкой
-      // экрана находки) тоже переключаем на фото заведения — оно
-      // остаётся фоном на документах/PIN/"Готово!" вместо возврата
-      // на нейтральный фон кухни, чтобы ничего не "мигало" при смене
-      // экранов до самого перехода на сайт.
-      document.getElementById("kdBg").style.backgroundImage = "url('" + MOCK_VENUE.photo + "')";
-      document.getElementById("foundLogo").src = resolveLogo(MOCK_VENUE.logo);
-      document.getElementById("foundName").textContent = MOCK_VENUE.name;
-      document.getElementById("foundType").textContent = MOCK_VENUE.type;
-      show("foundScreen");
-      requestAnimationFrame(function () {
-        document.getElementById("foundPhoto").classList.add("active");
-        document.getElementById("foundOverlay").classList.add("active");
+    var minDelay = new Promise(function (r) { setTimeout(r, 900); });
+    Promise.all([api("/api/auth/invite/check", { code: code }), minDelay])
+      .then(function (res) {
+        var data = res[0];
+        invite = { code: code, venue: data.venue, employee: data.employee };
+        var logo = absUrl(data.venue.logo_url);
+        var photo = absUrl(data.venue.cover_url) || KD_BG_URL;
+        showVenueLogoInRing(logo);
+        setTimeout(function () { showFound(logo, photo); }, 450);
+      })
+      .catch(function (e) {
+        codeErr.textContent = e.message;
+        show("codeScreen", "back");
       });
-    }, 1300);
   });
+  function showFound(logo, photo) {
+    var photoEl = document.getElementById("foundPhoto");
+    photoEl.classList.remove("active");
+    document.getElementById("foundOverlay").classList.remove("active");
+    photoEl.style.backgroundImage = "url('" + photo + "')";
+    // Общий фон тоже на фото заведения — остаётся под документами/PIN,
+    // чтобы ничего не "мигало" при смене экранов до перехода на сайт.
+    document.getElementById("kdBg").style.backgroundImage = "url('" + photo + "')";
+    document.getElementById("foundLogo").src = logo || KD_LOGO_URL;
+    document.getElementById("foundName").textContent = invite.venue.name;
+    document.getElementById("foundType").textContent = invite.employee.section || "";
+    document.getElementById("foundRole").textContent = invite.employee.name + " · " + invite.employee.role;
+    show("foundScreen");
+    requestAnimationFrame(function () {
+      photoEl.classList.add("active");
+      document.getElementById("foundOverlay").classList.add("active");
+    });
+  }
   document.getElementById("notMyVenueBtn").addEventListener("click", function () {
+    invite = null;
+    document.getElementById("kdBg").style.backgroundImage = "";
+    codeErr.textContent = "Проверьте код у администратора — он выдаётся на конкретного сотрудника";
     show("codeScreen", "back");
   });
   document.getElementById("foundContinue").addEventListener("click", function () {
     show("docsScreen");
   });
 
-  // ---------- PIN: создание → подтверждение → успех; или быстрый
-  // возврат для уже зарегистрированных на этом устройстве ----------
+  // ---------- PIN: create → confirm → сервер (регистрация); login — вход ----------
+  var pinScreen = document.getElementById("pinScreen");
   var pinHeadline = document.getElementById("pinHeadline");
   var pinSub = document.getElementById("pinSub");
   var pinMsg = document.getElementById("pinMsg");
+  var pinLinks = document.getElementById("pinLinks");
   var dotsEl = document.getElementById("dots");
   var dots = dotsEl.querySelectorAll(".dot");
   var entered = "";
-  var pinMode = "create"; // create | confirm | returning
+  var pinMode = "login"; // create | confirm | login
   var firstPinEntry = "";
+  var pinBusy = false;
 
   function renderDots() {
     for (var i = 0; i < dots.length; i++) {
@@ -829,25 +796,25 @@
   }
   function resetDots() { entered = ""; renderDots(); }
 
-  function startPinFlow(mode) {
+  function startPinFlow(mode, direction) {
     pinMode = mode;
+    pinBusy = false;
     resetDots();
     pinMsg.textContent = "";
-    if (mode === "create") {
-      pinHeadline.textContent = "Придумайте PIN";
-      pinSub.textContent = "PIN нужен для быстрого входа в приложение";
-      document.getElementById("resetOnboarding").hidden = true;
-      show("pinScreen");
-    } else if (mode === "confirm") {
-      pinHeadline.textContent = "Повторите PIN";
-      pinSub.textContent = "Введите PIN ещё раз для подтверждения";
-      show("pinScreen");
-    } else {
+    pinLinks.hidden = mode !== "login";
+    if (mode === "login") {
+      var last = getLastProfile();
       pinHeadline.textContent = "Введите PIN";
-      pinSub.textContent = "";
-      document.getElementById("resetOnboarding").hidden = false;
-      show("pinScreen");
+      pinSub.textContent = last && last.name ? last.name + (last.venue ? " · " + last.venue : "") : "6 цифр — выдаёт администратор заведения";
+      pinScreen.setAttribute("data-back", "landingScreen");
+      pinScreen.removeAttribute("data-progress");
+    } else {
+      pinHeadline.textContent = mode === "create" ? "Придумайте PIN" : "Повторите PIN";
+      pinSub.textContent = mode === "create" ? "6 цифр — по нему вы будете входить в приложение" : "Введите PIN ещё раз для подтверждения";
+      pinScreen.setAttribute("data-back", "docsScreen");
+      pinScreen.setAttribute("data-progress", "4");
     }
+    show("pinScreen", direction);
   }
 
   function failPin(message) {
@@ -856,10 +823,7 @@
     void dotsEl.offsetWidth;
     dotsEl.classList.add("shake");
     pinMsg.textContent = message;
-    setTimeout(function () {
-      resetDots();
-      pinMsg.textContent = "";
-    }, 480);
+    setTimeout(function () { resetDots(); pinBusy = false; }, 480);
   }
 
   function submitPin() {
@@ -867,68 +831,83 @@
       firstPinEntry = entered;
       startPinFlow("confirm");
     } else if (pinMode === "confirm") {
-      if (entered === firstPinEntry) {
-        storeOnboarding({ venue: MOCK_VENUE, pin: firstPinEntry });
-        show("successScreen");
-      } else {
-        failPin("PIN не совпадает — попробуйте ещё раз");
-      }
+      if (entered !== firstPinEntry) { failPin("PIN не совпадает — попробуйте ещё раз"); return; }
+      pinBusy = true;
+      pinMsg.textContent = "";
+      api("/api/auth/invite/redeem", { code: invite.code, pin: entered })
+        .then(function (data) {
+          pendingEnter = { token: data.token, user: data.user, venue: data.venue && data.venue.name };
+          show("successScreen");
+        })
+        .catch(function (e) {
+          // PIN занят/слишком простой — придумать другой; код сгорел — начать заново.
+          if (/PIN/.test(e.message)) { startPinFlow("create"); pinMsg.textContent = e.message; }
+          else { codeErr.textContent = e.message; openInvite("back"); }
+        });
     } else {
-      var savedPin = stored && stored.pin;
-      if (entered === savedPin) {
-        window.location.href = TARGET_URL;
-      } else {
-        failPin("Неверный PIN");
-      }
+      pinBusy = true;
+      api("/api/auth/pin", { pin: entered })
+        .then(function (data) { enterSite(data.token, data.user); })
+        .catch(function (e) { failPin(e.message); });
     }
   }
   document.getElementById("pad").addEventListener("click", function (e) {
     var key = e.target.closest(".key");
-    if (!key) return;
+    if (!key || pinBusy) return;
     if (key.id === "back") { entered = entered.slice(0, -1); renderDots(); return; }
     var k = key.getAttribute("data-k");
-    if (k == null || entered.length >= 4) return;
+    if (k == null || entered.length >= PIN_LENGTH) return;
     entered += k;
     renderDots();
-    if (entered.length === 4) setTimeout(submitPin, 120);
+    pinMsg.textContent = "";
+    if (entered.length === PIN_LENGTH) { pinBusy = true; setTimeout(submitPin, 120); }
   });
+  document.getElementById("pinToPassword").addEventListener("click", function () {
+    loginInfo.textContent = "";
+    show("loginScreen");
+  });
+  document.getElementById("pinToInvite").addEventListener("click", function () { openInvite(); });
+
+  var pendingEnter = null;
   document.getElementById("successContinue").addEventListener("click", function () {
-    var banner = document.getElementById("handoffBanner");
-    var below = document.getElementById("handoffBelow");
-    var veil = document.getElementById("navVeil");
-    veil.classList.remove("show");
-    banner.style.backgroundImage = "url('" + MOCK_VENUE.photo + "')";
-    banner.classList.remove("collapsed");
-    below.classList.remove("show");
-    show("handoffScreen");
-    setTimeout(function () {
-      banner.classList.add("collapsed");
-      below.classList.add("show");
-    }, 250);
-    // Сама перезагрузка страницы (полная навигация в WebView) не
-    // может быть плавной — рвёт кадр. Прячем этот момент под ровный
-    // фон и переходим, только когда он уже полностью закрыл экран.
-    setTimeout(function () {
-      veil.classList.add("show");
-    }, 1300);
-    setTimeout(function () {
-      window.location.href = TARGET_URL;
-    }, 1650);
+    if (pendingEnter) enterSite(pendingEnter.token, pendingEnter.user, pendingEnter.venue);
   });
 
-  // Для тестирования: на быстром PIN-экране можно сбросить и заново
-  // пройти первый вход на этом же устройстве.
-  document.getElementById("resetOnboarding").addEventListener("click", function () {
-    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
-    window.location.reload();
-  });
+  // ---------- Переход на сайт ----------
+  // Экран с логотипом и загрузкой плавно закрывает текущий, поверх
+  // встаёт такая же нативная заставка, под ней грузится /web — и она
+  // плавно гаснет, когда кабинет отрисовался. replace — чтобы «Назад»
+  // из кабинета не возвращал на экран входа.
+  function enterSite(token, user, venueName) {
+    var remember = function (venue) {
+      setLastProfile({ name: user.name || "", venue: venue || "" });
+    };
+    // Название заведения — для подписи на PIN-экране при следующем запуске.
+    if (venueName) remember(venueName);
+    else api("/api/profile/restaurant", null, token).then(function (r) { remember(r && r.name); }, function () { remember(""); });
+
+    show("loaderScreen");
+    var hash = "#kd_auth=" + encodeURIComponent(JSON.stringify({ token: token, user: user }));
+    setTimeout(function () {
+      appShell("showLoader").then(function () { window.location.replace(TARGET_URL + hash); });
+    }, 340);
+  }
 
   // ---------- Загрузка приложения ----------
-  show("splashScreen");
-  if (isReturning) {
-    setTimeout(function () { startPinFlow("returning"); }, 650);
+  // ?logout=1 — сюда вернул сайт после «Выйти из системы» (utils/appShell.ts).
+  var loggedOut = /[?&]logout=1/.test(window.location.search);
+  if (loggedOut) {
+    setLastProfile(null);
+    history.replaceState(null, "", window.location.pathname);
+    startPinFlow("login");
+    requestAnimationFrame(function () { requestAnimationFrame(function () { appShell("hideLoader"); }); });
   } else {
-    setTimeout(function () { show("landingScreen"); }, 1100);
+    appShell("hideLoader");
+    show("splashScreen");
+    setTimeout(function () {
+      if (getLastProfile()) startPinFlow("login");
+      else show("landingScreen");
+    }, getLastProfile() ? 650 : 1100);
   }
 </script>
 </body>
