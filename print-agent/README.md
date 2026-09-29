@@ -3148,6 +3148,34 @@
         проекта `kitchendesk`, `POST_NOTIFICATIONS`, MessagingService
         плагина. (Прогон по dcac707 упал на шаге секрета — секрет тогда ещё
         не был добавлен.) Копия SA-ключа из /tmp удалена `shred`.
+      - **2026-09-29, первый заход живого теста: телефоны не
+        регистрировались.** Оба вошли на /web (Android 16 и Android 12),
+        но ни одного `/api/push/register` с телефонов. Добавлена
+        диагностика (задеплоена): `nativePush.ts` шлёт шаги регистрации в
+        `POST /api/push/diag` (только в лог бэкенда `[PUSH-DIAG]`, без
+        FCM-токена), плюс теперь слушается `registrationError`. Телефон B
+        сообщил `not_native, platform=android, plugin=false,
+        hasBridge=true`. **Причина:** Capacitor подмешивает JS моста и
+        список плагинов (`PluginHeaders`) только в страницы самого
+        приложения (`https://localhost`, онбординг) — см. `Bridge.loadWebView`,
+        `addDocumentStartJavaScript(..., singleton(appUrl origin))`; на
+        домены из `allowNavigation` пробрасывается лишь `androidBridge`
+        (addWebMessageListener), без плагинов. Предположение в
+        `nativePush.ts` («Capacitor подключает мост к домену из
+        allowNavigation») было верно только наполовину.
+        **Исправление (e808e1b, одобрено пользователем как вариант 1):**
+        `MainActivity.injectBridgeIntoSite()` добавляет тот же скрипт
+        (через reflection `Bridge.getJSInjector().getScriptString()`)
+        только для точного адреса `https://kitchendesk.chefplan.ru`, без
+        масок; онбординг не тронут; +зависимость `androidx.webkit` в
+        app/build.gradle. **Компромисс по безопасности принят
+        пользователем:** при XSS на сайте чужой скрипт смог бы вызывать
+        нативные плагины (сейчас только App и PushNotifications) — новые
+        плагины добавлять с оглядкой на это. Первая попытка правки была
+        заблокирована системой безопасности Claude Code до явного решения
+        пользователя. Сборка 36565291540 — success, `mobile-test-latest`
+        обновлён 12:02 UTC, в dex проверено наличие `injectBridgeIntoSite`.
+        Дальше: переустановить APK на оба телефона и повторить тест.
       - **Живая проверка на двух телефонах — В РАБОТЕ.** Тестовые
         заведения PUSH-PHONE-TEST A (id 23) и B (id 24), в каждом админ
         `phonetest_{a,b}_admin` (вход в /web — только админы) и повар
