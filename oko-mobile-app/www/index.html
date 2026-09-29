@@ -544,8 +544,17 @@
     } catch (e) { return Promise.resolve(); }
   }
 
-  // Кто входил на этом устройстве последним — только чтобы сразу открыть
-  // вход по PIN. Ни PIN, ни токен здесь не хранятся.
+  // Привязка устройства к аккаунту (backend src/auth-devices.js, 2026-09-29):
+  // сервер сверяет PIN только с аккаунтом, к которому привязано ЭТО устройство.
+  // Привязку выдают код приглашения и логин+пароль; «Выйти» её не снимает —
+  // тот же сотрудник снова входит PIN, другой — своим кодом/паролем
+  // (устройство перепривязывается). Здесь хранится только ключ устройства.
+  var DEVICE_KEY = "kd_device";
+  function getDevice() { try { return localStorage.getItem(DEVICE_KEY); } catch (e) { return null; } }
+  function saveDevice(d) { try { if (d) localStorage.setItem(DEVICE_KEY, d); else localStorage.removeItem(DEVICE_KEY); } catch (e) {} }
+
+  // Кто входил на этом устройстве последним — для подписи на экране PIN.
+  // Ни PIN, ни токен здесь не хранятся.
   var PROFILE_KEY = "kd_last_profile";
   function getLastProfile() {
     try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || "null"); } catch (e) { return null; }
@@ -564,7 +573,11 @@
     return fetch(SITE + path, { method: body ? "POST" : "GET", headers: headers, body: body ? JSON.stringify(body) : undefined })
       .then(function (res) {
         return res.json().catch(function () { return {}; }).then(function (data) {
-          if (!res.ok) throw new Error(data.error || ("Ошибка сервера (" + res.status + ")"));
+          if (!res.ok) {
+            var err = new Error(data.error || ("Ошибка сервера (" + res.status + ")"));
+            err.code = data.code;
+            throw err;
+          }
           return data;
         });
       }, function () { throw new Error("Нет связи с сервером — проверьте интернет"); });
@@ -607,6 +620,11 @@
     document.querySelectorAll(".screen").forEach(function (el) { el.classList.remove("active"); });
     var el = document.getElementById(id);
     el.classList.add("active");
+    // Без привязки устройства PIN-экран бесполезен — с пароля назад на старт.
+    if (id === "loginScreen") {
+      el.setAttribute("data-back", getDevice() ? "pinScreen" : "landingScreen");
+      document.getElementById("loginToPin").hidden = !getDevice();
+    }
 
     var back = el.getAttribute("data-back");
     var progress = el.getAttribute("data-progress");
@@ -683,7 +701,13 @@
 
   // ---------- Старт ----------
   document.getElementById("landingLoginBtn").addEventListener("click", function () { openInvite(); });
-  document.getElementById("landingAccountLoginBtn").addEventListener("click", function () { startPinFlow("login"); });
+  // Устройство ещё не привязано — PIN не сработает, сразу вход по паролю
+  // (для сотрудника без пароля там же подсказка про код приглашения).
+  document.getElementById("landingAccountLoginBtn").addEventListener("click", function () {
+    if (getDevice()) { startPinFlow("login"); return; }
+    loginInfo.textContent = "Это устройство ещё не привязано к аккаунту. Войдите по паролю — или по коду приглашения от администратора, если пароля нет. После этого здесь будет работать ваш PIN.";
+    show("loginScreen");
+  });
 
   // ---------- Вход по логину и паролю (сервер пускает так только админа) ----------
   var loginInput = document.getElementById("loginInput");
@@ -706,8 +730,8 @@
     if (!login || !passwordInput.value) { loginInfo.textContent = "Заполните логин и пароль"; return; }
     loginInfo.textContent = "";
     loginSubmit.classList.add("loading");
-    api("/api/auth/login", { login: login, password: passwordInput.value })
-      .then(function (data) { enterSite(data.token, data.user); })
+    api("/api/auth/login", { login: login, password: passwordInput.value, device: getDevice() })
+      .then(function (data) { saveDevice(data.device); enterSite(data.token, data.user); })
       .catch(function (e) { loginInfo.textContent = e.message; loginSubmit.classList.remove("loading"); });
   }
   loginSubmit.addEventListener("click", submitPassword);
@@ -805,7 +829,7 @@
     if (mode === "login") {
       var last = getLastProfile();
       pinHeadline.textContent = "Введите PIN";
-      pinSub.textContent = last && last.name ? last.name + (last.venue ? " · " + last.venue : "") : "6 цифр — выдаёт администратор заведения";
+      pinSub.textContent = last && last.name ? last.name + (last.venue ? " · " + last.venue : "") : "PIN вашего аккаунта на этом устройстве";
       pinScreen.setAttribute("data-back", "landingScreen");
       pinScreen.removeAttribute("data-progress");
     } else {
@@ -834,8 +858,9 @@
       if (entered !== firstPinEntry) { failPin("PIN не совпадает — попробуйте ещё раз"); return; }
       pinBusy = true;
       pinMsg.textContent = "";
-      api("/api/auth/invite/redeem", { code: invite.code, pin: entered })
+      api("/api/auth/invite/redeem", { code: invite.code, pin: entered, device: getDevice() })
         .then(function (data) {
+          saveDevice(data.device);
           pendingEnter = { token: data.token, user: data.user, venue: data.venue && data.venue.name };
           show("successScreen");
         })
@@ -846,9 +871,20 @@
         });
     } else {
       pinBusy = true;
-      api("/api/auth/pin", { pin: entered })
+      api("/api/auth/pin", { pin: entered, device: getDevice() })
         .then(function (data) { enterSite(data.token, data.user); })
-        .catch(function (e) { failPin(e.message); });
+        .catch(function (e) {
+          // Устройство не привязано (или отвязано после 5 неверных PIN) —
+          // PIN здесь не сработает ни для кого, нужен код приглашения/пароль.
+          if (e.code === "device_not_bound") {
+            saveDevice(null);
+            setLastProfile(null);
+            codeErr.textContent = e.message;
+            openInvite();
+            return;
+          }
+          failPin(e.message);
+        });
     }
   }
   document.getElementById("pad").addEventListener("click", function (e) {
@@ -899,15 +935,16 @@
   if (loggedOut) {
     setLastProfile(null);
     history.replaceState(null, "", window.location.pathname);
-    startPinFlow("login");
+    if (getDevice()) startPinFlow("login");
+    else show("landingScreen");
     requestAnimationFrame(function () { requestAnimationFrame(function () { appShell("hideLoader"); }); });
   } else {
     appShell("hideLoader");
     show("splashScreen");
     setTimeout(function () {
-      if (getLastProfile()) startPinFlow("login");
+      if (getDevice()) startPinFlow("login");
       else show("landingScreen");
-    }, getLastProfile() ? 650 : 1100);
+    }, getDevice() ? 650 : 1100);
   }
 </script>
 </body>

@@ -89,20 +89,20 @@ public class MainActivity extends BridgeActivity {
 
   // ---------- Звук push-уведомлений (2026-09-29) ----------
   // Канал с нашим звуком res/raw/kd_notification.mp3. Сервер шлёт пуши в
-  // kd_events_v2 (backend src/push/index.js). Звук у существующего канала
-  // Android поменять не даёт, поэтому новый id, а старый kd_events (системный
-  // звук) удаляем. Создаём один раз: если сотрудник потом сам сменит звук в
-  // настройках телефона — не перетираем.
-  static final String PUSH_CHANNEL_ID = "kd_events_v2";
+  // kd_push (backend src/push/index.js). Звук у существующего канала Android
+  // поменять не даёт, а удалённый канал при создании с тем же id
+  // восстанавливается со СТАРЫМИ настройками — поэтому id, который никто
+  // раньше не создавал (kd_events_v2 мог успеть создать сайт, без звука).
+  // Старые kd_events / kd_events_v2 удаляем. Создаём один раз: если сотрудник
+  // потом сам сменит звук в настройках телефона — не перетираем.
+  static final String PUSH_CHANNEL_ID = "kd_push";
 
   private void createPushChannel() {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
     try {
       SharedPreferences prefs = getSharedPreferences("kd_app", Context.MODE_PRIVATE);
-      if (prefs.getBoolean("push_channel_v2_created", false)) return;
+      if (prefs.getBoolean("push_channel_kd_push_created", false)) return;
       NotificationManager nm = getSystemService(NotificationManager.class);
-      // Если канал успела создать без звука старая версия сайта — пересоздаём.
-      nm.deleteNotificationChannel(PUSH_CHANNEL_ID);
       NotificationChannel ch = new NotificationChannel(PUSH_CHANNEL_ID, "События KitchenDesk", NotificationManager.IMPORTANCE_HIGH);
       ch.setDescription("Акты, списания, напоминания, ТТК");
       ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
@@ -113,7 +113,8 @@ public class MainActivity extends BridgeActivity {
         .build());
       nm.createNotificationChannel(ch);
       nm.deleteNotificationChannel("kd_events");
-      prefs.edit().putBoolean("push_channel_v2_created", true).apply();
+      nm.deleteNotificationChannel("kd_events_v2");
+      prefs.edit().putBoolean("push_channel_kd_push_created", true).apply();
     } catch (Exception e) {
       Logger.error("KitchenDesk: не удалось создать канал уведомлений", e);
     }
