@@ -35,6 +35,25 @@
   .status { font-size: 13px; margin-top: 8px; min-height: 16px; }
   .save-bar { position: sticky; bottom: 0; background: #0d1117; padding: 12px 0; }
   .hint { font-size: 12px; color: #8b949e; margin-bottom: 16px; }
+  .item-rows { display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
+  .item-row { display: flex; align-items: center; gap: 10px; background: #21262d; border-radius: 8px; padding: 6px 8px; }
+  .item-row .nm { flex: 1; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
+  .item-row select { background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; padding: 5px 4px; font-size: 13px; }
+  .item-row .x { background: none; border: none; color: #f85149; cursor: pointer; font-size: 15px; padding: 4px; }
+  .ph-thumb { width: 44px; height: 44px; border-radius: 8px; flex: none; background: #0d1117; border: 1px dashed #30363d; color: #8b949e; font-size: 10px; line-height: 1.1; text-align: center; display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; position: relative; padding: 0; }
+  .ph-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .ph-thumb.has { border-style: solid; }
+  .mini-link { background: none; border: none; color: #8b949e; font-size: 11px; cursor: pointer; padding: 0; text-decoration: underline; }
+  .brand-box { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+  .brand-preview { position: relative; height: 128px; border-radius: 10px; overflow: hidden; background: radial-gradient(120% 80% at 100% 0%, rgba(47,212,95,.2), transparent 60%), #0b0f0d; margin-bottom: 10px; }
+  .brand-preview > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scale(1.12); filter: blur(3px); opacity: .62; }
+  .brand-preview::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,15,13,.35), rgba(11,15,13,.55) 55%, #0b0f0d); }
+  .brand-preview .fg { position: absolute; left: 12px; bottom: 14px; z-index: 1; display: flex; align-items: center; gap: 10px; }
+  .brand-preview .lg { width: 44px; height: 44px; border-radius: 12px; background: rgba(11,15,13,.55); border: 1px solid rgba(255,255,255,.12); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .brand-preview .lg img { width: 100%; height: 100%; object-fit: contain; }
+  .brand-preview .t1 { font-size: 11px; color: rgba(238,243,240,.78); }
+  .brand-preview .t2 { font-size: 19px; font-weight: 800; color: #2fd45f; }
+  .brand-actions { display: flex; flex-wrap: wrap; gap: 8px; }
   .link-box { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 12px; margin-bottom: 14px; }
 </style>
 </head>
@@ -193,8 +212,89 @@
   }
 
   function normalizeItem(item) {
-    if (typeof item === "string") return { name: item, category: null };
-    return { name: item.name, category: item.category || null };
+    if (typeof item === "string") return { name: item, category: null, unit: "шт.", photoUrl: null };
+    return { name: item.name, category: item.category || null, unit: item.unit || "шт.", photoUrl: item.photoUrl || null };
+  }
+
+  // Этап 2: единица измерения и фото у позиции, фон и логотип у формы.
+  // «шт.» — значение по умолчанию: у старых позиций сообщения в Telegram
+  // не меняются.
+  const UNITS = ["шт.", "кг", "г", "л", "уп.", "порц.", "кор."];
+  const CHEF_HAT_SMALL = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2fd45f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 13.5V20h12v-6.5"/><path d="M6 13.5A4 4 0 0 1 7.2 5.8 5 5 0 0 1 16.8 5.8 4 4 0 0 1 18 13.5z"/><path d="M6 17h12"/></svg>';
+  function esc(value) {
+    return String(value == null ? "" : value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function unitOptionsHtml(selected) {
+    const list = UNITS.includes(selected) ? UNITS : [selected, ...UNITS];
+    return list.map((u) => `<option value="${esc(u)}" ${u === selected ? "selected" : ""}>${esc(u)}</option>`).join("");
+  }
+  function itemObject(venueKey, index) {
+    const items = config[venueKey].items;
+    if (typeof items[index] === "string") items[index] = { name: items[index] };
+    return items[index];
+  }
+  function setItemUnit(venueKey, index, unit) {
+    const item = itemObject(venueKey, index);
+    if (unit === "шт.") delete item.unit; else item.unit = unit;
+  }
+  function clearItemPhoto(venueKey, index) {
+    delete itemObject(venueKey, index).photoUrl;
+    render();
+  }
+  function clearBrand(venueKey, field) {
+    delete config[venueKey][field];
+    render();
+  }
+
+  // Картинку уменьшаем прямо в браузере (фото с телефона бывают по 5–10 МБ),
+  // сервер ещё раз проверяет формат, пережимает в webp и убирает метаданные.
+  const UPLOAD_MAX_SIDE = { cover: 2000, logo: 800, item: 900 };
+  function downscale(file, maxSide, keepAlpha) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL(keepAlpha ? "image/png" : "image/jpeg", 0.88));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Не удалось открыть картинку")); };
+      img.src = url;
+    });
+  }
+  function pickImage(venueKey, kind, itemIndex) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/jpeg,image/png,image/webp";
+    input.onchange = async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const status = document.getElementById("saveStatus");
+      status.innerText = "Загружаем картинку...";
+      try {
+        const data = await downscale(file, UPLOAD_MAX_SIDE[kind], kind === "logo");
+        const res = await fetch("/api/oko-order/admin/media", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Admin-Password": password },
+          body: JSON.stringify({ kind, data }),
+        });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.error || "Ошибка загрузки");
+        if (kind === "cover") config[venueKey].coverUrl = out.url;
+        else if (kind === "logo") config[venueKey].logoUrl = out.url;
+        else itemObject(venueKey, itemIndex).photoUrl = out.url;
+        status.innerText = "Картинка загружена — не забудьте сохранить";
+        render();
+      } catch (err) {
+        status.innerText = "";
+        alert(err.message || "Не удалось загрузить картинку");
+      }
+    };
+    input.click();
   }
 
   function renderItemGroups(venueKey, v) {
@@ -216,11 +316,16 @@
         (key) => `
       <div class="category-group">
         ${showHeadings ? `<div class="category-group-label">${key || "Без категории"}</div>` : ""}
-        <div class="items-list">
+        <div class="item-rows">
           ${byCategory[key]
             .map(
               ({ item, i }) => `
-            <span class="item-chip">${item.name} <button onclick="removeItem('${venueKey}', ${i})">✕</button></span>
+            <div class="item-row">
+              <button class="ph-thumb ${item.photoUrl ? "has" : ""}" title="Фото позиции" onclick="pickImage('${venueKey}', 'item', ${i})">${item.photoUrl ? `<img src="${esc(item.photoUrl)}" alt="">` : "+ фото"}</button>
+              <div class="nm">${esc(item.name)}${item.photoUrl ? `<br><button class="mini-link" onclick="clearItemPhoto('${venueKey}', ${i})">убрать фото</button>` : ""}</div>
+              <select title="Единица измерения" onchange="setItemUnit('${venueKey}', ${i}, this.value)">${unitOptionsHtml(item.unit)}</select>
+              <button class="x" title="Удалить позицию" onclick="removeItem('${venueKey}', ${i})">✕</button>
+            </div>
           `,
             )
             .join("")}
@@ -434,6 +539,23 @@
             <button class="secondary" onclick="rotateLink('${venueKey}')">Выпустить новую ссылку и обновить кнопку в теме</button>
           </div>
 
+          <div class="brand-box">
+            <label style="font-size:13px;color:#8b949e;display:block;margin-bottom:6px">Оформление формы для клиента</label>
+            <div class="brand-preview">
+              ${v.coverUrl ? `<img src="${esc(v.coverUrl)}" alt="">` : ""}
+              <div class="fg">
+                <div class="lg">${v.logoUrl ? `<img src="${esc(v.logoUrl)}" alt="">` : CHEF_HAT_SMALL}</div>
+                <div><div class="t1">Заказ продуктов</div><div class="t2">${esc(v.label)}</div></div>
+              </div>
+            </div>
+            <div class="brand-actions">
+              <button class="secondary" onclick="pickImage('${venueKey}', 'cover')">${v.coverUrl ? "Заменить фон" : "Загрузить фон"}</button>
+              ${v.coverUrl ? `<button class="danger" onclick="clearBrand('${venueKey}', 'coverUrl')">Убрать фон</button>` : ""}
+              <button class="secondary" onclick="pickImage('${venueKey}', 'logo')">${v.logoUrl ? "Заменить логотип" : "Загрузить логотип"}</button>
+              ${v.logoUrl ? `<button class="danger" onclick="clearBrand('${venueKey}', 'logoUrl')">Убрать логотип</button>` : ""}
+            </div>
+            <p class="hint" style="margin:8px 0 0">Фон показывается в шапке формы слегка размытым и затемнённым — подойдёт любое фото продукции или зала. Логотип — лучше квадратный PNG с прозрачным фоном. Без загрузки показываются заглушки, как на превью. Изменения вступят в силу после «Сохранить все изменения».</p>
+          </div>
           <div class="field">
             <label>Название заведения</label>
             <input type="text" value="${v.label}" data-venue="${venueKey}" data-field="label" oninput="onManualInput(this)">
@@ -457,10 +579,11 @@
           </div>
 
           <label style="font-size:13px;color:#8b949e">Позиции меню</label>
-          <p class="hint" style="margin:2px 0 6px">Категория — по желанию, чтобы разбить длинный список на разделы в форме заказа. Чтобы поменять категорию позиции — удалите её и добавьте заново.</p>
+          <p class="hint" style="margin:2px 0 6px">Категория — по желанию, чтобы разбить длинный список на разделы в форме заказа. Нажмите «+ фото», чтобы добавить фото позиции (без фото показывается первая буква). Единица измерения попадёт в заказ и тикет (например «2 кг»); «шт.» — как было раньше. Чтобы поменять категорию позиции — удалите её и добавьте заново.</p>
           <div id="items-${venueKey}">${renderItemGroups(venueKey, v)}</div>
           <div class="add-item">
             <input type="text" id="newItem-${venueKey}" placeholder="Название позиции" onkeydown="if(event.key==='Enter') addItem('${venueKey}')">
+            <select id="newItemUnit-${venueKey}" style="flex:0 0 auto;min-width:0">${unitOptionsHtml("шт.")}</select>
             <input type="text" class="category" id="newItemCategory-${venueKey}" placeholder="Категория (необязательно)" onkeydown="if(event.key==='Enter') addItem('${venueKey}')">
             <button class="secondary" onclick="addItem('${venueKey}')">Добавить</button>
           </div>
@@ -643,7 +766,15 @@
     const name = input.value.trim();
     if (!name) return;
     const category = categoryInput.value.trim();
-    config[venueKey].items.push(category ? { name, category } : name);
+    const unit = document.getElementById(`newItemUnit-${venueKey}`).value;
+    if (config[venueKey].items.some((raw) => normalizeItem(raw).name === name)) {
+      alert(`Позиция «${name}» уже есть в этой форме`);
+      return;
+    }
+    const item = { name };
+    if (category) item.category = category;
+    if (unit && unit !== "шт.") item.unit = unit;
+    config[venueKey].items.push(item);
     input.value = "";
     categoryInput.value = "";
     render();
@@ -660,7 +791,8 @@
       headers: { "Content-Type": "application/json", "X-Admin-Password": password },
       body: JSON.stringify(config),
     });
-    document.getElementById("saveStatus").innerText = res.ok ? "Сохранено" : "Ошибка сохранения";
+    const out = res.ok ? null : await res.json().catch(() => ({}));
+    document.getElementById("saveStatus").innerText = res.ok ? "Сохранено" : `Ошибка сохранения${out && out.error ? ": " + out.error : ""}`;
     return res.ok;
   }
 

@@ -2,121 +2,411 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Заказ OKO</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f0d">
+<title>Заказ продуктов</title>
 <style>
+  :root {
+    --bg: #0b0f0d;
+    --surface: #141a17;
+    --surface-2: #1b231f;
+    --line: #26302b;
+    --text: #eef3f0;
+    --muted: #8d9a93;
+    --faint: #5f6b65;
+    --accent: #2fd45f;
+    --accent-ink: #04210f;
+    --accent-soft: rgba(47, 212, 95, 0.12);
+    --accent-line: rgba(47, 212, 95, 0.45);
+    --danger: #ff5a52;
+    --radius: 16px;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; margin: 0; padding: 24px 16px 40px; color: #e6edf3; }
-
-  .venue-head { display: flex; align-items: center; gap: 10px; margin: 0 0 22px; }
-  .venue-head .bar { width: 4px; height: 26px; background: #238636; border-radius: 2px; flex: none; }
-  h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
-
-  label { font-size: 12px; color: #8b949e; display: block; margin-bottom: 6px; }
-  .field { margin-bottom: 14px; }
-  .field.date { margin-bottom: 24px; }
-
-  input[type="text"], input[type="date"], textarea {
-    width: 100%; padding: 10px 12px; background: #161b22; border: 1px solid #30363d;
-    color: #e6edf3; border-radius: 8px; font-size: 15px; font-family: inherit;
-    color-scheme: dark;
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    font-size: 15px; line-height: 1.35; min-height: 100vh; overflow-x: hidden;
   }
-  input[type="text"]::placeholder, textarea::placeholder { color: #6e7681; }
-  textarea { resize: vertical; min-height: 70px; font-size: 14px; }
+  button { font: inherit; color: inherit; border: none; background: none; padding: 0; cursor: pointer; touch-action: manipulation; }
+  input, textarea { font: inherit; color: inherit; }
+  .screen { display: none; min-height: 100vh; padding-bottom: calc(110px + var(--safe-bottom)); animation: fadeIn .22s ease; }
+  .screen.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .wrap { padding: 0 16px; max-width: 560px; margin: 0 auto; }
 
-  .section-label { font-size: 12px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 12px; }
-
-  .category-pill {
-    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
-    background: rgba(63, 185, 80, 0.12); border: 1px solid rgba(63, 185, 80, 0.35);
-    border-radius: 100px; margin: 0 0 10px; user-select: none;
+  /* ── Шапка: фон формы (размытое фото) + логотип + название клиента ── */
+  .hero { position: relative; overflow: hidden; padding: calc(20px + env(safe-area-inset-top, 0px)) 0 22px; margin-bottom: 6px; }
+  .hero-bg { position: absolute; inset: 0; z-index: 0; }
+  .hero-bg img {
+    width: 100%; height: 100%; object-fit: cover; transform: scale(1.12);
+    filter: blur(3px) saturate(1.05); opacity: .62;
   }
-  .category-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: #3fb950; }
-  .category-pill .label { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #3fb950; }
-  .category-group { margin-bottom: 14px; }
-  .category-group:last-child { margin-bottom: 0; }
-  .item-list { display: flex; flex-direction: column; gap: 8px; }
+  .hero-bg.placeholder {
+    background:
+      radial-gradient(120% 80% at 100% 0%, rgba(47, 212, 95, .20), transparent 60%),
+      radial-gradient(90% 70% at 0% 100%, rgba(47, 212, 95, .08), transparent 70%),
+      var(--bg);
+  }
+  .hero-bg::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(11, 15, 13, .35) 0%, rgba(11, 15, 13, .55) 55%, var(--bg) 100%);
+  }
+  .hero .wrap { position: relative; z-index: 1; }
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .logo {
+    width: 52px; height: 52px; border-radius: 14px; flex: none; overflow: hidden;
+    background: rgba(11, 15, 13, .55); border: 1px solid rgba(255, 255, 255, .12);
+    display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);
+  }
+  .logo img { width: 100%; height: 100%; object-fit: contain; }
+  .brand-text .kicker { font-size: 13px; color: rgba(238, 243, 240, .78); }
+  .brand-text h1 { margin: 2px 0 0; font-size: 26px; line-height: 1.1; font-weight: 800; color: var(--accent); letter-spacing: -.01em; word-break: break-word; }
+  .date-chip {
+    position: relative; display: inline-flex; align-items: center; gap: 10px;
+    padding: 11px 14px; border-radius: 12px; background: rgba(11, 15, 13, .62);
+    border: 1px solid rgba(255, 255, 255, .14); font-size: 16px; font-weight: 600;
+    backdrop-filter: blur(6px);
+  }
+  .date-chip .lbl { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .date-chip input {
+    position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;
+    color-scheme: dark; border: 0; padding: 0; margin: 0;
+  }
 
+  /* ── Поиск ── */
+  .search {
+    display: flex; align-items: center; gap: 10px; padding: 0 12px; height: 46px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin: 12px 0 14px;
+  }
+  .search:focus-within { border-color: var(--accent-line); }
+  .search input { flex: 1; min-width: 0; background: none; border: none; outline: none; font-size: 15px; height: 100%; }
+  .search input::placeholder { color: var(--faint); }
+  .search .clear { display: none; color: var(--muted); padding: 6px; }
+  .search.has-text .clear { display: block; }
+
+  /* ── Категории ── */
+  .cat-list { display: flex; flex-direction: column; gap: 10px; }
+  .cat {
+    display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+    padding: 10px 14px 10px 10px; border-radius: var(--radius); background: var(--surface);
+    border: 1px solid var(--line); transition: border-color .15s, background .15s;
+  }
+  .cat:active { background: var(--surface-2); }
+  .cat.has-picked { border-color: var(--accent-line); background: linear-gradient(90deg, var(--accent-soft), var(--surface) 70%); }
+  .cat .meta { flex: 1; min-width: 0; }
+  .cat .name { font-size: 17px; font-weight: 700; }
+  .cat .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .cat .picked { color: var(--accent); font-weight: 600; }
+  .chev { color: var(--faint); flex: none; }
+
+  .thumb {
+    width: 64px; height: 56px; border-radius: 12px; flex: none; overflow: hidden;
+    background: var(--surface-2); display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 800; color: var(--accent);
+  }
+  .thumb.sm { width: 56px; height: 56px; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .thumb.ph { background: linear-gradient(135deg, rgba(47, 212, 95, .22), rgba(47, 212, 95, .05)); }
+
+  /* ── Позиции ── */
+  .top-bar {
+    position: sticky; top: 0; z-index: 5; background: rgba(11, 15, 13, .92); backdrop-filter: blur(10px);
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 0 2px;
+  }
+  .top-row { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+  .top-row h2 { margin: 0; font-size: 21px; font-weight: 800; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .icon-btn { width: 40px; height: 40px; margin-left: -8px; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
+  .icon-btn:active { background: var(--surface); }
+  .link-danger { color: var(--danger); font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; padding: 8px 0 8px 8px; }
+
+  .items { display: flex; flex-direction: column; gap: 8px; }
   .item {
-    display: flex; align-items: center; gap: 12px; padding: 14px;
-    background: #161b22; border: 1.5px solid #30363d; border-radius: 12px;
-    user-select: none;
+    display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 8px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    transition: border-color .15s, background .15s;
   }
-  .item.checked { background: rgba(35, 134, 54, 0.10); border-color: #238636; }
+  .item.in-cart { border-color: var(--accent-line); }
+  .item .info { flex: 1; min-width: 0; }
+  .item .name { font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
+  .item .unit { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .item .cat-note { font-size: 12px; color: var(--faint); margin-top: 1px; }
+  .item .remove { color: var(--faint); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; flex: none; margin-left: -4px; }
 
-  .item .box {
-    width: 22px; height: 22px; border-radius: 7px; flex: none; border: 1.5px solid #30363d;
-    display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer;
+  .add-btn {
+    width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
+    display: flex; align-items: center; justify-content: center; flex: none;
+    box-shadow: 0 4px 14px rgba(47, 212, 95, .28); transition: transform .1s;
   }
-  .item.checked .box { background: #238636; border-color: #238636; }
-  .item .box svg { display: none; }
-  .item.checked .box svg { display: block; }
-  .item .box input[type="checkbox"] {
-    position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer;
+  .add-btn:active { transform: scale(.92); }
+  .stepper {
+    display: flex; align-items: center; flex: none; height: 38px; border-radius: 12px;
+    background: var(--bg); border: 1px solid var(--line); overflow: hidden;
   }
-
-  .item .name { flex: 1; font-size: 15px; cursor: pointer; }
-  .item.checked .name { font-weight: 600; }
-
-  .qty-stepper { display: none; align-items: center; gap: 8px; background: #238636; border-radius: 100px; padding: 5px 6px 5px 8px; flex: none; }
-  .item.checked .qty-stepper { display: flex; }
-  .qty-btn {
-    width: 20px; height: 20px; border: none; background: none; padding: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 15px; font-weight: 700; color: #fff; cursor: pointer; touch-action: manipulation;
+  .stepper button { width: 36px; height: 100%; display: flex; align-items: center; justify-content: center; }
+  .stepper button:active { background: var(--surface-2); }
+  .stepper .plus { background: var(--accent); color: var(--accent-ink); }
+  .stepper .plus:active { background: #29bb54; }
+  .stepper input {
+    width: 44px; height: 100%; text-align: center; background: none; border: none; outline: none;
+    font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums;
   }
-  input.qty-input {
-    width: 30px; text-align: center; font-size: 14px; font-weight: 700; color: #fff;
-    font-variant-numeric: tabular-nums; background: rgba(255,255,255,0.20); border: none;
-    border-radius: 6px; padding: 2px 2px; font-family: inherit;
+  .pop { animation: pop .18s ease; }
+  @keyframes pop { 50% { transform: scale(1.08); } }
+
+  .empty-note { text-align: center; color: var(--muted); padding: 36px 12px; font-size: 14px; }
+  .section-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 18px 0 10px; }
+
+  /* ── Нижняя кнопка «Перейти к заказу» ── */
+  .dock {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; pointer-events: none;
+    padding: 14px 16px calc(14px + var(--safe-bottom));
+    background: linear-gradient(180deg, transparent, rgba(11, 15, 13, .94) 38%);
+    transform: translateY(120%); transition: transform .25s ease;
   }
-  input.qty-input:focus { outline: 1px solid rgba(255,255,255,0.6); }
-
-  .hint { font-size: 11px; color: #8b949e; line-height: 1.4; margin: 10px 0 24px; }
-
-  button.submit {
-    width: 100%; padding: 16px; margin-top: 4px; background: #238636; color: #fff; border: none;
-    border-radius: 12px; font-size: 16px; font-weight: 700; letter-spacing: 0.01em;
-    box-shadow: 0 8px 24px rgba(35, 134, 54, 0.35); cursor: pointer;
+  .dock.show { transform: none; }
+  .dock .btn { pointer-events: auto; max-width: 528px; margin: 0 auto; }
+  .btn {
+    width: 100%; height: 54px; border-radius: 14px; display: flex; align-items: center; justify-content: center; gap: 10px;
+    font-size: 16px; font-weight: 750; letter-spacing: .01em;
   }
-  button.submit:disabled { opacity: 0.6; box-shadow: none; }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); box-shadow: 0 10px 28px rgba(47, 212, 95, .26); }
+  .btn-primary:active { background: #29bb54; }
+  .btn-primary:disabled { opacity: .55; box-shadow: none; }
+  .btn-ghost { background: var(--surface); border: 1px solid var(--line); color: var(--text); font-weight: 650; }
+  .btn .count { font-variant-numeric: tabular-nums; }
+  .btn .arrow { margin-left: auto; margin-right: 4px; }
+  .btn.spread { justify-content: flex-start; padding-left: 18px; }
+  .btn.spread .label { flex: 1; text-align: center; margin-left: 24px; }
 
-  .empty { color: #8b949e; font-size: 14px; padding: 16px 0; }
-  .done { text-align: center; padding: 60px 16px; }
-  .done h1 { justify-content: center; }
-  .done p { color: #8b949e; font-size: 14px; }
-  .error { color: #f85149; font-size: 13px; margin-top: 10px; min-height: 16px; }
+  /* ── Экран «Ваш заказ» ── */
+  .field-label { font-size: 13px; color: var(--muted); margin: 18px 0 8px; display: block; }
+  .text-input, textarea {
+    width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 14px; font-size: 15px; outline: none;
+  }
+  .text-input:focus, textarea:focus { border-color: var(--accent-line); }
+  textarea { resize: vertical; min-height: 84px; }
+  ::placeholder { color: var(--faint); }
+  .row-date {
+    position: relative; display: flex; align-items: center; gap: 12px; margin-top: 12px;
+    padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line);
+  }
+  .row-date .v { font-weight: 700; }
+  .row-date .change { margin-left: auto; color: var(--accent); font-size: 14px; font-weight: 600; }
+  .row-date input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; color-scheme: dark; cursor: pointer; }
+  .summary {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px;
+  }
+  .summary > div {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 8px;
+    text-align: center; min-width: 0;
+  }
+  .summary .v { font-size: 15px; font-weight: 750; display: flex; align-items: center; justify-content: center; gap: 6px; overflow: hidden; }
+  .summary .v span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .summary .k { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .error-box {
+    display: none; margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+    background: rgba(255, 90, 82, .1); border: 1px solid rgba(255, 90, 82, .35); color: #ffb3ae; font-size: 14px;
+  }
+  .error-box.show { display: block; }
+
+  /* ── Центрированные экраны: отправка, успех, пусто, ошибка ── */
+  .center {
+    min-height: calc(100vh - 40px); display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 24px 24px calc(24px + var(--safe-bottom)); max-width: 460px; margin: 0 auto;
+  }
+  .center h2 { font-size: 23px; font-weight: 800; margin: 26px 0 8px; }
+  .center p { color: var(--muted); margin: 0; font-size: 15px; }
+  .center .actions { width: 100%; display: flex; flex-direction: column; gap: 10px; margin-top: 30px; }
+  .ring { width: 124px; height: 124px; position: relative; display: flex; align-items: center; justify-content: center; }
+  .ring svg.track { position: absolute; inset: 0; }
+  .ring .spin { animation: spin 1.1s linear infinite; transform-origin: 50% 50%; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .plane { animation: fly 1.4s ease-in-out infinite; color: var(--text); }
+  @keyframes fly { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(3px, -3px); } }
+  .check-circle { stroke-dasharray: 340; stroke-dashoffset: 340; animation: draw .6s ease forwards; }
+  .check-mark { stroke-dasharray: 80; stroke-dashoffset: 80; animation: draw .35s .45s ease forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .receipt {
+    width: 100%; text-align: left; margin-top: 22px; padding: 12px 14px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--line); font-size: 14px;
+  }
+  .receipt div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+  .receipt div span:first-child { color: var(--muted); }
+  .receipt div span:last-child { text-align: right; font-weight: 600; }
+  .muted-icon { color: var(--muted); }
+
+  .skeleton { background: linear-gradient(90deg, var(--surface) 0%, var(--surface-2) 50%, var(--surface) 100%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: var(--radius); height: 76px; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } .check-circle, .check-mark { stroke-dashoffset: 0; } }
 </style>
 </head>
 <body>
-  <div id="formScreen">
-    <div class="venue-head"><div class="bar"></div><h1 id="venueLabel">Заказ</h1></div>
 
-    <div class="field">
-      <label>Ваше имя</label>
-      <input type="text" id="submitterName" placeholder="Имя">
+<!-- 1. Каталог: шапка с фоном/логотипом, дата, поиск, категории -->
+<section class="screen active" id="scr-home">
+  <header class="hero">
+    <div class="hero-bg placeholder" id="heroBg"></div>
+    <div class="wrap">
+      <div class="brand">
+        <div class="logo" id="logoBox"></div>
+        <div class="brand-text">
+          <div class="kicker">Заказ продуктов</div>
+          <h1 id="venueLabel">&nbsp;</h1>
+        </div>
+      </div>
+      <label class="date-chip" id="dateChip">
+        <span>
+          <span class="lbl">Дата заказа</span><br>
+          <span id="dateText">—</span>
+        </span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M8 2.5v4M16 2.5v4M3 10h18"/></svg>
+        <input type="date" id="orderDate" aria-label="Дата заказа">
+      </label>
     </div>
-
-    <div class="field date">
-      <label>Дата заказа</label>
-      <input type="date" id="orderDate">
+  </header>
+  <div class="wrap">
+    <div class="search" id="homeSearch">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="muted-icon" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" id="homeQuery" placeholder="Поиск по всем позициям…" autocomplete="off" enterkeyhint="search">
+      <button class="clear" type="button" aria-label="Очистить поиск" onclick="clearSearch('home')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
     </div>
-
-    <div class="section-label">Позиции</div>
-    <div id="itemsList" class="empty">Загрузка...</div>
-    <div class="hint">Число рядом с − / + можно листать кнопками или вписать вручную.</div>
-
-    <div class="field">
-      <textarea id="comment" placeholder="Комментарий (необязательно)" rows="3"></textarea>
+    <div id="homeBody">
+      <div class="cat-list"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
     </div>
-    <div class="error" id="errorText"></div>
-    <button class="submit" id="submitBtn" onclick="submitOrder()">Отправить заказ</button>
   </div>
+</section>
 
-  <div id="doneScreen" class="done" style="display:none">
-    <div class="venue-head" style="justify-content:center"><h1>Заказ отправлен</h1></div>
-    <p>Можно закрыть эту страницу.</p>
+<!-- 2–3. Позиции категории -->
+<section class="screen" id="scr-cat">
+  <div class="top-bar">
+    <div class="wrap">
+      <div class="top-row">
+        <button class="icon-btn" type="button" aria-label="Назад" onclick="history.back()">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+        </button>
+        <h2 id="catTitle"></h2>
+      </div>
+      <div class="search" id="catSearch">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="muted-icon" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" id="catQuery" placeholder="Поиск по позициям…" autocomplete="off" enterkeyhint="search">
+        <button class="clear" type="button" aria-label="Очистить поиск" onclick="clearSearch('cat')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+    </div>
   </div>
+  <div class="wrap"><div class="items" id="catItems"></div></div>
+</section>
+
+<!-- 4. Предпросмотр заказа -->
+<section class="screen" id="scr-review">
+  <div class="top-bar">
+    <div class="wrap">
+      <div class="top-row">
+        <button class="icon-btn" type="button" aria-label="Назад" onclick="history.back()">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+        </button>
+        <h2>Ваш заказ</h2>
+        <button class="link-danger" type="button" onclick="clearCart()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+          Очистить
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="items" id="reviewItems" style="margin-top:10px"></div>
+
+    <label class="row-date">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="muted-icon" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M8 2.5v4M16 2.5v4M3 10h18"/></svg>
+      <span>Дата: <span class="v" id="reviewDate">—</span></span>
+      <span class="change">Изменить</span>
+      <input type="date" id="reviewDateInput" aria-label="Изменить дату заказа">
+    </label>
+
+    <label class="field-label" for="comment">Комментарий к заказу (необязательно)</label>
+    <textarea id="comment" maxlength="1000" placeholder="Например: только свежая продукция"></textarea>
+
+    <label class="field-label" for="submitterName">Ваше имя (необязательно)</label>
+    <input class="text-input" id="submitterName" maxlength="80" placeholder="Кто оформил заказ" autocomplete="name">
+
+    <div class="error-box" id="errorBox"></div>
+
+    <button class="btn btn-primary" type="button" id="sendBtn" style="margin-top:18px" onclick="submitOrder()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.4 2.6 2.9 9.9c-.9.4-.9 1.6 0 1.9l5.4 1.9 1.9 5.9c.3.9 1.4 1.1 2 .4l2.8-2.9 4.9 3.6c.7.5 1.7.1 1.9-.8l3-15.4c.2-1.1-.9-1.9-1.9-1.5zM9.9 13.2l8.2-6.6-6.6 7.6-.3 3.3z"/></svg>
+      Отправить заказ
+    </button>
+
+    <div class="summary" id="summary"></div>
+  </div>
+</section>
+
+<!-- Пустая корзина -->
+<section class="screen" id="scr-empty">
+  <div class="center">
+    <svg width="96" height="96" viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" class="muted-icon" aria-hidden="true">
+      <path d="M14 38h68l-7 40a6 6 0 0 1-6 5H27a6 6 0 0 1-6-5z"/><path d="M30 38 42 16M66 38 54 16"/><path d="M38 52v16M58 52v16M48 52v16"/>
+    </svg>
+    <h2>Заказ пуст</h2>
+    <p>Выберите позиции для оформления заказа</p>
+    <div class="actions">
+      <button class="btn btn-primary" type="button" onclick="goHome()">Перейти к каталогу</button>
+    </div>
+  </div>
+</section>
+
+<!-- 5. Отправка -->
+<section class="screen" id="scr-sending">
+  <div class="center">
+    <div class="ring">
+      <svg class="track" viewBox="0 0 124 124" aria-hidden="true">
+        <circle cx="62" cy="62" r="56" fill="none" stroke="#1d2a23" stroke-width="6"/>
+        <g class="spin"><circle cx="62" cy="62" r="56" fill="none" stroke="#2fd45f" stroke-width="6" stroke-linecap="round" stroke-dasharray="120 232"/></g>
+      </svg>
+      <svg class="plane" width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M21.5 2.5 10.5 13.5M21.5 2.5 14.5 21.5l-4-8-8-4z"/></svg>
+    </div>
+    <h2>Отправляем заказ…</h2>
+    <p>Пожалуйста, подождите</p>
+  </div>
+</section>
+
+<!-- 6. Успех -->
+<section class="screen" id="scr-done">
+  <div class="center">
+    <svg width="112" height="112" viewBox="0 0 112 112" fill="none" aria-hidden="true">
+      <circle class="check-circle" cx="56" cy="56" r="52" stroke="#2fd45f" stroke-width="6"/>
+      <path class="check-mark" d="M34 57l15 15 29-31" stroke="#2fd45f" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <h2>Заказ отправлен!</h2>
+    <p id="doneText">Кухня получила ваш заказ. Подтверждение придёт в вашу тему в Telegram.</p>
+    <div class="receipt" id="doneReceipt"></div>
+    <div class="actions">
+      <button class="btn btn-primary" type="button" onclick="startNewOrder(false)">Вернуться к каталогу</button>
+      <button class="btn btn-ghost" type="button" onclick="startNewOrder(true)">Повторить этот заказ</button>
+    </div>
+  </div>
+</section>
+
+<!-- Ссылка устарела / недействительна / приём закрыт / нет связи -->
+<section class="screen" id="scr-blocked">
+  <div class="center">
+    <svg width="84" height="84" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" class="muted-icon" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 7v6M12 16.5v.5"/></svg>
+    <h2 id="blockedTitle">Форма недоступна</h2>
+    <p id="blockedText"></p>
+    <div class="actions" id="blockedActions"></div>
+  </div>
+</section>
+
+<div class="dock" id="dock">
+  <button class="btn btn-primary spread" type="button" onclick="openReview()">
+    <span class="label">Перейти к заказу (<span class="count" id="dockCount">0</span>)</span>
+    <svg class="arrow" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+  </button>
+</div>
 
 <script>
   const params = new URLSearchParams(window.location.search);
@@ -125,6 +415,22 @@
   const formToken = params.get("f");
   const venue = params.get("venue");
   const formQuery = formToken ? `f=${encodeURIComponent(formToken)}` : `venue=${encodeURIComponent(venue || "")}`;
+  const DRAFT_KEY = `oko_order_draft:${formToken || venue || ""}`;
+  const NAME_KEY = "oko_order_name";
+  const MAX_QTY = 999;
+
+  const CHEF_HAT = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#2fd45f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 13.5V20h12v-6.5"/><path d="M6 13.5A4 4 0 0 1 7.2 5.8 5 5 0 0 1 16.8 5.8 4 4 0 0 1 18 13.5z"/><path d="M6 17h12"/></svg>';
+  const PLUS = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+  const MINUS = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14"/></svg>';
+  const CROSS = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  const CHEVRON = '<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
+  const OTHER = "Другое";
+
+  let form = { label: "", items: [] };
+  let cart = {};              // имя позиции → количество
+  let currentCategory = null;
+  let lastOrder = null;
+  let clientOrderId = newClientOrderId();
 
   // Один id на один заказ: если «Отправить» нажмут дважды или запрос
   // повторится на плохом интернете, сервер не создаст второй заказ.
@@ -133,195 +439,430 @@
     (window.crypto || window.msCrypto).getRandomValues(bytes);
     return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
   }
-  const clientOrderId = newClientOrderId();
 
-  const dateInput = document.getElementById("orderDate");
-  const tomorrow = new Date(Date.now() + 86400000);
-  dateInput.value = tomorrow.toISOString().split("T")[0];
+  function esc(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function plural(n, one, few, many) {
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
+  }
+  function fmtQty(q) { return String(Math.round(q * 100) / 100).replace(".", ","); }
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    const [y, m, d] = iso.split("-");
+    return `${d}.${m}.${y}`;
+  }
+  function localIso(date) {
+    const tz = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - tz).toISOString().slice(0, 10);
+  }
 
-  let currentItems = [];
-  let quantities = [];
-
-  async function loadItems() {
-    if (!formToken && !venue) {
-      document.getElementById("venueLabel").innerText = "Не указано заведение";
-      return;
-    }
+  // ── черновик: корзина/комментарий/дата переживают перезагрузку страницы ──
+  function storage(fn) { try { return fn(window.localStorage); } catch { return null; } }
+  function saveDraft() {
+    storage((ls) => ls.setItem(DRAFT_KEY, JSON.stringify({
+      cart, comment: document.getElementById("comment").value, date: dateInput.value, savedAt: Date.now(),
+    })));
+  }
+  function loadDraft() {
+    const raw = storage((ls) => ls.getItem(DRAFT_KEY));
+    if (!raw) return;
     try {
-      const res = await fetch(`/api/oko-order/items?${formQuery}`);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        showBlocked(data.label || "Заказ", data.error || "Ошибка загрузки");
-        return;
-      }
-      const data = await res.json();
-      document.getElementById("venueLabel").innerText = data.label;
-      currentItems = data.items;
-      quantities = currentItems.map(() => 1);
-      renderItems();
-    } catch {
-      document.getElementById("venueLabel").innerText = "Нет соединения";
+      const d = JSON.parse(raw);
+      if (!d || Date.now() - (d.savedAt || 0) > 3 * 86400000) return;
+      const known = new Set(form.items.map((i) => i.name));
+      Object.entries(d.cart || {}).forEach(([name, qty]) => {
+        if (known.has(name) && qty > 0) cart[name] = Math.min(MAX_QTY, qty);
+      });
+      document.getElementById("comment").value = d.comment || "";
+      if (d.date && d.date >= localIso(new Date())) setDate(d.date);
+    } catch {}
+  }
+
+  // ── дата ──
+  const dateInput = document.getElementById("orderDate");
+  const reviewDateInput = document.getElementById("reviewDateInput");
+  function setDate(iso) {
+    dateInput.value = iso;
+    reviewDateInput.value = iso;
+    document.getElementById("dateText").textContent = fmtDate(iso);
+    document.getElementById("reviewDate").textContent = fmtDate(iso);
+  }
+  [dateInput, reviewDateInput].forEach((el) => el.addEventListener("change", () => {
+    if (el.value) { setDate(el.value); saveDraft(); }
+  }));
+  setDate(localIso(new Date(Date.now() + 86400000)));
+  dateInput.min = reviewDateInput.min = localIso(new Date());
+
+  // ── навигация: экраны + кнопка «назад» телефона ──
+  function show(id) {
+    document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("active", s.id === id));
+    window.scrollTo(0, 0);
+    updateDock();
+  }
+  function screenFromState(state) {
+    const s = state || {};
+    if (s.screen === "cat" && s.category != null && categoryNames().includes(s.category)) {
+      currentCategory = s.category;
+      document.getElementById("catQuery").value = "";
+      document.getElementById("catSearch").classList.remove("has-text");
+      renderCategory();
+      show("scr-cat");
+    } else if (s.screen === "review") {
+      renderReview();
+    } else {
+      renderHome();
+      show("scr-home");
     }
   }
-
-  // Ссылка устарела / недействительна / приём закрыт — вместо формы только
-  // понятное сообщение, чтобы не собирать заказ, который всё равно не уйдёт.
-  function showBlocked(title, message) {
-    document.getElementById("venueLabel").innerText = title;
-    const list = document.getElementById("itemsList");
-    list.className = "empty";
-    list.innerText = message;
-    document.getElementById("submitBtn").style.display = "none";
-    document.querySelectorAll("#formScreen .field, #formScreen .section-label, #formScreen .hint").forEach((el) => {
-      el.style.display = "none";
-    });
+  window.addEventListener("popstate", (e) => {
+    const active = document.querySelector(".screen.active");
+    if (active && ["scr-sending", "scr-blocked"].includes(active.id)) return;
+    if (active && active.id === "scr-done") { history.pushState({ screen: "done" }, ""); return; }
+    screenFromState(e.state);
+  });
+  function openCategory(name) {
+    history.pushState({ screen: "cat", category: name }, "");
+    screenFromState({ screen: "cat", category: name });
+  }
+  function openReview() {
+    history.pushState({ screen: "review" }, "");
+    renderReview();
+  }
+  function goHome() {
+    history.replaceState({ screen: "home" }, "");
+    screenFromState({ screen: "home" });
   }
 
-  const checkIcon = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+  // ── каталог ──
+  function categoryOf(item) { return item.category || OTHER; }
+  function categoryNames() {
+    const names = [];
+    form.items.forEach((i) => { const c = categoryOf(i); if (!names.includes(c)) names.push(c); });
+    return names;
+  }
+  function hasCategories() { return form.items.some((i) => i.category); }
 
-  function renderItems() {
-    const list = document.getElementById("itemsList");
-    if (!currentItems.length) {
-      list.className = "empty";
-      list.innerText = "Список позиций пуст — обратитесь к администратору.";
+  function thumbHtml(item, cls) {
+    if (item && item.photoUrl) return `<div class="thumb ${cls || ""}"><img src="${esc(item.photoUrl)}" alt="" loading="lazy"></div>`;
+    const letter = item ? (item.name || "?").trim().charAt(0).toUpperCase() : "?";
+    return `<div class="thumb ph ${cls || ""}">${esc(letter)}</div>`;
+  }
+
+  function itemRowHtml(item, opts = {}) {
+    const qty = cart[item.name] || 0;
+    const key = esc(item.name);
+    const control = qty > 0
+      ? `<div class="stepper">
+           <button type="button" aria-label="Меньше" data-act="dec" data-name="${key}">${MINUS}</button>
+           <input type="text" inputmode="decimal" value="${fmtQty(qty)}" data-act="set" data-name="${key}" aria-label="Количество">
+           <button type="button" class="plus" aria-label="Больше" data-act="inc" data-name="${key}">${PLUS}</button>
+         </div>`
+      : `<button type="button" class="add-btn" aria-label="Добавить" data-act="inc" data-name="${key}">${PLUS}</button>`;
+    return `
+      <div class="item ${qty > 0 ? "in-cart" : ""}" data-row="${key}">
+        ${thumbHtml(item, "sm")}
+        <div class="info">
+          <div class="name">${esc(item.name)}</div>
+          <div class="unit">1 ${esc(item.unit)}</div>
+          ${opts.showCategory && item.category ? `<div class="cat-note">${esc(item.category)}</div>` : ""}
+        </div>
+        ${control}
+        ${opts.removable ? `<button type="button" class="remove" aria-label="Убрать" data-act="remove" data-name="${key}">${CROSS}</button>` : ""}
+      </div>`;
+  }
+
+  function matches(item, q) {
+    if (!q) return true;
+    const hay = `${item.name} ${item.category || ""}`.toLowerCase().replace(/ё/g, "е");
+    return q.toLowerCase().replace(/ё/g, "е").trim().split(/\s+/).every((w) => hay.includes(w));
+  }
+
+  function renderHome() {
+    const body = document.getElementById("homeBody");
+    const q = document.getElementById("homeQuery").value.trim();
+    if (!form.items.length) {
+      body.innerHTML = '<div class="empty-note">Список позиций пока пуст — обратитесь к кухне.</div>';
       return;
     }
-    list.className = "";
-
-    // Group by category, preserving each item's original index (needed for
-    // the check-i / qty-i element ids and the quantities[] array).
-    const categoryOrder = [];
-    const byCategory = {};
-    currentItems.forEach((item, i) => {
-      const key = item.category || "";
-      if (!byCategory[key]) {
-        byCategory[key] = [];
-        categoryOrder.push(key);
-      }
-      byCategory[key].push(i);
-    });
-    const showHeadings = categoryOrder.length > 1 || (categoryOrder.length === 1 && categoryOrder[0] !== "");
-
-    list.innerHTML = categoryOrder
-      .map((key) => `
-        <div class="category-group">
-          ${showHeadings ? `
-            <div class="category-pill"><span class="dot"></span><span class="label">${key || "Без категории"}</span></div>
-          ` : ""}
-          <div class="item-list">
-            ${byCategory[key]
-              .map(
-                (i) => `
-              <div class="item" id="item-${i}">
-                <div class="box">
-                  <input type="checkbox" id="check-${i}">
-                  ${checkIcon}
-                </div>
-                <label class="name" for="check-${i}">${currentItems[i].name}</label>
-                <div class="qty-stepper">
-                  <button type="button" class="qty-btn" onclick="changeQty(${i}, -1)">−</button>
-                  <input type="text" inputmode="numeric" class="qty-input" id="qty-${i}" value="1">
-                  <button type="button" class="qty-btn" onclick="changeQty(${i}, 1)">+</button>
-                </div>
-              </div>
-            `,
-              )
-              .join("")}
+    if (q || !hasCategories()) {
+      const found = form.items.filter((i) => matches(i, q));
+      body.innerHTML = found.length
+        ? `<div class="items">${found.map((i) => itemRowHtml(i, { showCategory: !!q })).join("")}</div>`
+        : `<div class="empty-note">Ничего не нашлось по запросу «${esc(q)}»</div>`;
+      return;
+    }
+    body.innerHTML = `<div class="cat-list">${categoryNames().map((name) => {
+      const items = form.items.filter((i) => categoryOf(i) === name);
+      const withPhoto = items.find((i) => i.photoUrl) || items[0];
+      const picked = items.filter((i) => cart[i.name] > 0).length;
+      return `
+        <button type="button" class="cat ${picked ? "has-picked" : ""}" data-cat="${esc(name)}">
+          ${withPhoto && withPhoto.photoUrl ? thumbHtml(withPhoto) : `<div class="thumb ph">${esc(name.charAt(0).toUpperCase())}</div>`}
+          <div class="meta">
+            <div class="name">${esc(name)}</div>
+            <div class="sub">${items.length} ${plural(items.length, "позиция", "позиции", "позиций")}${picked ? ` · <span class="picked">${picked} в заказе</span>` : ""}</div>
           </div>
-        </div>
-      `)
-      .join("");
+          ${CHEVRON}
+        </button>`;
+    }).join("")}</div>`;
+  }
 
-    currentItems.forEach((_, i) => {
-      const checkbox = document.getElementById(`check-${i}`);
-      const row = document.getElementById(`item-${i}`);
-      checkbox.addEventListener("change", (e) => {
-        row.classList.toggle("checked", e.target.checked);
-      });
+  function renderCategory() {
+    document.getElementById("catTitle").textContent = currentCategory;
+    const q = document.getElementById("catQuery").value.trim();
+    const items = form.items.filter((i) => categoryOf(i) === currentCategory && matches(i, q));
+    document.getElementById("catItems").innerHTML = items.length
+      ? items.map((i) => itemRowHtml(i)).join("")
+      : `<div class="empty-note">Ничего не нашлось по запросу «${esc(q)}»</div>`;
+  }
 
-      const qtyInput = document.getElementById(`qty-${i}`);
-      qtyInput.addEventListener("change", () => setQty(i, qtyInput.value));
-      qtyInput.addEventListener("blur", () => setQty(i, qtyInput.value));
+  function cartItems() { return form.items.filter((i) => cart[i.name] > 0); }
+
+  function renderReview() {
+    const items = cartItems();
+    if (!items.length) { show("scr-empty"); return; }
+    document.getElementById("reviewItems").innerHTML = items.map((i) => itemRowHtml(i, { removable: true })).join("");
+    renderSummary();
+    show("scr-review");
+  }
+
+  function renderSummary() {
+    const items = cartItems();
+    const byUnit = {};
+    items.forEach((i) => { byUnit[i.unit] = (byUnit[i.unit] || 0) + cart[i.name]; });
+    const totals = Object.entries(byUnit).map(([u, q]) => `${fmtQty(q)} ${u}`).join(" · ");
+    const cats = [...new Set(items.map(categoryOf))];
+    const catText = cats.length === 1 ? cats[0] : `${cats.length} ${plural(cats.length, "категория", "категории", "категорий")}`;
+    document.getElementById("summary").innerHTML = `
+      <div><div class="v"><span>${esc(totals)}</span></div><div class="k">Всего</div></div>
+      <div><div class="v"><span>${items.length}</span></div><div class="k">${plural(items.length, "Позиция", "Позиции", "Позиций")}</div></div>
+      <div><div class="v"><span>${esc(catText)}</span></div><div class="k">${cats.length === 1 ? "Категория" : "Категории"}</div></div>`;
+  }
+
+  function updateDock() {
+    const n = Object.values(cart).filter((q) => q > 0).length;
+    document.getElementById("dockCount").textContent = n;
+    const active = document.querySelector(".screen.active");
+    const onCatalog = active && (active.id === "scr-home" || active.id === "scr-cat");
+    document.getElementById("dock").classList.toggle("show", !!(onCatalog && n > 0));
+  }
+
+  // Точечная перерисовка одной строки — чтобы поле количества не теряло фокус
+  // и список не прыгал при каждом нажатии +/−.
+  function refreshRows(name, animate) {
+    const item = form.items.find((i) => i.name === name);
+    document.querySelectorAll(".item[data-row]").forEach((row) => {
+      if (row.dataset.row !== name) return;
+      const inReview = !!row.closest("#reviewItems");
+      const showCategory = !!row.querySelector(".cat-note");
+      if (inReview && !(cart[name] > 0)) { row.remove(); return; }
+      const tmp = document.createElement("div");
+      tmp.innerHTML = itemRowHtml(item, { removable: inReview, showCategory });
+      const fresh = tmp.firstElementChild;
+      row.replaceWith(fresh);
+      if (animate) { const s = fresh.querySelector(".stepper input"); if (s) s.classList.add("pop"); }
     });
+    const active = document.querySelector(".screen.active");
+    if (active && active.id === "scr-review") {
+      if (!cartItems().length) show("scr-empty"); else renderSummary();
+    }
+    updateDock();
+    saveDraft();
   }
 
-  function setQty(i, rawValue) {
-    const n = Math.max(1, parseInt(rawValue, 10) || 1);
-    quantities[i] = n;
-    document.getElementById(`qty-${i}`).value = n;
+  function setQty(name, qty) {
+    const q = Math.max(0, Math.min(MAX_QTY, Math.round(qty * 100) / 100));
+    if (q > 0) cart[name] = q; else delete cart[name];
   }
 
-  function changeQty(i, delta) {
-    quantities[i] = Math.max(1, (quantities[i] || 1) + delta);
-    document.getElementById(`qty-${i}`).value = quantities[i];
+  document.addEventListener("click", (e) => {
+    const cat = e.target.closest("[data-cat]");
+    if (cat) { openCategory(cat.dataset.cat); return; }
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const name = btn.dataset.name;
+    const qty = cart[name] || 0;
+    if (btn.dataset.act === "inc") setQty(name, Math.floor(qty) + 1);
+    else if (btn.dataset.act === "dec") setQty(name, qty > 1 ? Math.ceil(qty) - 1 : 0);
+    else if (btn.dataset.act === "remove") setQty(name, 0);
+    refreshRows(name, btn.dataset.act !== "remove");
+  });
+  document.addEventListener("change", (e) => {
+    const input = e.target.closest("input[data-act=set]");
+    if (!input) return;
+    const n = parseFloat(String(input.value).replace(",", "."));
+    setQty(input.dataset.name, Number.isFinite(n) ? n : 0);
+    refreshRows(input.dataset.name, false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.matches("input[data-act=set]")) e.target.blur();
+  });
+
+  function bindSearch(which, render) {
+    const input = document.getElementById(`${which}Query`);
+    const box = document.getElementById(`${which}Search`);
+    input.addEventListener("input", () => { box.classList.toggle("has-text", !!input.value); render(); });
+  }
+  bindSearch("home", renderHome);
+  bindSearch("cat", renderCategory);
+  function clearSearch(which) {
+    const input = document.getElementById(`${which}Query`);
+    input.value = "";
+    document.getElementById(`${which}Search`).classList.remove("has-text");
+    which === "home" ? renderHome() : renderCategory();
+    input.focus();
   }
 
-  function collectItems() {
-    const items = [];
-    currentItems.forEach((item, i) => {
-      const checked = document.getElementById(`check-${i}`).checked;
-      if (checked) {
-        items.push({ name: item.name, qty: quantities[i] || 1 });
-      }
-    });
-    return items;
+  function clearCart() {
+    if (!confirm("Убрать все позиции из заказа?")) return;
+    cart = {};
+    saveDraft();
+    show("scr-empty");
+  }
+
+  // ── отправка ──
+  function showError(text) {
+    const box = document.getElementById("errorBox");
+    box.textContent = text;
+    box.classList.add("show");
+    box.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   async function submitOrder() {
-    const errorEl = document.getElementById("errorText");
-    errorEl.innerText = "";
-
-    const items = collectItems();
-    if (!items.length) {
-      errorEl.innerText = "Добавьте хотя бы одну позицию";
-      return;
-    }
-
-    if (!dateInput.value) {
-      errorEl.innerText = "Укажите дату заказа";
-      return;
-    }
-
+    document.getElementById("errorBox").classList.remove("show");
+    const items = cartItems().map((i) => ({ name: i.name, qty: cart[i.name] }));
+    if (!items.length) { show("scr-empty"); return; }
+    if (!dateInput.value) { showError("Укажите дату заказа"); return; }
+    const name = document.getElementById("submitterName").value.trim();
+    storage((ls) => ls.setItem(NAME_KEY, name));
     const payload = {
-      ...(formToken ? { f: formToken } : { venue: venue }),
-      clientOrderId: clientOrderId,
-      name: document.getElementById("submitterName").value.trim(),
+      ...(formToken ? { f: formToken } : { venue }),
+      clientOrderId,
+      name,
       date: dateInput.value,
-      items: items,
-      comment: document.getElementById("comment").value || "",
+      items,
+      comment: document.getElementById("comment").value.trim(),
     };
-
-    const submitBtn = document.getElementById("submitBtn");
-    submitBtn.disabled = true;
-    submitBtn.innerText = "Отправляем...";
-
+    const sendBtn = document.getElementById("sendBtn");
+    sendBtn.disabled = true;
+    show("scr-sending");
+    const started = Date.now();
+    let res, data;
     try {
-      const res = await fetch("/api/oko-order/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      res = await fetch("/api/oko-order/submit", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (data.expired || data.closed) {
-          showBlocked(document.getElementById("venueLabel").innerText, data.error);
-          return;
-        }
-        errorEl.innerText = data.error || "Не удалось отправить заказ";
-        submitBtn.disabled = false;
-        submitBtn.innerText = "Отправить заказ";
-        return;
-      }
-      document.getElementById("formScreen").style.display = "none";
-      document.getElementById("doneScreen").style.display = "block";
+      data = await res.json().catch(() => ({}));
     } catch {
-      errorEl.innerText = "Нет соединения. Попробуйте ещё раз.";
-      submitBtn.disabled = false;
-      submitBtn.innerText = "Отправить заказ";
+      res = null;
     }
+    // Анимация отправки видна хотя бы мгновение — иначе экран «мигает».
+    const wait = 900 - (Date.now() - started);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    sendBtn.disabled = false;
+    if (!res) {
+      renderReview();
+      showError("Нет соединения. Заказ не отправлен — попробуйте ещё раз.");
+      return;
+    }
+    if (!res.ok) {
+      if (data.expired || data.closed || res.status === 404) { showBlocked(data); return; }
+      renderReview();
+      showError(data.error || "Не удалось отправить заказ, попробуйте ещё раз");
+      return;
+    }
+    lastOrder = { cart: { ...cart }, comment: payload.comment, date: payload.date };
+    renderDone(payload);
+    cart = {};
+    document.getElementById("comment").value = "";
+    clientOrderId = newClientOrderId();
+    storage((ls) => ls.removeItem(DRAFT_KEY));
+    history.replaceState({ screen: "done" }, "");
+    show("scr-done");
   }
 
-  loadItems();
+  function renderDone(payload) {
+    const units = {};
+    payload.items.forEach((line) => {
+      const item = form.items.find((i) => i.name === line.name);
+      const u = item ? item.unit : "шт.";
+      units[u] = (units[u] || 0) + line.qty;
+    });
+    document.getElementById("doneReceipt").innerHTML = `
+      <div><span>Заказчик</span><span>${esc(form.label)}</span></div>
+      <div><span>Дата</span><span>${fmtDate(payload.date)}</span></div>
+      <div><span>Позиций</span><span>${payload.items.length}</span></div>
+      <div><span>Всего</span><span>${esc(Object.entries(units).map(([u, q]) => `${fmtQty(q)} ${u}`).join(" · "))}</span></div>`;
+  }
+
+  function startNewOrder(repeat) {
+    if (repeat && lastOrder) {
+      cart = { ...lastOrder.cart };
+      document.getElementById("comment").value = lastOrder.comment || "";
+    }
+    saveDraft();
+    history.replaceState({ screen: "home" }, "");
+    if (repeat) { history.pushState({ screen: "review" }, ""); renderReview(); }
+    else screenFromState({ screen: "home" });
+  }
+
+  function showBlocked(data) {
+    const d = data || {};
+    document.getElementById("blockedTitle").textContent = d.expired
+      ? "Ссылка устарела"
+      : d.closed ? "Приём заказов закрыт" : d.offline ? "Нет соединения" : "Ссылка недействительна";
+    document.getElementById("blockedText").textContent = d.error || "Нажмите кнопку «Заполнить заказ» в вашей теме Telegram ещё раз.";
+    document.getElementById("blockedActions").innerHTML = d.offline
+      ? '<button class="btn btn-primary" type="button" onclick="location.reload()">Попробовать снова</button>'
+      : "";
+    show("scr-blocked");
+  }
+
+  function applyBranding(data) {
+    document.getElementById("venueLabel").textContent = data.label || "Заказ";
+    document.title = data.label ? `Заказ — ${data.label}` : "Заказ продуктов";
+    const bg = document.getElementById("heroBg");
+    if (data.coverUrl) {
+      const img = new Image();
+      img.alt = "";
+      img.onload = () => { bg.classList.remove("placeholder"); };
+      img.src = data.coverUrl;
+      bg.appendChild(img);
+    }
+    document.getElementById("logoBox").innerHTML = data.logoUrl
+      ? `<img src="${esc(data.logoUrl)}" alt="">`
+      : CHEF_HAT;
+  }
+
+  async function load() {
+    document.getElementById("logoBox").innerHTML = CHEF_HAT;
+    if (!formToken && !venue) { showBlocked({ error: "В ссылке нет адреса формы. Нажмите кнопку «Заполнить заказ» в вашей теме Telegram." }); return; }
+    let res, data;
+    try {
+      res = await fetch(`/api/oko-order/items?${formQuery}`);
+      data = await res.json().catch(() => ({}));
+    } catch {
+      showBlocked({ offline: true, error: "Проверьте интернет и попробуйте снова." });
+      return;
+    }
+    if (!res.ok) { showBlocked(data); return; }
+    form = { label: data.label, items: Array.isArray(data.items) ? data.items : [] };
+    applyBranding(data);
+    document.getElementById("submitterName").value = storage((ls) => ls.getItem(NAME_KEY)) || "";
+    loadDraft();
+    ["comment", "submitterName"].forEach((id) => document.getElementById(id).addEventListener("input", saveDraft));
+    history.replaceState({ screen: "home" }, "");
+    renderHome();
+    show("scr-home");
+  }
+
+  load();
 </script>
 </body>
 </html>

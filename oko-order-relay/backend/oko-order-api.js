@@ -20,6 +20,77 @@ const {
 
 const ACCEPT_CALLBACK_PREFIX = "oko_accept:";
 
+// ── Этап 2 (2026-09-30): единицы измерения, фото позиций, фон и логотип ──
+// Всё необязательное и обратно совместимое: у старых позиций единицы нет →
+// «шт.», поэтому сообщения в Telegram и тикеты для них не меняются ни на
+// символ. Картинки загружаются только через админку (POST /admin/media),
+// пережимаются сервером в webp и отдаются с этого же роутера — ссылка в
+// конфиге принимается ТОЛЬКО на наш /media/ (не произвольный адрес).
+const DEFAULT_UNIT = "шт.";
+const UNIT_MAX_LEN = 12;
+const ITEM_NAME_MAX_LEN = 120;
+const CATEGORY_MAX_LEN = 60;
+const MEDIA_URL_PREFIX = "/api/oko-order/media/";
+const MEDIA_NAME_RE = /^[a-f0-9]{24}\.webp$/;
+const MEDIA_DIR = path.join(__dirname, "data", "oko-order-media");
+const MEDIA_MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+// Максимальная сторона после пережатия: фон — на всю ширину телефона с
+// запасом под retina, логотип и фото позиций — маленькие миниатюры.
+const MEDIA_KINDS = { cover: 1600, logo: 512, item: 640 };
+const MEDIA_GC_AGE_MS = 24 * 60 * 60 * 1000;
+
+function cleanMediaUrl(value) {
+  if (typeof value !== "string" || !value.startsWith(MEDIA_URL_PREFIX)) return null;
+  const name = value.slice(MEDIA_URL_PREFIX.length);
+  return MEDIA_NAME_RE.test(name) ? MEDIA_URL_PREFIX + name : null;
+}
+
+function itemUnit(item) {
+  const unit = item && typeof item.unit === "string" ? item.unit.trim().slice(0, UNIT_MAX_LEN) : "";
+  return unit || DEFAULT_UNIT;
+}
+
+// Определяет формат картинки по первым байтам (а не по тому, что прислал
+// браузер): принимаем только JPEG/PNG/WebP. SVG и прочее — нет.
+function sniffImage(buf) {
+  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "jpeg";
+  if (buf.length > 8 && buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "png";
+  if (buf.length > 12 && buf.slice(0, 4).toString("ascii") === "RIFF" && buf.slice(8, 12).toString("ascii") === "WEBP") return "webp";
+  return null;
+}
+
+function referencedMedia(config) {
+  const names = new Set();
+  const add = (url) => {
+    const clean = cleanMediaUrl(url);
+    if (clean) names.add(clean.slice(MEDIA_URL_PREFIX.length));
+  };
+  Object.values(config).forEach((form) => {
+    add(form.coverUrl);
+    add(form.logoUrl);
+    (form.items || []).forEach((item) => item && typeof item === "object" && add(item.photoUrl));
+  });
+  return names;
+}
+
+// Удаляет картинки, на которые больше не ссылается ни одна форма. Только
+// старше суток — чтобы не снести файл, который только что загрузили в
+// админке, но ещё не нажали «Сохранить».
+function collectUnusedMedia(config) {
+  try {
+    if (!fs.existsSync(MEDIA_DIR)) return;
+    const used = referencedMedia(config);
+    const now = Date.now();
+    fs.readdirSync(MEDIA_DIR).forEach((name) => {
+      if (!MEDIA_NAME_RE.test(name) || used.has(name)) return;
+      const file = path.join(MEDIA_DIR, name);
+      if (now - fs.statSync(file).mtimeMs > MEDIA_GC_AGE_MS) fs.unlinkSync(file);
+    });
+  } catch (err) {
+    console.error("[oko-order] уборка картинок (не критично):", err.message);
+  }
+}
+
 // Печать тикета заказа на кухонный принтер — переиспользует уже
 // существующую очередь печати (oko-shelf-life-print) и агента на моноблоке,
 // ничего нового не заводим. createRawPrintJob ничего не знает про заказы,
@@ -33,7 +104,7 @@ const ACCEPT_CALLBACK_PREFIX = "oko_accept:";
 function buildOrderPrintLines(order, venueConfig) {
   const lines = ["KitchenDesk", "------------------------------", `Заказ — ${venueConfig.label}`, order.date || "", "------------------------------"];
   (order.items || []).forEach((item) => {
-    lines.push(`${item.name} — ${item.qty} шт.`);
+    lines.push(`${item.name} — ${item.qty} ${item.unit || DEFAULT_UNIT}`);
   });
   if (order.comment) {
     lines.push("------------------------------", "Комментарий:", order.comment);
@@ -159,7 +230,10 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // формы, разумное количество, длины полей. Возвращает { order } с очищенными
 // данными (имена позиций — ровно как в каталоге) или { error }.
 function validateOrder(body, form) {
-  const catalog = new Set((form.items || []).map((raw) => normalizeItem(raw).name));
+  const catalog = new Map((form.items || []).map((raw) => {
+    const item = normalizeItem(raw);
+    return [item.name, item];
+  }));
   if (!Array.isArray(body.items) || !body.items.length) {
     return { error: "Добавьте хотя бы одну позицию" };
   }
@@ -181,7 +255,7 @@ function validateOrder(body, form) {
     if (!Number.isFinite(qty) || qty <= 0 || qty > MAX_QTY) {
       return { error: `Некорректное количество у «${name}» (от 1 до ${MAX_QTY})` };
     }
-    items.push({ name, qty: Math.round(qty * 100) / 100 });
+    items.push({ name, qty: Math.round(qty * 100) / 100, unit: catalog.get(name).unit });
   }
   const date = typeof body.date === "string" ? body.date.trim() : "";
   if (!DATE_RE.test(date)) {
@@ -242,14 +316,17 @@ function relayFailure(err) {
 const DUPLICATE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 // 5 неудачных попыток за 15 минут с одного IP — дальше 429, пока окно не
-// истечёт. Успешные запросы (skipSuccessfulRequests) не расходуют лимит, так
-// что штатная работа админки лимит не исчерпывает — только подбор пароля.
+// истечёт. Считается только неверный пароль (401): ошибки самой работы в
+// админке (не тот файл картинки, дубль позиции при сохранении) лимит не
+// расходуют — иначе после пяти таких ошибок админка блокировалась бы на
+// 15 минут (найдено на тестах Этапа 2).
 const adminLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
+  requestWasSuccessful: (req, res) => res.statusCode !== 401,
   message: { error: "Слишком много попыток входа, попробуйте позже" },
 });
 
@@ -274,8 +351,25 @@ function requireAdmin(req, res, next) {
 // { name, category } object — normalized here so the order form always gets
 // a consistent shape regardless of which one is stored in the config.
 function normalizeItem(item) {
-  if (typeof item === "string") return { name: item, category: null };
-  return { name: item.name, category: item.category || null };
+  if (typeof item === "string") return { name: item, category: null, unit: DEFAULT_UNIT, photoUrl: null };
+  return { name: item.name, category: item.category || null, unit: itemUnit(item), photoUrl: cleanMediaUrl(item.photoUrl) };
+}
+
+// Позиция из админки → то, что хранится в конфиге. Имя обязательно, всё
+// остальное необязательное; единица «шт.» не записывается (это значение по
+// умолчанию), ссылки на фото — только на наши /media/.
+function sanitizeItem(raw) {
+  const item = typeof raw === "string" ? { name: raw } : raw && typeof raw === "object" ? raw : {};
+  const name = typeof item.name === "string" ? item.name.trim().slice(0, ITEM_NAME_MAX_LEN) : "";
+  if (!name) return null;
+  const out = { name };
+  const category = typeof item.category === "string" ? item.category.trim().slice(0, CATEGORY_MAX_LEN) : "";
+  if (category) out.category = category;
+  const unit = itemUnit(item);
+  if (unit !== DEFAULT_UNIT) out.unit = unit;
+  const photoUrl = cleanMediaUrl(item.photoUrl);
+  if (photoUrl) out.photoUrl = photoUrl;
+  return out;
 }
 
 function escapeHtml(value) {
@@ -292,7 +386,7 @@ function escapeHtml(value) {
 // formatting or inject tags.
 function buildOrderMessage(order, venueConfig) {
   const itemsText = (order.items || [])
-    .map((item) => `• ${escapeHtml(item.name)} — ${escapeHtml(item.qty)} шт.`)
+    .map((item) => `• ${escapeHtml(item.name)} — ${escapeHtml(item.qty)} ${escapeHtml(item.unit || DEFAULT_UNIT)}`)
     .join("\n");
 
   const lines = [
@@ -397,7 +491,27 @@ function createOkoOrderRouter(bot) {
     if (!isFormActive(found.form)) {
       return res.status(403).json({ error: "Приём заказов через эту форму сейчас закрыт", closed: true, label: found.form.label });
     }
-    res.json({ label: found.form.label, items: (found.form.items || []).map(normalizeItem) });
+    res.json({
+      label: found.form.label,
+      coverUrl: cleanMediaUrl(found.form.coverUrl),
+      logoUrl: cleanMediaUrl(found.form.logoUrl),
+      items: (found.form.items || []).map(normalizeItem),
+    });
+  });
+
+  // Публичная раздача картинок форм (фон, логотип, фото позиций). Имена
+  // случайные и файл после загрузки не меняется — можно кешировать надолго.
+  router.get("/media/:name", (req, res) => {
+    const name = req.params.name;
+    if (!MEDIA_NAME_RE.test(name)) return res.status(404).end();
+    const file = path.join(MEDIA_DIR, name);
+    if (!fs.existsSync(file)) return res.status(404).end();
+    res.set({
+      "Content-Type": "image/webp",
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
+    });
+    res.sendFile(file);
   });
 
   // Public — the order form submits here directly. Telegram only allows
@@ -618,6 +732,15 @@ function createOkoOrderRouter(bot) {
       if (!Array.isArray(venueConfig.items)) {
         return res.status(400).json({ error: `У заведения "${venueKey}" некорректный список позиций` });
       }
+      const seenNames = new Set();
+      for (const raw of venueConfig.items) {
+        const item = sanitizeItem(raw);
+        if (!item) return res.status(400).json({ error: `У заведения "${venueConfig.label}" есть позиция без названия` });
+        if (seenNames.has(item.name)) {
+          return res.status(400).json({ error: `У заведения "${venueConfig.label}" позиция «${item.name}» указана дважды` });
+        }
+        seenNames.add(item.name);
+      }
     }
     // Серверные поля (токен, старая ссылка, заведение, «Активна», id
     // закреплённой кнопки) берутся с диска, а не из присланного — новая
@@ -625,7 +748,12 @@ function createOkoOrderRouter(bot) {
     const current = readConfig();
     const merged = {};
     for (const [venueKey, venueConfig] of Object.entries(next)) {
-      const form = { ...venueConfig };
+      const form = { ...venueConfig, items: venueConfig.items.map(sanitizeItem) };
+      ["coverUrl", "logoUrl"].forEach((field) => {
+        const clean = cleanMediaUrl(form[field]);
+        if (clean) form[field] = clean;
+        else delete form[field];
+      });
       delete form.formUrl;
       delete form.legacySlugAllowed;
       SERVER_FORM_FIELDS.forEach((field) => delete form[field]);
@@ -642,7 +770,39 @@ function createOkoOrderRouter(bot) {
       merged[venueKey] = form;
     }
     writeConfig(merged);
+    collectUnusedMedia(merged);
     res.json({ ok: true });
+  });
+
+  // Admin — загрузка картинки для формы: фон (cover), логотип (logo) или фото
+  // позиции (item). Браузер присылает data:-URL (JSON, лимит express.json
+  // 10 МБ); сервер проверяет формат по байтам, поворачивает по EXIF, уменьшает
+  // и пережимает в webp — заодно вырезаются все метаданные (геометки
+  // телефона и т. п.). В конфиг ссылка попадает только после «Сохранить».
+  router.post("/admin/media", adminLoginLimiter, requireAdmin, async (req, res) => {
+    const { data, kind } = req.body || {};
+    const maxSide = MEDIA_KINDS[kind];
+    if (!maxSide) return res.status(400).json({ error: "Неизвестный тип картинки" });
+    const match = typeof data === "string" ? /^data:image\/[a-z+.-]+;base64,([A-Za-z0-9+/=]+)$/.exec(data) : null;
+    if (!match) return res.status(400).json({ error: "Пришлите картинку JPG, PNG или WebP" });
+    const buf = Buffer.from(match[1], "base64");
+    if (buf.length > MEDIA_MAX_UPLOAD_BYTES) return res.status(413).json({ error: "Картинка слишком большая (до 8 МБ)" });
+    if (!sniffImage(buf)) return res.status(400).json({ error: "Поддерживаются только JPG, PNG и WebP" });
+    try {
+      const sharp = require("sharp");
+      const out = await sharp(buf, { limitInputPixels: 40e6 })
+        .rotate()
+        .resize({ width: maxSide, height: maxSide, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: kind === "logo" ? 90 : 80 })
+        .toBuffer();
+      fs.mkdirSync(MEDIA_DIR, { recursive: true });
+      const name = `${crypto.randomBytes(12).toString("hex")}.webp`;
+      fs.writeFileSync(path.join(MEDIA_DIR, name), out);
+      res.json({ ok: true, url: MEDIA_URL_PREFIX + name });
+    } catch (err) {
+      console.error("[oko-order] не удалось обработать картинку:", err.message);
+      res.status(400).json({ error: "Не удалось прочитать картинку — попробуйте другой файл" });
+    }
   });
 
   // Admin — after wiring up a venue's source/kitchen IDs, post a visible
