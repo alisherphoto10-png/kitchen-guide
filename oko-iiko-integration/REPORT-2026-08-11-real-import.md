@@ -1,6 +1,6 @@
 # Отчёт: сверка плана с сервером + реальный импорт (2026-08-11)
 
-Эта сессия (Claude Code с доступом к серверу) открыла ветку `claude/oko-iiko-integration`,
+Эта сессия (техническая команда KitchenDesk, с доступом к серверу) открыла ветку `claude/oko-iiko-integration`,
 прочитала `README.md` как ТЗ/чеклист и сверила каждый пункт с реальным кодом в
 `/root/kitchendesk/backend` (это фактический бэкенд `kitchendesk.chefplan.ru`,
 не `/home/oko-kitchen/oko-kitchen/backend` — тот отключён) и
