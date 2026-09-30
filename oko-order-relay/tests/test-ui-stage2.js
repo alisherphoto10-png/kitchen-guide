@@ -35,6 +35,8 @@ async function upload(kind, buf, mime) {
   }).jpeg().toBuffer(), "image/jpeg");
   const p1 = await crop(0.1, 0.3), p2 = await crop(0.5, 0.4);
   const conf = await (await fetch(BASE + "/api/oko-order/admin/config", { headers: ADMIN })).json();
+  delete conf.myaso.coverUrl; // для проверки заглушек у Мяса оформления нет
+  delete conf.myaso.logoUrl;
   conf.oblako.coverUrl = cover;
   conf.oblako.logoUrl = logo;
   conf.oblako.items = [
@@ -69,7 +71,10 @@ async function upload(kind, buf, mime) {
   ok(await page.$eval("#logoBox img", (i) => i.naturalWidth > 0), "логотип загружен");
   const tomorrow = new Date(Date.now() + 86400000);
   const dd = `${String(tomorrow.getDate()).padStart(2, "0")}.${String(tomorrow.getMonth() + 1).padStart(2, "0")}.${tomorrow.getFullYear()}`;
-  ok((await page.textContent("#dateText")) === dd, `дата по умолчанию — завтра (${dd})`);
+  const isoTomorrow = await page.evaluate(() => { const d = new Date(Date.now() + 86400000); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); });
+  ok((await page.inputValue("#orderDate")) === isoTomorrow, `дата по умолчанию — завтра (${isoTomorrow})`);
+  ok(/^[а-я]+, \d{1,2} [а-я]+$/.test(await page.textContent("#dateText")), `дата словами: «${await page.textContent("#dateText")}»`);
+  ok((await page.$$(".cat .tile svg, .cat .media img")).length === 5, "у каждой категории фото или значок, не буква");
   const catNames = await page.$$eval(".cat .name", (els) => els.map((e) => e.textContent));
   ok(JSON.stringify(catNames) === JSON.stringify(["Мясо", "Овощи", "Десерты", "Мучное", "Прочее"]), "категории в порядке из админки: " + catNames.join(", "));
   ok((await page.textContent(".cat:first-child .sub")).startsWith("4 позиции"), "«4 позиции» у Мяса");

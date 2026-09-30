@@ -36,7 +36,7 @@ const MEDIA_DIR = path.join(__dirname, "data", "oko-order-media");
 const MEDIA_MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 // Максимальная сторона после пережатия: фон — на всю ширину телефона с
 // запасом под retina, логотип и фото позиций — маленькие миниатюры.
-const MEDIA_KINDS = { cover: 1600, logo: 512, item: 640 };
+const MEDIA_KINDS = { cover: 1600, logo: 512, item: 640, category: 800 };
 const MEDIA_GC_AGE_MS = 24 * 60 * 60 * 1000;
 
 function cleanMediaUrl(value) {
@@ -59,6 +59,20 @@ function sniffImage(buf) {
   return null;
 }
 
+// Фото категорий (2026-09-30, правка дизайна после Этапа 2): { "Десерты":
+// "/api/oko-order/media/…webp" }. Оставляем только категории, которые
+// реально есть у позиций формы, и только ссылки на наш /media/.
+function cleanCategoryPhotos(raw, items) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const present = new Set((items || []).map((item) => normalizeItem(item).category).filter(Boolean));
+  const out = {};
+  Object.entries(raw).forEach(([category, url]) => {
+    const clean = cleanMediaUrl(url);
+    if (clean && present.has(category)) out[category] = clean;
+  });
+  return Object.keys(out).length ? out : null;
+}
+
 function referencedMedia(config) {
   const names = new Set();
   const add = (url) => {
@@ -68,6 +82,7 @@ function referencedMedia(config) {
   Object.values(config).forEach((form) => {
     add(form.coverUrl);
     add(form.logoUrl);
+    Object.values(form.categoryPhotos || {}).forEach(add);
     (form.items || []).forEach((item) => item && typeof item === "object" && add(item.photoUrl));
   });
   return names;
@@ -495,6 +510,7 @@ function createOkoOrderRouter(bot) {
       label: found.form.label,
       coverUrl: cleanMediaUrl(found.form.coverUrl),
       logoUrl: cleanMediaUrl(found.form.logoUrl),
+      categoryPhotos: cleanCategoryPhotos(found.form.categoryPhotos, found.form.items) || {},
       items: (found.form.items || []).map(normalizeItem),
     });
   });
@@ -754,6 +770,9 @@ function createOkoOrderRouter(bot) {
         if (clean) form[field] = clean;
         else delete form[field];
       });
+      const categoryPhotos = cleanCategoryPhotos(form.categoryPhotos, form.items);
+      if (categoryPhotos) form.categoryPhotos = categoryPhotos;
+      else delete form.categoryPhotos;
       delete form.formUrl;
       delete form.legacySlugAllowed;
       SERVER_FORM_FIELDS.forEach((field) => delete form[field]);

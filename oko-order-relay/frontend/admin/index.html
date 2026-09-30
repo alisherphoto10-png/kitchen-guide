@@ -45,14 +45,18 @@
   .ph-thumb.has { border-style: solid; }
   .mini-link { background: none; border: none; color: #8b949e; font-size: 11px; cursor: pointer; padding: 0; text-decoration: underline; }
   .brand-box { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 12px; margin-bottom: 14px; }
-  .brand-preview { position: relative; height: 128px; border-radius: 10px; overflow: hidden; background: radial-gradient(120% 80% at 100% 0%, rgba(47,212,95,.2), transparent 60%), #0b0f0d; margin-bottom: 10px; }
-  .brand-preview > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scale(1.12); filter: blur(3px); opacity: .62; }
-  .brand-preview::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,15,13,.35), rgba(11,15,13,.55) 55%, #0b0f0d); }
-  .brand-preview .fg { position: absolute; left: 12px; bottom: 14px; z-index: 1; display: flex; align-items: center; gap: 10px; }
-  .brand-preview .lg { width: 44px; height: 44px; border-radius: 12px; background: rgba(11,15,13,.55); border: 1px solid rgba(255,255,255,.12); display: flex; align-items: center; justify-content: center; overflow: hidden; }
-  .brand-preview .lg img { width: 100%; height: 100%; object-fit: contain; }
-  .brand-preview .t1 { font-size: 11px; color: rgba(238,243,240,.78); }
-  .brand-preview .t2 { font-size: 19px; font-weight: 800; color: #2fd45f; }
+  .brand-preview { position: relative; height: 200px; border-radius: 12px; overflow: hidden; isolation: isolate; background: radial-gradient(70% 60% at 85% 20%, rgba(230,166,86,.30), transparent 70%), radial-gradient(60% 55% at 10% 75%, rgba(196,96,64,.22), transparent 70%), linear-gradient(160deg, #2a1f18, #1a1411 60%, #15110f); margin-bottom: 10px; }
+  .brand-preview > img { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; object-fit: cover; object-position: center 40%; transform: scale(1.06); filter: blur(1.5px) brightness(.82); }
+  .brand-preview::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(21,17,15,0) 34%, rgba(21,17,15,.6) 62%, rgba(21,17,15,.88) 84%, #15110f); }
+  .brand-preview .fg { position: absolute; left: 16px; right: 16px; bottom: 18px; display: flex; align-items: center; gap: 12px; }
+  .brand-preview .lg { width: 56px; height: 56px; border-radius: 16px; background: #0e0b0a; box-shadow: 0 8px 24px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.1); display: flex; align-items: center; justify-content: center; overflow: hidden; flex: none; }
+  .brand-preview .lg img { width: 100%; height: 100%; object-fit: cover; }
+  .brand-preview .t1 { font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: rgba(245,239,232,.78); }
+  .brand-preview .t2 { font-size: 26px; font-weight: 800; color: #fff; line-height: 1.05; text-shadow: 0 2px 14px rgba(0,0,0,.45); }
+  .cat-head { display: flex; align-items: center; gap: 10px; margin: 12px 0 6px; }
+  .cat-head .category-group-label { margin: 0; flex: 1; }
+  .cat-photo { width: 56px; height: 36px; border-radius: 6px; flex: none; background: #0d1117; border: 1px dashed #30363d; color: #8b949e; font-size: 10px; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; padding: 0; }
+  .cat-photo img { width: 100%; height: 100%; object-fit: cover; }
   .brand-actions { display: flex; flex-wrap: wrap; gap: 8px; }
   .link-box { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 12px; margin-bottom: 14px; }
 </style>
@@ -220,7 +224,7 @@
   // «шт.» — значение по умолчанию: у старых позиций сообщения в Telegram
   // не меняются.
   const UNITS = ["шт.", "кг", "г", "л", "уп.", "порц.", "кор."];
-  const CHEF_HAT_SMALL = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2fd45f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 13.5V20h12v-6.5"/><path d="M6 13.5A4 4 0 0 1 7.2 5.8 5 5 0 0 1 16.8 5.8 4 4 0 0 1 18 13.5z"/><path d="M6 17h12"/></svg>';
+  const CHEF_HAT_SMALL = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#e6a656" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 13.5V20h12v-6.5"/><path d="M6 13.5A4 4 0 0 1 7.2 5.8 5 5 0 0 1 16.8 5.8 4 4 0 0 1 18 13.5z"/><path d="M6 17h12"/></svg>';
   function esc(value) {
     return String(value == null ? "" : value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
@@ -241,6 +245,26 @@
     delete itemObject(venueKey, index).photoUrl;
     render();
   }
+  // Фото категории: ключ — название категории. В onclick передаётся номер
+  // категории (порядок как в renderItemGroups), а не само название — чтобы
+  // кавычки в названии не ломали разметку.
+  function categoryNamesOf(v) {
+    const names = [];
+    (v.items || []).forEach((raw) => {
+      const c = normalizeItem(raw).category || "";
+      if (!names.includes(c)) names.push(c);
+    });
+    return names;
+  }
+  function pickCategoryImage(venueKey, index) {
+    const name = categoryNamesOf(config[venueKey])[index];
+    if (name) pickImage(venueKey, "category", name);
+  }
+  function clearCategoryPhoto(venueKey, index) {
+    const name = categoryNamesOf(config[venueKey])[index];
+    if (config[venueKey].categoryPhotos) delete config[venueKey].categoryPhotos[name];
+    render();
+  }
   function clearBrand(venueKey, field) {
     delete config[venueKey][field];
     render();
@@ -248,7 +272,7 @@
 
   // Картинку уменьшаем прямо в браузере (фото с телефона бывают по 5–10 МБ),
   // сервер ещё раз проверяет формат, пережимает в webp и убирает метаданные.
-  const UPLOAD_MAX_SIDE = { cover: 2000, logo: 800, item: 900 };
+  const UPLOAD_MAX_SIDE = { cover: 2000, logo: 800, item: 900, category: 1200 };
   function downscale(file, maxSide, keepAlpha) {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file);
@@ -286,7 +310,10 @@
         if (!res.ok) throw new Error(out.error || "Ошибка загрузки");
         if (kind === "cover") config[venueKey].coverUrl = out.url;
         else if (kind === "logo") config[venueKey].logoUrl = out.url;
-        else itemObject(venueKey, itemIndex).photoUrl = out.url;
+        else if (kind === "category") {
+          config[venueKey].categoryPhotos = config[venueKey].categoryPhotos || {};
+          config[venueKey].categoryPhotos[itemIndex] = out.url;
+        } else itemObject(venueKey, itemIndex).photoUrl = out.url;
         status.innerText = "Картинка загружена — не забудьте сохранить";
         render();
       } catch (err) {
@@ -315,7 +342,12 @@
       .map(
         (key) => `
       <div class="category-group">
-        ${showHeadings ? `<div class="category-group-label">${key || "Без категории"}</div>` : ""}
+        ${showHeadings ? (key ? `
+          <div class="cat-head">
+            <div class="category-group-label">${esc(key)}</div>
+            ${(v.categoryPhotos || {})[key] ? `<button class="mini-link" onclick="clearCategoryPhoto('${venueKey}', ${categoryOrder.indexOf(key)})">убрать фото</button>` : ""}
+            <button class="cat-photo" title="Фото категории — показывается в форме вместо значка" onclick="pickCategoryImage('${venueKey}', ${categoryOrder.indexOf(key)})">${(v.categoryPhotos || {})[key] ? `<img src="${esc(v.categoryPhotos[key])}" alt="">` : "+ фото"}</button>
+          </div>` : `<div class="category-group-label">Без категории</div>`) : ""}
         <div class="item-rows">
           ${byCategory[key]
             .map(
@@ -554,7 +586,7 @@
               <button class="secondary" onclick="pickImage('${venueKey}', 'logo')">${v.logoUrl ? "Заменить логотип" : "Загрузить логотип"}</button>
               ${v.logoUrl ? `<button class="danger" onclick="clearBrand('${venueKey}', 'logoUrl')">Убрать логотип</button>` : ""}
             </div>
-            <p class="hint" style="margin:8px 0 0">Фон показывается в шапке формы слегка размытым и затемнённым — подойдёт любое фото продукции или зала. Логотип — лучше квадратный PNG с прозрачным фоном. Без загрузки показываются заглушки, как на превью. Изменения вступят в силу после «Сохранить все изменения».</p>
+            <p class="hint" style="margin:8px 0 0">Фон показывается в высокой шапке формы, слегка размытым и затемнённым к низу — подойдёт любое фото зала или продукции, вертикальное тоже. Логотип — лучше квадратный PNG с прозрачным фоном. Без загрузки показываются заглушки, как на превью. Изменения вступят в силу после «Сохранить все изменения».</p>
           </div>
           <div class="field">
             <label>Название заведения</label>
@@ -579,7 +611,7 @@
           </div>
 
           <label style="font-size:13px;color:#8b949e">Позиции меню</label>
-          <p class="hint" style="margin:2px 0 6px">Категория — по желанию, чтобы разбить длинный список на разделы в форме заказа. Нажмите «+ фото», чтобы добавить фото позиции (без фото показывается первая буква). Единица измерения попадёт в заказ и тикет (например «2 кг»); «шт.» — как было раньше. Чтобы поменять категорию позиции — удалите её и добавьте заново.</p>
+          <p class="hint" style="margin:2px 0 6px">Категория — по желанию, чтобы разбить длинный список на разделы в форме заказа. Нажмите «+ фото» у позиции или у категории, чтобы добавить фото (без фото в форме показывается значок по смыслу категории: торт, хлеб, мясо, овощи и т. п.). Единица измерения попадёт в заказ и тикет (например «2 кг»); «шт.» — как было раньше. Чтобы поменять категорию позиции — удалите её и добавьте заново.</p>
           <div id="items-${venueKey}">${renderItemGroups(venueKey, v)}</div>
           <div class="add-item">
             <input type="text" id="newItem-${venueKey}" placeholder="Название позиции" onkeydown="if(event.key==='Enter') addItem('${venueKey}')">

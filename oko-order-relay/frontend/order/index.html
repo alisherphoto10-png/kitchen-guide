@@ -3,175 +3,216 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#0b0f0d">
+<meta name="theme-color" content="#15110f">
 <title>Заказ продуктов</title>
 <style>
+  /* Тёплая тёмная палитра (правка 2026-09-30): фон — тёплый уголь, а не
+     чёрно-зелёный; акцент — медовый янтарь, перекликается с тёплым светом
+     баннерных фото; зелёный остался только для «Заказ отправлен». */
   :root {
-    --bg: #0b0f0d;
-    --surface: #141a17;
-    --surface-2: #1b231f;
-    --line: #26302b;
-    --text: #eef3f0;
-    --muted: #8d9a93;
-    --faint: #5f6b65;
-    --accent: #2fd45f;
-    --accent-ink: #04210f;
-    --accent-soft: rgba(47, 212, 95, 0.12);
-    --accent-line: rgba(47, 212, 95, 0.45);
-    --danger: #ff5a52;
-    --radius: 16px;
+    --bg: #15110f;
+    --surface: #211b18;
+    --surface-2: #2b2420;
+    --line: #3a302a;
+    --text: #f5efe8;
+    --muted: #b5a99d;
+    --faint: #7f7368;
+    --accent: #e6a656;
+    --accent-press: #d4944a;
+    --accent-ink: #2b1905;
+    --accent-soft: rgba(230, 166, 86, 0.13);
+    --accent-line: rgba(230, 166, 86, 0.5);
+    --ok: #9fc690;
+    --danger: #ef7064;
+    --radius: 18px;
+    --gutter: 18px;
     --safe-bottom: env(safe-area-inset-bottom, 0px);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; background: var(--bg); color: var(--text); }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
-    font-size: 15px; line-height: 1.35; min-height: 100vh; overflow-x: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    font-size: 16px; line-height: 1.4; min-height: 100vh; overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
   }
   button { font: inherit; color: inherit; border: none; background: none; padding: 0; cursor: pointer; touch-action: manipulation; }
   input, textarea { font: inherit; color: inherit; }
-  .screen { display: none; min-height: 100vh; padding-bottom: calc(110px + var(--safe-bottom)); animation: fadeIn .22s ease; }
+  .screen { display: none; min-height: 100vh; padding-bottom: calc(120px + var(--safe-bottom)); animation: fadeIn .2s ease; }
   .screen.active { display: block; }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-  .wrap { padding: 0 16px; max-width: 560px; margin: 0 auto; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .wrap { padding: 0 var(--gutter); max-width: 600px; margin: 0 auto; }
 
-  /* ── Шапка: фон формы (размытое фото) + логотип + название клиента ── */
-  .hero { position: relative; overflow: hidden; padding: calc(20px + env(safe-area-inset-top, 0px)) 0 22px; margin-bottom: 6px; }
-  .hero-bg { position: absolute; inset: 0; z-index: 0; }
+  /* ── Шапка: высокое фото заведения, логотип и название внутри фото ── */
+  .hero {
+    position: relative; overflow: hidden; isolation: isolate;
+    height: clamp(300px, 46vh, 440px); display: flex; align-items: flex-end;
+  }
+  .hero-bg { position: absolute; inset: 0; z-index: -1; }
   .hero-bg img {
-    width: 100%; height: 100%; object-fit: cover; transform: scale(1.12);
-    filter: blur(3px) saturate(1.05); opacity: .62;
+    width: 100%; height: 100%; object-fit: cover; object-position: center 40%;
+    transform: scale(1.06); filter: blur(1.5px) saturate(1.05) brightness(.82);
   }
   .hero-bg.placeholder {
     background:
-      radial-gradient(120% 80% at 100% 0%, rgba(47, 212, 95, .20), transparent 60%),
-      radial-gradient(90% 70% at 0% 100%, rgba(47, 212, 95, .08), transparent 70%),
-      var(--bg);
+      radial-gradient(70% 60% at 85% 20%, rgba(230, 166, 86, .30), transparent 70%),
+      radial-gradient(60% 55% at 10% 75%, rgba(196, 96, 64, .22), transparent 70%),
+      linear-gradient(160deg, #2a1f18 0%, #1a1411 60%, var(--bg) 100%);
   }
   .hero-bg::after {
     content: ""; position: absolute; inset: 0;
-    background: linear-gradient(180deg, rgba(11, 15, 13, .35) 0%, rgba(11, 15, 13, .55) 55%, var(--bg) 100%);
+    background:
+      linear-gradient(180deg, rgba(21, 17, 15, .45) 0%, rgba(21, 17, 15, 0) 22%),
+      linear-gradient(180deg, rgba(21, 17, 15, 0) 34%, rgba(21, 17, 15, .6) 62%, rgba(21, 17, 15, .88) 84%, var(--bg) 100%);
   }
-  .hero .wrap { position: relative; z-index: 1; }
-  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .hero-content { width: 100%; padding-bottom: 30px; }
+  .brand { display: flex; align-items: center; gap: 16px; }
   .logo {
-    width: 52px; height: 52px; border-radius: 14px; flex: none; overflow: hidden;
-    background: rgba(11, 15, 13, .55); border: 1px solid rgba(255, 255, 255, .12);
-    display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);
+    width: 72px; height: 72px; border-radius: 20px; flex: none; overflow: hidden;
+    background: #0e0b0a; box-shadow: 0 10px 30px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .10);
+    display: flex; align-items: center; justify-content: center;
   }
-  .logo img { width: 100%; height: 100%; object-fit: contain; }
-  .brand-text .kicker { font-size: 13px; color: rgba(238, 243, 240, .78); }
-  .brand-text h1 { margin: 2px 0 0; font-size: 26px; line-height: 1.1; font-weight: 800; color: var(--accent); letter-spacing: -.01em; word-break: break-word; }
-  .date-chip {
-    position: relative; display: inline-flex; align-items: center; gap: 10px;
-    padding: 11px 14px; border-radius: 12px; background: rgba(11, 15, 13, .62);
-    border: 1px solid rgba(255, 255, 255, .14); font-size: 16px; font-weight: 600;
-    backdrop-filter: blur(6px);
+  .logo img { width: 100%; height: 100%; object-fit: cover; }
+  .brand-text { min-width: 0; }
+  .brand-text .kicker {
+    font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: rgba(245, 239, 232, .78);
   }
-  .date-chip .lbl { font-size: 12px; font-weight: 500; color: var(--muted); }
-  .date-chip input {
+  .brand-text h1 {
+    margin: 4px 0 0; font-size: clamp(30px, 8.4vw, 48px); line-height: 1.02; font-weight: 800;
+    letter-spacing: -.02em; color: #fff; word-break: break-word;
+    text-shadow: 0 2px 18px rgba(0, 0, 0, .45);
+  }
+
+  /* ── Панель под шапкой: дата и поиск ── */
+  .toolbar { display: grid; gap: 12px; margin-top: 4px; }
+  .date-card {
+    position: relative; display: flex; align-items: center; gap: 14px; width: 100%;
+    padding: 14px 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line);
+  }
+  .date-card .ic {
+    width: 44px; height: 44px; border-radius: 14px; flex: none; display: flex; align-items: center; justify-content: center;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .date-card .lbl { font-size: 13px; color: var(--muted); }
+  .date-card .val { font-size: 18px; font-weight: 700; margin-top: 1px; }
+  .date-card .val::first-letter { text-transform: uppercase; }
+  .date-card .change { margin-left: auto; font-size: 14px; font-weight: 600; color: var(--accent); }
+  .date-card input, .row-date input {
     position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;
     color-scheme: dark; border: 0; padding: 0; margin: 0;
   }
 
-  /* ── Поиск ── */
   .search {
-    display: flex; align-items: center; gap: 10px; padding: 0 12px; height: 46px;
-    background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin: 12px 0 14px;
+    display: flex; align-items: center; gap: 10px; padding: 0 14px; height: 52px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
   }
   .search:focus-within { border-color: var(--accent-line); }
-  .search input { flex: 1; min-width: 0; background: none; border: none; outline: none; font-size: 15px; height: 100%; }
+  .search input { flex: 1; min-width: 0; background: none; border: none; outline: none; font-size: 16px; height: 100%; }
   .search input::placeholder { color: var(--faint); }
+  .search input::-webkit-search-cancel-button { display: none; }
   .search .clear { display: none; color: var(--muted); padding: 6px; }
   .search.has-text .clear { display: block; }
+  .top-bar .search { margin: 10px 0 14px; }
 
-  /* ── Категории ── */
-  .cat-list { display: flex; flex-direction: column; gap: 10px; }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 26px 0 12px; }
+  .section-head h3 { margin: 0; font-size: 20px; font-weight: 750; letter-spacing: -.01em; }
+  .section-head span { font-size: 14px; color: var(--muted); }
+
+  /* ── Категории: фото или значок по смыслу, не буква ── */
+  .cat-list { display: grid; gap: 12px; }
   .cat {
-    display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
-    padding: 10px 14px 10px 10px; border-radius: var(--radius); background: var(--surface);
-    border: 1px solid var(--line); transition: border-color .15s, background .15s;
+    display: flex; align-items: center; gap: 16px; width: 100%; text-align: left;
+    padding: 10px 16px 10px 10px; border-radius: var(--radius); background: var(--surface);
+    border: 1px solid var(--line); transition: border-color .15s, background .15s, transform .1s;
   }
-  .cat:active { background: var(--surface-2); }
-  .cat.has-picked { border-color: var(--accent-line); background: linear-gradient(90deg, var(--accent-soft), var(--surface) 70%); }
+  .cat:active { transform: scale(.99); background: var(--surface-2); }
+  .cat.has-picked { border-color: var(--accent-line); }
+  .cat .media { width: 84px; height: 72px; border-radius: 14px; flex: none; overflow: hidden; }
   .cat .meta { flex: 1; min-width: 0; }
-  .cat .name { font-size: 17px; font-weight: 700; }
-  .cat .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .cat .name { font-size: 18px; font-weight: 700; letter-spacing: -.005em; }
+  .cat .sub { font-size: 14px; color: var(--muted); margin-top: 3px; }
   .cat .picked { color: var(--accent); font-weight: 600; }
   .chev { color: var(--faint); flex: none; }
 
-  .thumb {
-    width: 64px; height: 56px; border-radius: 12px; flex: none; overflow: hidden;
-    background: var(--surface-2); display: flex; align-items: center; justify-content: center;
-    font-size: 22px; font-weight: 800; color: var(--accent);
-  }
-  .thumb.sm { width: 56px; height: 56px; }
-  .thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .thumb.ph { background: linear-gradient(135deg, rgba(47, 212, 95, .22), rgba(47, 212, 95, .05)); }
+  .media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tile { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+  .tile svg { width: 46%; height: auto; max-width: 44px; }
+  .tone-0 { background: linear-gradient(140deg, #4a3319, #2b2016); color: #f3c887; }
+  .tone-1 { background: linear-gradient(140deg, #4a2a20, #2c1d19); color: #f2a88c; }
+  .tone-2 { background: linear-gradient(140deg, #34391f, #22241a); color: #c7d89f; }
+  .tone-3 { background: linear-gradient(140deg, #43283a, #291c24); color: #e7b0c4; }
 
   /* ── Позиции ── */
   .top-bar {
-    position: sticky; top: 0; z-index: 5; background: rgba(11, 15, 13, .92); backdrop-filter: blur(10px);
-    padding: calc(10px + env(safe-area-inset-top, 0px)) 0 2px;
+    position: sticky; top: 0; z-index: 5; background: rgba(21, 17, 15, .94);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 0 2px; border-bottom: 1px solid rgba(58, 48, 42, .6);
   }
-  .top-row { display: flex; align-items: center; gap: 12px; min-height: 44px; }
-  .top-row h2 { margin: 0; font-size: 21px; font-weight: 800; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .icon-btn { width: 40px; height: 40px; margin-left: -8px; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
+  .top-row { display: flex; align-items: center; gap: 12px; min-height: 48px; }
+  .top-row h2 { margin: 0; font-size: 22px; font-weight: 800; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -.01em; }
+  .icon-btn { width: 44px; height: 44px; margin-left: -10px; display: flex; align-items: center; justify-content: center; border-radius: 14px; }
   .icon-btn:active { background: var(--surface); }
-  .link-danger { color: var(--danger); font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; padding: 8px 0 8px 8px; }
+  .link-danger { color: var(--danger); font-size: 15px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; padding: 10px 0 10px 8px; }
 
-  .items { display: flex; flex-direction: column; gap: 8px; }
+  .items { display: grid; gap: 10px; }
+  #catItems, #homeBody .items { margin-top: 14px; }
   .item {
-    display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 8px;
+    display: flex; align-items: center; gap: 14px; padding: 10px 12px 10px 10px;
     background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-    transition: border-color .15s, background .15s;
+    transition: border-color .15s;
   }
   .item.in-cart { border-color: var(--accent-line); }
+  .item .media { width: 64px; height: 64px; border-radius: 14px; flex: none; overflow: hidden; }
+  .item .tile svg { max-width: 30px; }
   .item .info { flex: 1; min-width: 0; }
-  .item .name { font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
-  .item .unit { font-size: 13px; color: var(--muted); margin-top: 2px; }
-  .item .cat-note { font-size: 12px; color: var(--faint); margin-top: 1px; }
-  .item .remove { color: var(--faint); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; flex: none; margin-left: -4px; }
+  .item .name { font-size: 16px; font-weight: 650; overflow-wrap: break-word; hyphens: auto; -webkit-hyphens: auto; line-height: 1.25; }
+  /* В «Ваш заказ» в строке ещё и «×» — миниатюра и счётчик компактнее,
+     чтобы название не рвалось посреди слова. */
+  #reviewItems .item { gap: 12px; }
+  #reviewItems .item .media { width: 52px; height: 52px; border-radius: 12px; }
+  #reviewItems .stepper button { width: 34px; }
+  #reviewItems .stepper input { width: 40px; }
+  .item .unit { font-size: 14px; color: var(--muted); margin-top: 3px; }
+  .item .cat-note { font-size: 12px; color: var(--faint); margin-top: 2px; }
+  .item .remove { color: var(--faint); width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; flex: none; margin-left: -6px; }
 
   .add-btn {
-    width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
-    display: flex; align-items: center; justify-content: center; flex: none;
-    box-shadow: 0 4px 14px rgba(47, 212, 95, .28); transition: transform .1s;
+    width: 42px; height: 42px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
+    display: flex; align-items: center; justify-content: center; flex: none; transition: transform .1s, background .15s;
   }
-  .add-btn:active { transform: scale(.92); }
+  .add-btn:active { transform: scale(.92); background: var(--accent-press); }
   .stepper {
-    display: flex; align-items: center; flex: none; height: 38px; border-radius: 12px;
+    display: flex; align-items: center; flex: none; height: 42px; border-radius: 14px;
     background: var(--bg); border: 1px solid var(--line); overflow: hidden;
   }
-  .stepper button { width: 36px; height: 100%; display: flex; align-items: center; justify-content: center; }
+  .stepper button { width: 40px; height: 100%; display: flex; align-items: center; justify-content: center; }
   .stepper button:active { background: var(--surface-2); }
   .stepper .plus { background: var(--accent); color: var(--accent-ink); }
-  .stepper .plus:active { background: #29bb54; }
+  .stepper .plus:active { background: var(--accent-press); }
   .stepper input {
-    width: 44px; height: 100%; text-align: center; background: none; border: none; outline: none;
-    font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums;
+    width: 46px; height: 100%; text-align: center; background: none; border: none; outline: none;
+    font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums;
   }
   .pop { animation: pop .18s ease; }
-  @keyframes pop { 50% { transform: scale(1.08); } }
+  @keyframes pop { 50% { transform: scale(1.1); } }
 
-  .empty-note { text-align: center; color: var(--muted); padding: 36px 12px; font-size: 14px; }
-  .section-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 18px 0 10px; }
+  .empty-note { text-align: center; color: var(--muted); padding: 40px 12px; font-size: 15px; }
 
   /* ── Нижняя кнопка «Перейти к заказу» ── */
   .dock {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; pointer-events: none;
-    padding: 14px 16px calc(14px + var(--safe-bottom));
-    background: linear-gradient(180deg, transparent, rgba(11, 15, 13, .94) 38%);
+    padding: 18px var(--gutter) calc(16px + var(--safe-bottom));
+    background: linear-gradient(180deg, rgba(21, 17, 15, 0), rgba(21, 17, 15, .96) 42%);
     transform: translateY(120%); transition: transform .25s ease;
   }
   .dock.show { transform: none; }
-  .dock .btn { pointer-events: auto; max-width: 528px; margin: 0 auto; }
+  .dock .btn { pointer-events: auto; max-width: 564px; margin: 0 auto; }
   .btn {
-    width: 100%; height: 54px; border-radius: 14px; display: flex; align-items: center; justify-content: center; gap: 10px;
-    font-size: 16px; font-weight: 750; letter-spacing: .01em;
+    width: 100%; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; gap: 10px;
+    font-size: 17px; font-weight: 700; letter-spacing: .005em;
   }
-  .btn-primary { background: var(--accent); color: var(--accent-ink); box-shadow: 0 10px 28px rgba(47, 212, 95, .26); }
-  .btn-primary:active { background: #29bb54; }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); box-shadow: 0 10px 26px rgba(230, 166, 86, .18); }
+  .btn-primary:active { background: var(--accent-press); }
   .btn-primary:disabled { opacity: .55; box-shadow: none; }
   .btn-ghost { background: var(--surface); border: 1px solid var(--line); color: var(--text); font-weight: 650; }
   .btn .count { font-variant-numeric: tabular-nums; }
@@ -180,46 +221,43 @@
   .btn.spread .label { flex: 1; text-align: center; margin-left: 24px; }
 
   /* ── Экран «Ваш заказ» ── */
-  .field-label { font-size: 13px; color: var(--muted); margin: 18px 0 8px; display: block; }
+  .field-label { font-size: 14px; color: var(--muted); margin: 20px 0 8px; display: block; }
   .text-input, textarea {
-    width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
-    padding: 12px 14px; font-size: 15px; outline: none;
+    width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 13px 15px; font-size: 16px; outline: none;
   }
   .text-input:focus, textarea:focus { border-color: var(--accent-line); }
-  textarea { resize: vertical; min-height: 84px; }
+  textarea { resize: vertical; min-height: 88px; }
   ::placeholder { color: var(--faint); }
   .row-date {
-    position: relative; display: flex; align-items: center; gap: 12px; margin-top: 12px;
-    padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line);
+    position: relative; display: flex; align-items: center; gap: 12px; margin-top: 14px;
+    padding: 14px 16px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line);
   }
   .row-date .v { font-weight: 700; }
   .row-date .change { margin-left: auto; color: var(--accent); font-size: 14px; font-weight: 600; }
-  .row-date input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; color-scheme: dark; cursor: pointer; }
-  .summary {
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px;
-  }
+  .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
   .summary > div {
-    background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 8px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 13px 8px;
     text-align: center; min-width: 0;
   }
-  .summary .v { font-size: 15px; font-weight: 750; display: flex; align-items: center; justify-content: center; gap: 6px; overflow: hidden; }
+  .summary .v { font-size: 16px; font-weight: 750; display: flex; align-items: center; justify-content: center; gap: 6px; overflow: hidden; }
   .summary .v span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .summary .k { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .summary .k { font-size: 13px; color: var(--muted); margin-top: 3px; }
   .error-box {
-    display: none; margin-top: 14px; padding: 12px 14px; border-radius: 12px;
-    background: rgba(255, 90, 82, .1); border: 1px solid rgba(255, 90, 82, .35); color: #ffb3ae; font-size: 14px;
+    display: none; margin-top: 16px; padding: 13px 15px; border-radius: 14px;
+    background: rgba(239, 112, 100, .1); border: 1px solid rgba(239, 112, 100, .4); color: #ffc0b8; font-size: 15px;
   }
   .error-box.show { display: block; }
 
   /* ── Центрированные экраны: отправка, успех, пусто, ошибка ── */
   .center {
     min-height: calc(100vh - 40px); display: flex; flex-direction: column; align-items: center; justify-content: center;
-    text-align: center; padding: 24px 24px calc(24px + var(--safe-bottom)); max-width: 460px; margin: 0 auto;
+    text-align: center; padding: 24px 24px calc(24px + var(--safe-bottom)); max-width: 480px; margin: 0 auto;
   }
-  .center h2 { font-size: 23px; font-weight: 800; margin: 26px 0 8px; }
-  .center p { color: var(--muted); margin: 0; font-size: 15px; }
+  .center h2 { font-size: 26px; font-weight: 800; margin: 26px 0 8px; letter-spacing: -.01em; }
+  .center p { color: var(--muted); margin: 0; font-size: 16px; }
   .center .actions { width: 100%; display: flex; flex-direction: column; gap: 10px; margin-top: 30px; }
-  .ring { width: 124px; height: 124px; position: relative; display: flex; align-items: center; justify-content: center; }
+  .ring { width: 128px; height: 128px; position: relative; display: flex; align-items: center; justify-content: center; }
   .ring svg.track { position: absolute; inset: 0; }
   .ring .spin { animation: spin 1.1s linear infinite; transform-origin: 50% 50%; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -229,52 +267,93 @@
   .check-mark { stroke-dasharray: 80; stroke-dashoffset: 80; animation: draw .35s .45s ease forwards; }
   @keyframes draw { to { stroke-dashoffset: 0; } }
   .receipt {
-    width: 100%; text-align: left; margin-top: 22px; padding: 12px 14px; border-radius: 12px;
-    background: var(--surface); border: 1px solid var(--line); font-size: 14px;
+    width: 100%; text-align: left; margin-top: 24px; padding: 14px 16px; border-radius: 14px;
+    background: var(--surface); border: 1px solid var(--line); font-size: 15px;
   }
-  .receipt div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+  .receipt div { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
   .receipt div span:first-child { color: var(--muted); }
   .receipt div span:last-child { text-align: right; font-weight: 600; }
   .muted-icon { color: var(--muted); }
 
-  .skeleton { background: linear-gradient(90deg, var(--surface) 0%, var(--surface-2) 50%, var(--surface) 100%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: var(--radius); height: 76px; }
+  .skeleton { background: linear-gradient(90deg, var(--surface) 0%, var(--surface-2) 50%, var(--surface) 100%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: var(--radius); height: 94px; }
   @keyframes shimmer { to { background-position: -200% 0; } }
+
+  /* ── Планшет и компьютер: шире колонка, крупнее шапка, категории сеткой ── */
+  @media (min-width: 700px) {
+    :root { --gutter: 32px; }
+    body { font-size: 17px; }
+    .wrap { max-width: 920px; }
+    .hero { height: clamp(360px, 44vh, 520px); }
+    .hero-content { padding-bottom: 40px; }
+    .logo { width: 96px; height: 96px; border-radius: 24px; }
+    .brand { gap: 22px; }
+    .brand-text .kicker { font-size: 13px; }
+    .brand-text h1 { font-size: clamp(44px, 6vw, 60px); }
+    .toolbar { grid-template-columns: minmax(340px, 1fr) 1fr; align-items: stretch; }
+    .date-card .val { white-space: nowrap; }
+    .toolbar .search { height: auto; min-height: 56px; }
+    .cat-list { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .cat { flex-direction: column; align-items: stretch; gap: 0; padding: 0; overflow: hidden; }
+    .cat .media { width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 0; }
+    .cat .tile svg { max-width: 64px; width: 22%; }
+    .cat .meta { padding: 14px 18px 16px; }
+    .cat .name { font-size: 20px; }
+    .cat .chev { display: none; }
+    .items { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    #reviewItems { grid-template-columns: 1fr; }
+    .item .media { width: 72px; height: 72px; }
+    .btn { height: 60px; font-size: 18px; }
+    .dock .btn { max-width: 520px; }
+    #scr-review .wrap { max-width: 680px; }
+  }
+  @media (min-width: 1100px) {
+    .cat-list { grid-template-columns: repeat(3, 1fr); }
+    .items { grid-template-columns: repeat(3, 1fr); }
+  }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } .check-circle, .check-mark { stroke-dashoffset: 0; } }
 </style>
 </head>
 <body>
 
-<!-- 1. Каталог: шапка с фоном/логотипом, дата, поиск, категории -->
+<!-- 1. Каталог: высокая шапка с фото заведения, логотип и название, дата, поиск, категории -->
 <section class="screen active" id="scr-home">
   <header class="hero">
     <div class="hero-bg placeholder" id="heroBg"></div>
-    <div class="wrap">
-      <div class="brand">
-        <div class="logo" id="logoBox"></div>
-        <div class="brand-text">
-          <div class="kicker">Заказ продуктов</div>
-          <h1 id="venueLabel">&nbsp;</h1>
+    <div class="hero-content">
+      <div class="wrap">
+        <div class="brand">
+          <div class="logo" id="logoBox"></div>
+          <div class="brand-text">
+            <div class="kicker">Заказ продуктов</div>
+            <h1 id="venueLabel">&nbsp;</h1>
+          </div>
         </div>
       </div>
-      <label class="date-chip" id="dateChip">
-        <span>
-          <span class="lbl">Дата заказа</span><br>
-          <span id="dateText">—</span>
-        </span>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M8 2.5v4M16 2.5v4M3 10h18"/></svg>
-        <input type="date" id="orderDate" aria-label="Дата заказа">
-      </label>
     </div>
   </header>
   <div class="wrap">
-    <div class="search" id="homeSearch">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="muted-icon" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input type="search" id="homeQuery" placeholder="Поиск по всем позициям…" autocomplete="off" enterkeyhint="search">
-      <button class="clear" type="button" aria-label="Очистить поиск" onclick="clearSearch('home')">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
-      </button>
+    <div class="toolbar">
+      <label class="date-card">
+        <span class="ic">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M8 2.5v4M16 2.5v4M3 10h18"/></svg>
+        </span>
+        <span>
+          <span class="lbl">Дата заказа</span><br>
+          <span class="val" id="dateText">—</span>
+        </span>
+        <span class="change">Изменить</span>
+        <input type="date" id="orderDate" aria-label="Дата заказа">
+      </label>
+      <div class="search" id="homeSearch">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="muted-icon" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" id="homeQuery" placeholder="Поиск по всем позициям" autocomplete="off" enterkeyhint="search">
+        <button class="clear" type="button" aria-label="Очистить поиск" onclick="clearSearch('home')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
     </div>
     <div id="homeBody">
+      <div class="section-head"><h3>Категории</h3></div>
       <div class="cat-list"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
     </div>
   </div>
@@ -292,7 +371,7 @@
       </div>
       <div class="search" id="catSearch">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="muted-icon" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input type="search" id="catQuery" placeholder="Поиск по позициям…" autocomplete="off" enterkeyhint="search">
+        <input type="search" id="catQuery" placeholder="Поиск по позициям" autocomplete="off" enterkeyhint="search">
         <button class="clear" type="button" aria-label="Очистить поиск" onclick="clearSearch('cat')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
@@ -364,8 +443,8 @@
   <div class="center">
     <div class="ring">
       <svg class="track" viewBox="0 0 124 124" aria-hidden="true">
-        <circle cx="62" cy="62" r="56" fill="none" stroke="#1d2a23" stroke-width="6"/>
-        <g class="spin"><circle cx="62" cy="62" r="56" fill="none" stroke="#2fd45f" stroke-width="6" stroke-linecap="round" stroke-dasharray="120 232"/></g>
+        <circle cx="62" cy="62" r="56" fill="none" stroke="#2e2622" stroke-width="6"/>
+        <g class="spin"><circle cx="62" cy="62" r="56" fill="none" stroke="#e6a656" stroke-width="6" stroke-linecap="round" stroke-dasharray="120 232"/></g>
       </svg>
       <svg class="plane" width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M21.5 2.5 10.5 13.5M21.5 2.5 14.5 21.5l-4-8-8-4z"/></svg>
     </div>
@@ -378,8 +457,8 @@
 <section class="screen" id="scr-done">
   <div class="center">
     <svg width="112" height="112" viewBox="0 0 112 112" fill="none" aria-hidden="true">
-      <circle class="check-circle" cx="56" cy="56" r="52" stroke="#2fd45f" stroke-width="6"/>
-      <path class="check-mark" d="M34 57l15 15 29-31" stroke="#2fd45f" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle class="check-circle" cx="56" cy="56" r="52" stroke="#9fc690" stroke-width="6"/>
+      <path class="check-mark" d="M34 57l15 15 29-31" stroke="#9fc690" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     <h2>Заказ отправлен!</h2>
     <p id="doneText">Кухня получила ваш заказ. Подтверждение придёт в вашу тему в Telegram.</p>
@@ -419,7 +498,7 @@
   const NAME_KEY = "oko_order_name";
   const MAX_QTY = 999;
 
-  const CHEF_HAT = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#2fd45f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 13.5V20h12v-6.5"/><path d="M6 13.5A4 4 0 0 1 7.2 5.8 5 5 0 0 1 16.8 5.8 4 4 0 0 1 18 13.5z"/><path d="M6 17h12"/></svg>';
+  const CHEF_HAT = '<svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#e6a656" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 13.5V20h12v-6.5"/><path d="M6 13.5A4 4 0 0 1 7.2 5.8 5 5 0 0 1 16.8 5.8 4 4 0 0 1 18 13.5z"/><path d="M6 17h12"/></svg>';
   const PLUS = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
   const MINUS = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14"/></svg>';
   const CROSS = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
@@ -457,6 +536,15 @@
     const [y, m, d] = iso.split("-");
     return `${d}.${m}.${y}`;
   }
+  // «четверг, 2 октября» — для карточки даты под шапкой.
+  function humanDate(iso) {
+    if (!iso) return "—";
+    const [y, m, d] = iso.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    const opts = { weekday: "long", day: "numeric", month: "long" };
+    if (y !== new Date().getFullYear()) opts.year = "numeric";
+    return date.toLocaleDateString("ru-RU", opts);
+  }
   function localIso(date) {
     const tz = date.getTimezoneOffset() * 60000;
     return new Date(date.getTime() - tz).toISOString().slice(0, 10);
@@ -490,7 +578,7 @@
   function setDate(iso) {
     dateInput.value = iso;
     reviewDateInput.value = iso;
-    document.getElementById("dateText").textContent = fmtDate(iso);
+    document.getElementById("dateText").textContent = humanDate(iso);
     document.getElementById("reviewDate").textContent = fmtDate(iso);
   }
   [dateInput, reviewDateInput].forEach((el) => el.addEventListener("change", () => {
@@ -548,10 +636,60 @@
   }
   function hasCategories() { return form.items.some((i) => i.category); }
 
-  function thumbHtml(item, cls) {
-    if (item && item.photoUrl) return `<div class="thumb ${cls || ""}"><img src="${esc(item.photoUrl)}" alt="" loading="lazy"></div>`;
-    const letter = item ? (item.name || "?").trim().charAt(0).toUpperCase() : "?";
-    return `<div class="thumb ph ${cls || ""}">${esc(letter)}</div>`;
+  // Значки категорий — вместо буквы-заглушки, когда фото ещё не загружено.
+  // Подбираются по смыслу названия категории; оттенок плашки — один из
+  // четырёх тёплых, стабильный для категории (по хэшу названия).
+  const ICON_PATHS = {
+    cake: '<path d="M4 20.5h16"/><path d="M5.5 20.5v-6.5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v6.5"/><path d="M5.5 16.2c1.4 1 2.8 1 4.2 0s2.8-1 4.2 0 2.8 1 4.2 0"/><path d="M12 12V8.5"/><path d="M12 6.3c.9 0 1.4-.7 1.4-1.4 0-.9-1.4-2.4-1.4-2.4s-1.4 1.5-1.4 2.4c0 .7.5 1.4 1.4 1.4z"/>',
+    bread: '<path d="M6.5 20h11a2 2 0 0 0 2-2v-7.2A3.6 3.6 0 0 0 20.8 8c0-2.5-3.9-4.5-8.8-4.5S3.2 5.5 3.2 8a3.6 3.6 0 0 0 1.3 2.8V18a2 2 0 0 0 2 2z"/><path d="M9 10.5l1.6 1.6M12.4 9.4 14 11M15.6 10.5l1.2 1.2"/>',
+    meat: '<path d="M16 4.6c3 1.3 4.7 4.5 3.7 7.8-1.1 3.8-5 6.4-9.2 6.1-3.5-.3-6.1-2.3-6.1-5.2 0-2.4 1.8-3.4 3.3-4.7 1.7-1.5 2.4-4 4.6-4.5 1.3-.3 2.5-.1 3.7.5z"/><circle cx="14.3" cy="10.3" r="2.1"/>',
+    poultry: '<path d="M14.8 3.8a5 5 0 0 1 2.8 8.4 5 5 0 0 1-4.6 1.4l-3.2 3.2a2 2 0 1 1-2.4 2.4 2 2 0 1 1-2.4-2.4 2 2 0 0 1 2.4-.1l3.2-3.2a5 5 0 0 1 4.2-9.7z"/>',
+    fish: '<path d="M5.5 12c2.2-3.6 5.4-5.6 8.6-5.6 3 0 5.6 2 7.4 5.6-1.8 3.6-4.4 5.6-7.4 5.6-3.2 0-6.4-2-8.6-5.6z"/><path d="M5.5 12 2.5 8v8z"/><circle cx="16.8" cy="10.8" r=".9" fill="currentColor" stroke="none"/>',
+    veg: '<path d="M15.6 8.4c-1.4-1.4-3.6-1.4-5 0L3.7 17.9c-.8 1 .2 2.4 1.3 2l9.4-4c1.4-.6 2.3-1.8 2.6-3.2.3-1.6-.2-3.2-1.4-4.3z"/><path d="M15.6 8.4 20.5 3.5M16.6 4.2c1.3-.9 3-.6 3.8.7M19.8 7.4c.9-1.3.6-3-.7-3.8"/><path d="M8.3 13.4l1.5 1.5M11 11l1.4 1.4"/>',
+    fruit: '<path d="M12 7.4c-2.2-1.6-6.4-1-7.1 3.1-.7 3.7 1.6 9.3 4.5 9.3 1 0 1.6-.6 2.6-.6s1.6.6 2.6.6c2.9 0 5.2-5.6 4.5-9.3-.7-4.1-4.9-4.7-7.1-3.1z"/><path d="M12 7.4c0-2 .6-3.6 2.2-4.6"/><path d="M12.6 5.2c1.4-.2 2.6.3 3.3 1.4"/>',
+    dairy: '<path d="M8.5 2.5h7"/><path d="M9.3 2.5v3L6.5 9.4V19.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V9.4l-2.8-3.9v-3"/><path d="M6.5 13.5h11"/>',
+    drink: '<path d="M5 8.5h12v5.5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z"/><path d="M17 10h1.4a2.6 2.6 0 0 1 0 5.2H17"/><path d="M9 3c-.7.8-.7 1.8 0 2.6M13 3c-.7.8-.7 1.8 0 2.6"/>',
+    pot: '<path d="M3 10.5h18"/><path d="M5 10.5v6.5a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-6.5"/><path d="M9 7c0-1.5 1.3-2.6 3-2.6S15 5.5 15 7"/><path d="M1.8 12.5H5M19 12.5h3.2"/>',
+    egg: '<path d="M12 3c-3.6 0-6.5 5.4-6.5 9.7a6.5 6.5 0 0 0 13 0C18.5 8.4 15.6 3 12 3z"/><path d="M9 13.5a3 3 0 0 0 2.2 3"/>',
+    frozen: '<path d="M12 2.5v19M4 7l16 10M4 17 20 7"/><path d="m9.5 4 2.5 2.5L14.5 4M9.5 20l2.5-2.5 2.5 2.5"/>',
+    basket: '<path d="M3 9.5h18l-1.8 9.2a2 2 0 0 1-2 1.8H6.8a2 2 0 0 1-2-1.8z"/><path d="M8 9.5l3-5.5M16 9.5l-3-5.5"/><path d="M9 13.5v3.5M12 13.5v3.5M15 13.5v3.5"/>',
+  };
+  const ICON_RULES = [
+    [/десерт|торт|пирож|сладк|кондит|выпеч|кекс|печень/, "cake"],
+    [/мучн|хлеб|булоч|булк|тесто|лаваш|лепёш|лепеш|пицц/, "bread"],
+    [/птиц|курин|куриц|цыпл|индей|утк/, "poultry"],
+    [/мяс|говя|свин|баран|телят|фарш|стейк|колбас|сосис/, "meat"],
+    [/рыб|море|кревет|лосос|кальм|икр/, "fish"],
+    [/овощ|зелен|салат|картоф|морков|лук|томат|огур/, "veg"],
+    [/фрукт|ягод|яблок|цитрус/, "fruit"],
+    [/молоч|сыр|слив|творог|масло|молок|йогур/, "dairy"],
+    [/напит|сок|лимонад|чай|кофе|вода|морс/, "drink"],
+    [/соус|заготов|полуфаб|суп|бульон|гарнир/, "pot"],
+    [/яйц/, "egg"],
+    [/замор|морож|лёд|лед/, "frozen"],
+  ];
+  function iconFor(category) {
+    const name = String(category || "").toLowerCase();
+    const rule = ICON_RULES.find(([re]) => re.test(name));
+    const key = rule ? rule[1] : "basket";
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[key]}</svg>`;
+  }
+  function toneFor(category) {
+    let h = 0;
+    for (const ch of String(category || "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return `tone-${h % 4}`;
+  }
+  function mediaHtml(photoUrl, category) {
+    if (photoUrl) return `<div class="media"><img src="${esc(photoUrl)}" alt="" loading="lazy"></div>`;
+    return `<div class="media"><div class="tile ${toneFor(category)}">${iconFor(category)}</div></div>`;
+  }
+  function thumbHtml(item) {
+    return mediaHtml(item && item.photoUrl, item ? categoryOf(item) : "");
+  }
+  function categoryPhoto(name, items) {
+    if (form.categoryPhotos && form.categoryPhotos[name]) return form.categoryPhotos[name];
+    const withPhoto = items.find((i) => i.photoUrl);
+    return withPhoto ? withPhoto.photoUrl : null;
   }
 
   function itemRowHtml(item, opts = {}) {
@@ -566,7 +704,7 @@
       : `<button type="button" class="add-btn" aria-label="Добавить" data-act="inc" data-name="${key}">${PLUS}</button>`;
     return `
       <div class="item ${qty > 0 ? "in-cart" : ""}" data-row="${key}">
-        ${thumbHtml(item, "sm")}
+        ${thumbHtml(item)}
         <div class="info">
           <div class="name">${esc(item.name)}</div>
           <div class="unit">1 ${esc(item.unit)}</div>
@@ -592,18 +730,21 @@
     }
     if (q || !hasCategories()) {
       const found = form.items.filter((i) => matches(i, q));
-      body.innerHTML = found.length
+      const head = q
+        ? `<div class="section-head"><h3>Поиск</h3><span>${found.length ? `${found.length} ${plural(found.length, "позиция", "позиции", "позиций")}` : ""}</span></div>`
+        : `<div class="section-head"><h3>Позиции</h3></div>`;
+      body.innerHTML = head + (found.length
         ? `<div class="items">${found.map((i) => itemRowHtml(i, { showCategory: !!q })).join("")}</div>`
-        : `<div class="empty-note">Ничего не нашлось по запросу «${esc(q)}»</div>`;
+        : `<div class="empty-note">Ничего не нашлось по запросу «${esc(q)}»</div>`);
       return;
     }
-    body.innerHTML = `<div class="cat-list">${categoryNames().map((name) => {
+    const names = categoryNames();
+    body.innerHTML = `<div class="section-head"><h3>Категории</h3></div><div class="cat-list">${names.map((name) => {
       const items = form.items.filter((i) => categoryOf(i) === name);
-      const withPhoto = items.find((i) => i.photoUrl) || items[0];
       const picked = items.filter((i) => cart[i.name] > 0).length;
       return `
         <button type="button" class="cat ${picked ? "has-picked" : ""}" data-cat="${esc(name)}">
-          ${withPhoto && withPhoto.photoUrl ? thumbHtml(withPhoto) : `<div class="thumb ph">${esc(name.charAt(0).toUpperCase())}</div>`}
+          ${mediaHtml(categoryPhoto(name, items), name)}
           <div class="meta">
             <div class="name">${esc(name)}</div>
             <div class="sub">${items.length} ${plural(items.length, "позиция", "позиции", "позиций")}${picked ? ` · <span class="picked">${picked} в заказе</span>` : ""}</div>
@@ -852,7 +993,11 @@
       return;
     }
     if (!res.ok) { showBlocked(data); return; }
-    form = { label: data.label, items: Array.isArray(data.items) ? data.items : [] };
+    form = {
+      label: data.label,
+      items: Array.isArray(data.items) ? data.items : [],
+      categoryPhotos: data.categoryPhotos && typeof data.categoryPhotos === "object" ? data.categoryPhotos : {},
+    };
     applyBranding(data);
     document.getElementById("submitterName").value = storage((ls) => ls.getItem(NAME_KEY)) || "";
     loadDraft();

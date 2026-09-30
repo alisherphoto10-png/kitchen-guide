@@ -9,6 +9,7 @@ cp stub-oko-shelf-life-store.js src/oko-shelf-life-store.js
 cp ../frontend/order/index.html frontend/oko-order/index.html
 cp ../frontend/admin/index.html frontend/oko-order/admin/index.html
 cp /root/kitchendesk/backend/src/data/{oko-order-config.json,oko-orders.json,oko-known-chats.json} src/data/
+cp -r /root/kitchendesk/backend/src/data/oko-order-media src/data/ 2>/dev/null || true
 export NODE_PATH=/root/kitchendesk/backend/node_modules
 PORT=3099 node server.js > server.log 2>&1 &
 echo $! > server.pid
