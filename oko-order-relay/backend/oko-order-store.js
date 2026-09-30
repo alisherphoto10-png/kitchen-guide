@@ -73,6 +73,49 @@ function markFinalNotified(orderId) {
   return order;
 }
 
+/**
+ * "Отправлено в доставку" — вторая стадия на ТОЙ ЖЕ кнопке (не новая кнопка):
+ * первое нажатие — повар принимает, второе, тем же callback_data, но только
+ * от назначенного в конфиге заведения человека — отмечает доставку. Общий
+ * случай (нет категорий, один "✅ Принято" на весь заказ).
+ */
+function markDelivery(orderId, delivered) {
+  const orders = readOrders();
+  const order = orders[orderId];
+  if (!order) return null;
+  if (order.delivered) return order;
+  order.delivered = delivered;
+  writeOrders(orders);
+  return order;
+}
+
+/**
+ * То же самое, но для одной категории — второе нажатие на конкретную
+ * "✅ Категория" кнопку, уже принятую поваром.
+ */
+function markCategoryDelivered(orderId, catIndex, delivered) {
+  const orders = readOrders();
+  const order = orders[orderId];
+  if (!order || !order.categories || !order.categories[catIndex]) return null;
+  if (order.categories[catIndex].delivered) return order;
+  order.categories[catIndex].delivered = delivered;
+  writeOrders(orders);
+  return order;
+}
+
+/**
+ * Отдельный от finalNotified флаг — "все категории доставлены" сообщение в
+ * исходную группу шлём один раз, тем же принципом защиты от гонки.
+ */
+function markDeliveryFinalNotified(orderId) {
+  const orders = readOrders();
+  const order = orders[orderId];
+  if (!order) return null;
+  order.deliveryFinalNotified = true;
+  writeOrders(orders);
+  return order;
+}
+
 module.exports = {
   createOrderId,
   saveOrder,
@@ -80,5 +123,8 @@ module.exports = {
   markAccepted,
   markCategoryAccepted,
   markFinalNotified,
+  markDelivery,
+  markCategoryDelivered,
+  markDeliveryFinalNotified,
   ORDERS_PATH,
 };

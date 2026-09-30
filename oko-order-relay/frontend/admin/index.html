@@ -24,6 +24,11 @@
   .add-item input.category { flex: 0 0 40%; }
   button.action { background: #238636; color: white; border: none; border-radius: 6px; padding: 10px 14px; cursor: pointer; font-size: 14px; }
   button.secondary { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 8px 14px; cursor: pointer; font-size: 14px; }
+  button.danger { background: #21262d; color: #f85149; border: 1px solid #30363d; border-radius: 6px; padding: 8px 14px; cursor: pointer; font-size: 14px; }
+  .venue-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .venue-header h2 { margin: 0; }
+  .add-venue-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+  .add-venue-form .field { flex: 1; min-width: 160px; margin-bottom: 0; }
   #gate { max-width: 320px; margin: 80px auto; text-align: center; }
   #gate input { width: 100%; padding: 10px; margin: 10px 0; background: #161b22; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; }
   #app { display: none; }
@@ -44,6 +49,24 @@
 <div id="app">
   <h1>OKO — управление заказами</h1>
   <p class="hint">Списки групп/тем заполняются автоматически по мере того, как бот видит там сообщения. Если нужной группы/темы ещё нет в списке — отправьте туда любое сообщение и обновите страницу, либо введите ID вручную.</p>
+
+  <div class="venue">
+    <h2>Добавить заведение</h2>
+    <p class="hint" style="margin-bottom:10px">Новое заведение появится ниже пустым карточкам — группу/тему для него подключаете точно так же, как для уже существующих. Не забудьте нажать «Сохранить все изменения» внизу.</p>
+    <div class="add-venue-form">
+      <div class="field">
+        <label>Название заведения</label>
+        <input type="text" id="newVenueName" placeholder="Например: Чайхана" oninput="onNewVenueNameInput()" onkeydown="if(event.key==='Enter') addVenue()">
+      </div>
+      <div class="field">
+        <label>Часть ссылки (заполнится сама, можно поменять)</label>
+        <input type="text" id="newVenueSlug" placeholder="заполнится после названия" oninput="slugTouchedByHand = true" onkeydown="if(event.key==='Enter') addVenue()">
+      </div>
+      <button class="action" onclick="addVenue()">+ Добавить</button>
+    </div>
+    <div class="status" id="newVenueStatus"></div>
+  </div>
+
   <div id="venues"></div>
 
   <div class="venue">
@@ -81,6 +104,91 @@
     document.getElementById("app").style.display = "block";
     render();
     renderKnownChats();
+  }
+
+  // Transliterates a Russian (or mixed) venue name into a URL-safe slug —
+  // this becomes the config's object key AND the "?venue=" query param the
+  // public order form reads, so it has to stay ASCII/lowercase/underscore
+  // only (matches the backend's VENUE_KEY_RE).
+  const TRANSLIT = {
+    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y",
+    к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f",
+    х: "h", ц: "c", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+  };
+  function slugify(text) {
+    return text
+      .toLowerCase()
+      .split("")
+      .map((ch) => (TRANSLIT[ch] !== undefined ? TRANSLIT[ch] : ch))
+      .join("")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 40);
+  }
+  function uniqueSlug(base) {
+    const root = base || "venue";
+    let slug = root;
+    let n = 2;
+    while (config[slug]) {
+      slug = `${root}_${n}`;
+      n += 1;
+    }
+    return slug;
+  }
+
+  let slugTouchedByHand = false;
+  function onNewVenueNameInput() {
+    if (slugTouchedByHand) return;
+    document.getElementById("newVenueSlug").value = slugify(document.getElementById("newVenueName").value);
+  }
+
+  function addVenue() {
+    const nameInput = document.getElementById("newVenueName");
+    const slugInput = document.getElementById("newVenueSlug");
+    const statusEl = document.getElementById("newVenueStatus");
+    const name = nameInput.value.trim();
+    if (!name) {
+      statusEl.className = "status";
+      statusEl.style.color = "#f85149";
+      statusEl.innerText = "Укажите название";
+      return;
+    }
+    let slug = slugify(slugInput.value.trim() || name);
+    if (!slug) {
+      statusEl.className = "status";
+      statusEl.style.color = "#f85149";
+      statusEl.innerText = "Не удалось сформировать ссылку — впишите её вручную латиницей";
+      return;
+    }
+    if (config[slug]) {
+      slug = uniqueSlug(slug);
+    }
+
+    config[slug] = {
+      label: name,
+      sourceGroupChatId: null,
+      sourceThreadId: null,
+      kitchenGroupChatId: null,
+      kitchenThreadId: null,
+      items: [],
+      cookMentions: [],
+    };
+
+    nameInput.value = "";
+    slugInput.value = "";
+    slugTouchedByHand = false;
+    statusEl.className = "status";
+    statusEl.style.color = "#3fb950";
+    statusEl.innerText = "Добавлено — не забудьте сохранить";
+    render();
+    document.getElementById(`venue-${slug}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function removeVenue(venueKey) {
+    const label = config[venueKey].label;
+    if (!confirm(`Удалить заведение «${label}»? Настройки групп/тем и список позиций для него потеряются. Уже отправленные заказы это не затронет.`)) return;
+    delete config[venueKey];
+    render();
   }
 
   function normalizeItem(item) {
@@ -136,6 +244,53 @@
         return `<option value="${userId}">${label} (${note})</option>`;
       })
       .join("");
+  }
+
+  // Су-шеф (или кто угодно назначенный на доставку) не обязан быть именно в
+  // кухонной группе конкретного заведения — бот мог увидеть его в любой
+  // другой группе. Раньше список брался только из v.kitchenGroupChatId, из-за
+  // чего человек, известный боту по другому чату, в списке не появлялся
+  // (баг, найденный 2026-09-03). Теперь — по всем известным чатам сразу,
+  // с дедупликацией по userId.
+  function allKnownPeople() {
+    const merged = {};
+    Object.values(knownChats).forEach((chat) => {
+      if (!chat || !chat.people) return;
+      Object.entries(chat.people).forEach(([userId, p]) => {
+        if (!merged[userId]) merged[userId] = p;
+      });
+    });
+    return merged;
+  }
+
+  function deliveryPersonOptionsHtml() {
+    const people = allKnownPeople();
+    return Object.keys(people)
+      .map((userId) => {
+        const p = people[userId];
+        const label = [p.firstName, p.lastName].filter(Boolean).join(" ") || `ID ${userId}`;
+        const note = p.username ? `@${p.username}` : "без username";
+        return `<option value="${userId}">${label} (${note})</option>`;
+      })
+      .join("");
+  }
+
+  function setDeliveryPersonFromPick(venueKey) {
+    const select = document.getElementById(`deliveryPersonPick-${venueKey}`);
+    const userId = select.value;
+    if (!userId) return;
+    const person = allKnownPeople()[userId];
+    if (!person) return;
+    const label = [person.firstName, person.lastName].filter(Boolean).join(" ") || `ID ${userId}`;
+    config[venueKey].deliveryPerson = person.username
+      ? { label, username: person.username }
+      : { label, userId: Number(userId) };
+    render();
+  }
+
+  function clearDeliveryPerson(venueKey) {
+    config[venueKey].deliveryPerson = null;
+    render();
   }
 
   function categoryOptionsHtml(v) {
@@ -255,8 +410,11 @@
       .map((venueKey) => {
         const v = config[venueKey];
         return `
-        <div class="venue">
-          <h2>${v.label} <span style="color:#8b949e;font-weight:400">(${venueKey})</span></h2>
+        <div class="venue" id="venue-${venueKey}">
+          <div class="venue-header">
+            <h2>${v.label} <span style="color:#8b949e;font-weight:400">(${venueKey})</span></h2>
+            <button class="danger" onclick="removeVenue('${venueKey}')">Удалить заведение</button>
+          </div>
 
           <div class="field">
             <label>Название заведения</label>
@@ -323,6 +481,21 @@
               ${categoryOptionsHtml(v)}
             </select>
             <button class="secondary" onclick="addMentionManual('${venueKey}')">Добавить</button>
+          </div>
+
+          <label style="font-size:13px;color:#8b949e;margin-top:14px;display:block">Кто отправляет в доставку (необязательно)</label>
+          <p class="hint" style="margin:2px 0 6px">После того как повар примет свою категорию, ту же кнопку (уже с его именем) сможет нажать ещё раз этот человек — текст на кнопке сменится на «🚚 в доставке», а статус заказа в исходной группе — на «В процессе доставки».</p>
+          <div class="items-list" id="deliveryPerson-${venueKey}">
+            ${v.deliveryPerson
+              ? `<span class="item-chip">${v.deliveryPerson.username ? "@" + v.deliveryPerson.username : v.deliveryPerson.label} <button onclick="clearDeliveryPerson('${venueKey}')">✕</button></span>`
+              : `<span class="hint">Не назначен</span>`}
+          </div>
+          <div class="add-item">
+            <select id="deliveryPersonPick-${venueKey}">
+              <option value="">— выбрать из тех, кого бот видел в поварской группе —</option>
+              ${deliveryPersonOptionsHtml(venueKey, v)}
+            </select>
+            <button class="secondary" onclick="setDeliveryPersonFromPick('${venueKey}')">Назначить</button>
           </div>
 
           <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">

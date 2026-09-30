@@ -1,6 +1,8 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
+const rateLimit = require("express-rate-limit");
 const { readKnownChats, renameTopic } = require("./oko-known-chats");
 const {
   createOrderId,
@@ -9,6 +11,9 @@ const {
   markAccepted,
   markCategoryAccepted,
   markFinalNotified,
+  markDelivery,
+  markCategoryDelivered,
+  markDeliveryFinalNotified,
 } = require("./oko-order-store");
 
 const ACCEPT_CALLBACK_PREFIX = "oko_accept:";
@@ -39,24 +44,19 @@ function buildOrderPrintLines(order, venueConfig) {
 }
 
 // "Облако" и "Мясо" (order.venue, ключи ИЗ ЭТОГО КОНФИГА — см.
-// data/oko-order-config.example.json) — это просто разные формы заказа,
-// НЕ заведения KitchenDesk: они не зарегистрированы в таблице restaurants
-// и никогда не будут (пользователь явно подтвердил: "облако и мясо, они
-// пока к kitchen desk вообще ничего не отношения не имеют... я просто хочу
-// подключить принтер, чтобы он что-то дублировал"). Поэтому тикеты обеих
-// форм печатаются на принтере ОДНОГО реального заведения — ОКО, просто
-// дублируя то, что и так приходит в Telegram-группу. "1" — настоящий id
-// ОКО Гастробар в таблице restaurants KitchenDesk (не придуманный, см.
-// print-agent/README.md, п.14 — миграция ОКО на схему синхронизации с
-// реальными заведениями).
+// data/oko-order-config.json) — это просто разные формы заказа, НЕ заведения
+// KitchenDesk: они не зарегистрированы в таблице restaurants и никогда не
+// будут. Поэтому тикеты обеих форм печатаются на принтере ОДНОГО реального
+// заведения — ОКО, просто дублируя то, что и так приходит в Telegram-группу.
+// "1" — настоящий id ОКО Гастробар в таблице restaurants KitchenDesk (не
+// придуманный, см. print-agent/README.md, п.14 — миграция ОКО на схему
+// синхронизации с реальными заведениями).
 const OKO_KITCHENDESK_TENANT_ID = "1";
 
 function printOrderTicket(order, venueConfig) {
   try {
-    // ПРОВЕРИТЬ этот путь при деплое — предположение по аналогии с тем, как
-    // это уже сделано в api/plan.js для чек-листа (require('../oko-shelf-life-store')),
-    // но oko-order-api.js копируется в другое место (README: "туда же, где
-    // bot.js"), реальный относительный путь может отличаться.
+    // Путь проверен при деплое 2026-09-20: oko-shelf-life-store.js лежит в
+    // том же каталоге, что и oko-order-api.js (/root/kitchendesk/backend/src/).
     const { createRawPrintJob } = require("./oko-shelf-life-store");
     createRawPrintJob({
       printLines: buildOrderPrintLines(order, venueConfig),
@@ -85,10 +85,30 @@ function writeConfig(config) {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), "utf8");
 }
 
+// 5 неудачных попыток за 15 минут с одного IP — дальше 429, пока окно не
+// истечёт. Успешные запросы (skipSuccessfulRequests) не расходуют лимит, так
+// что штатная работа админки лимит не исчерпывает — только подбор пароля.
+const adminLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { error: "Слишком много попыток входа, попробуйте позже" },
+});
+
 function requireAdmin(req, res, next) {
-  const password = req.header("X-Admin-Password");
-  const expected = process.env.OKO_ADMIN_PASSWORD;
-  if (!expected || password !== expected) {
+  const password = req.header("X-Admin-Password") || "";
+  const expected = process.env.OKO_ADMIN_PASSWORD || "";
+  const passwordBuf = Buffer.from(password);
+  const expectedBuf = Buffer.from(expected);
+  // timingSafeEqual требует буферы одной длины — иначе исключение. Разная
+  // длина сама по себе означает «неверный пароль», без 500-й ошибки.
+  const isValid =
+    expected.length > 0 &&
+    passwordBuf.length === expectedBuf.length &&
+    crypto.timingSafeEqual(passwordBuf, expectedBuf);
+  if (!isValid) {
     return res.status(401).json({ error: "Неверный пароль" });
   }
   next();
@@ -319,27 +339,33 @@ function createOkoOrderRouter(bot) {
       categories: categoriesRecord,
       accepted: null,
       finalNotified: false,
+      // Захватываем на момент заказа, а не читаем venueConfig заново при
+      // нажатии — тот же принцип, что и у cookMentions → categoriesRecord
+      // (кто был назначен при отправке заказа, тот и остаётся назначенным,
+      // даже если конфиг заведения потом поменяют).
+      deliveryPerson: venueConfig.deliveryPerson || null,
+      delivered: null,
       createdAt: Date.now(),
     });
 
     res.json({ ok: true });
   });
 
-  // Admin — full config (routing IDs + items) for both venues.
-  router.get("/admin/config", requireAdmin, (req, res) => {
+  // Admin — full config (routing IDs + items) for every configured venue.
+  router.get("/admin/config", adminLoginLimiter, requireAdmin, (req, res) => {
     res.json(readConfig());
   });
 
   // Admin — groups/topics the bot has seen activity in (for the dropdown
   // pickers). Telegram has no "list my chats" API, so this is only ever as
   // complete as whatever activity has happened since discovery was deployed.
-  router.get("/admin/known-chats", requireAdmin, (req, res) => {
+  router.get("/admin/known-chats", adminLoginLimiter, requireAdmin, (req, res) => {
     res.json(readKnownChats());
   });
 
   // Admin — manually label a topic Telegram never gave us a name for
   // (it only reports a topic's name at creation time).
-  router.post("/admin/known-chats/rename-topic", requireAdmin, (req, res) => {
+  router.post("/admin/known-chats/rename-topic", adminLoginLimiter, requireAdmin, (req, res) => {
     const { chatId, threadId, name } = req.body || {};
     if (!chatId || !threadId || !name) {
       return res.status(400).json({ error: "Нужны chatId, threadId и name" });
@@ -351,7 +377,7 @@ function createOkoOrderRouter(bot) {
   // Admin — send a visible test message into a specific chat/topic so the
   // admin can look in Telegram and see exactly which real topic a numeric
   // thread_id belongs to, instead of guessing from a bare number.
-  router.post("/admin/test-ping", requireAdmin, async (req, res) => {
+  router.post("/admin/test-ping", adminLoginLimiter, requireAdmin, async (req, res) => {
     const { chatId, threadId } = req.body || {};
     if (!chatId) {
       return res.status(400).json({ error: "Нужен chatId" });
@@ -367,10 +393,28 @@ function createOkoOrderRouter(bot) {
     }
   });
 
-  router.post("/admin/config", requireAdmin, (req, res) => {
+  // Venue keys are plain object keys (also used as the "?venue=" URL slug
+  // and as a config filename-adjacent identifier) — restricted to
+  // lowercase latin/digits/underscore so they stay URL-safe and match the
+  // slug the admin frontend generates (transliterated from whatever name
+  // the admin typed).
+  const VENUE_KEY_RE = /^[a-z0-9_]+$/;
+
+  router.post("/admin/config", adminLoginLimiter, requireAdmin, (req, res) => {
     const next = req.body;
-    if (!next || !next.oblako || !next.myaso) {
+    if (!next || typeof next !== "object" || Array.isArray(next) || !Object.keys(next).length) {
       return res.status(400).json({ error: "Некорректный формат конфига" });
+    }
+    for (const [venueKey, venueConfig] of Object.entries(next)) {
+      if (!VENUE_KEY_RE.test(venueKey)) {
+        return res.status(400).json({ error: `Недопустимый идентификатор заведения: "${venueKey}"` });
+      }
+      if (!venueConfig || typeof venueConfig.label !== "string" || !venueConfig.label.trim()) {
+        return res.status(400).json({ error: `У заведения "${venueKey}" не указано название` });
+      }
+      if (!Array.isArray(venueConfig.items)) {
+        return res.status(400).json({ error: `У заведения "${venueKey}" некорректный список позиций` });
+      }
     }
     writeConfig(next);
     res.json({ ok: true });
@@ -378,7 +422,7 @@ function createOkoOrderRouter(bot) {
 
   // Admin — after wiring up a venue's source/kitchen IDs, post a visible
   // confirmation into each so there's no doubt setup actually took.
-  router.post("/admin/confirm-connection", requireAdmin, async (req, res) => {
+  router.post("/admin/confirm-connection", adminLoginLimiter, requireAdmin, async (req, res) => {
     const { venue } = req.body || {};
     const config = readConfig();
     const venueConfig = config[venue];
@@ -420,7 +464,7 @@ function createOkoOrderRouter(bot) {
   // Admin — (re)send and pin the order-form button in a venue's source topic.
   // Must be a plain `url` button, not `web_app` — Telegram rejects web_app
   // buttons outside private chats (BUTTON_TYPE_INVALID).
-  router.post("/admin/pin-button", requireAdmin, async (req, res) => {
+  router.post("/admin/pin-button", adminLoginLimiter, requireAdmin, async (req, res) => {
     const { venue } = req.body;
     const config = readConfig();
     const venueConfig = config[venue];
@@ -499,11 +543,51 @@ function registerOrderAcceptHandler(bot) {
 }
 
 async function handleGenericAccept(bot, orderId, order, query) {
-  if (order.accepted) {
-    const note = `Уже принято: ${order.accepted.name}, ${formatTime(order.accepted.at)}`;
+  // Вторая стадия — та же самая кнопка, второе нажатие, но только от того,
+  // кто назначен отправлять доставку (venueConfig.deliveryPerson на момент
+  // заказа, см. форму в oko-order/admin). Не новая кнопка — callback_data
+  // тот же, просто состояние заказа уже другое к этому моменту.
+  if (order.accepted && !order.delivered) {
+    if (!order.deliveryPerson || !mentionMatchesUser(order.deliveryPerson, query.from)) {
+      const note = `Уже принято: ${order.accepted.name}, ${formatTime(order.accepted.at)}`;
+      return bot.answerCallbackQuery(query.id, { text: note, show_alert: true }).catch(() => {});
+    }
+
+    const deliveredByName = [query.from.first_name, query.from.last_name].filter(Boolean).join(" ");
+    const deliveredAt = Date.now();
+    const updated = markDelivery(orderId, { name: deliveredByName, at: deliveredAt });
+    const noteTime = formatTime(deliveredAt);
+
+    try {
+      await bot.editMessageText(
+        `${order.coreMessage}\n\n✅ <b>Принято:</b> ${escapeHtml(order.accepted.name)}, ${formatTime(order.accepted.at)}\n🚚 <b>В доставке:</b> ${escapeHtml(updated.delivered.name)}, ${noteTime}`,
+        { chat_id: order.kitchenChatId, message_id: order.kitchenMessageId, parse_mode: "HTML", reply_markup: { inline_keyboard: [] } },
+      );
+    } catch {
+      // best effort — the delivered state is already persisted either way
+    }
+
+    if (order.sourceChatId && order.sourceMessageId) {
+      try {
+        await bot.editMessageText(
+          `✅ Заказ принят кухней (${formatTime(order.accepted.at)})\n🚚 В процессе доставки (${noteTime})\n\n<blockquote>${order.coreMessage}</blockquote>`,
+          { chat_id: order.sourceChatId, message_id: order.sourceMessageId, parse_mode: "HTML" },
+        );
+      } catch {
+        // best effort
+      }
+    }
+
+    await bot.answerCallbackQuery(query.id, { text: "Отправлено в доставку!" }).catch(() => {});
+    return;
+  }
+
+  if (order.delivered) {
+    const note = `Уже отправлено в доставку: ${order.delivered.name}, ${formatTime(order.delivered.at)}`;
     return bot.answerCallbackQuery(query.id, { text: note, show_alert: true }).catch(() => {});
   }
 
+  // Первое нажатие — обычная приёмка (как раньше).
   const acceptedByName = [query.from.first_name, query.from.last_name].filter(Boolean).join(" ");
   const acceptedAt = Date.now();
   const updated = markAccepted(orderId, { name: acceptedByName, at: acceptedAt });
@@ -516,7 +600,10 @@ async function handleGenericAccept(bot, orderId, order, query) {
         chat_id: order.kitchenChatId,
         message_id: order.kitchenMessageId,
         parse_mode: "HTML",
-        reply_markup: { inline_keyboard: [] },
+        // Кнопка не убирается, если для заведения назначен отправитель
+        // доставки — та же кнопка, второе нажатие (от него) переводит заказ
+        // в доставку, см. ветку выше. Без deliveryPerson — как раньше.
+        reply_markup: { inline_keyboard: updated.deliveryPerson ? [[{ text: "✅ Принято", callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}` }]] : [] },
       },
     );
   } catch {
@@ -543,11 +630,70 @@ async function handleCategoryAccept(bot, orderId, order, catIndex, query) {
     return bot.answerCallbackQuery(query.id, { text: "Категория не найдена (возможно, устарела)", show_alert: true }).catch(() => {});
   }
 
-  if (category.accepted) {
-    const note = `Уже принято: ${category.accepted.name}, ${formatTime(category.accepted.at)}`;
+  // Вторая стадия — та же самая кнопка категории, второе нажатие, но только
+  // от назначенного отправителя доставки (не ещё раз от повара). Не новая
+  // кнопка — callback_data тот же, состояние заказа уже другое.
+  if (category.accepted && !category.delivered) {
+    if (!order.deliveryPerson || !mentionMatchesUser(order.deliveryPerson, query.from)) {
+      const note = `Уже принято: ${category.accepted.name}, ${formatTime(category.accepted.at)}`;
+      return bot.answerCallbackQuery(query.id, { text: note, show_alert: true }).catch(() => {});
+    }
+
+    const deliveredByName = [query.from.first_name, query.from.last_name].filter(Boolean).join(" ");
+    const deliveredAt = Date.now();
+    const updated = markCategoryDelivered(orderId, catIndex, { name: deliveredByName, at: deliveredAt });
+    if (!updated) {
+      return bot.answerCallbackQuery(query.id, { text: "Не удалось сохранить, попробуйте ещё раз", show_alert: true }).catch(() => {});
+    }
+
+    const inlineKeyboard = updated.categories.map((cat, i) => [
+      {
+        // Текст меняется, а не копится — доставка заменяет имя повара своим,
+        // а не дописывается рядом (было "✅ Категория · Повар", стало
+        // "🚚 Категория · Су-шеф", а не "✅ Категория · Повар → Су-шеф").
+        text: cat.delivered
+          ? `🚚 ${cat.name} · ${cat.delivered.name}`
+          : cat.accepted ? `✅ ${cat.name} · ${cat.accepted.name}` : `✅ ${cat.name}`,
+        callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}:${i}`,
+      },
+    ]);
+    try {
+      await bot.editMessageReplyMarkup(
+        { inline_keyboard: inlineKeyboard },
+        { chat_id: order.kitchenChatId, message_id: order.kitchenMessageId },
+      );
+    } catch {
+      // best effort — delivered state is already persisted either way
+    }
+
+    const allDeliveredNow = updated.categories.every((cat) => cat.delivered);
+    if (allDeliveredNow && !updated.deliveryFinalNotified && order.sourceChatId && order.sourceMessageId) {
+      const breakdown = updated.categories
+        .map((cat) =>
+          `${escapeHtml(cat.name)} — принял ${escapeHtml(cat.accepted.name)} (${formatTime(cat.accepted.at)}), ` +
+          `доставка: ${escapeHtml(cat.delivered.name)} (${formatTime(cat.delivered.at)})`)
+        .join("\n");
+      try {
+        await bot.editMessageText(
+          `🚚 Заказ в процессе доставки:\n${breakdown}\n\n<blockquote>${order.coreMessage}</blockquote>`,
+          { chat_id: order.sourceChatId, message_id: order.sourceMessageId, parse_mode: "HTML" },
+        );
+        markDeliveryFinalNotified(orderId);
+      } catch {
+        // best effort
+      }
+    }
+
+    await bot.answerCallbackQuery(query.id, { text: "Отправлено в доставку!" }).catch(() => {});
+    return;
+  }
+
+  if (category.delivered) {
+    const note = `Уже отправлено в доставку: ${category.delivered.name}, ${formatTime(category.delivered.at)}`;
     return bot.answerCallbackQuery(query.id, { text: note, show_alert: true }).catch(() => {});
   }
 
+  // Первое нажатие — обычная приёмка поваром (как раньше).
   const authorized = category.cooks.some((cook) => mentionMatchesUser(cook, query.from));
   if (!authorized) {
     return bot.answerCallbackQuery(query.id, { text: "Эта кнопка не для вас", show_alert: true }).catch(() => {});
@@ -578,8 +724,8 @@ async function handleCategoryAccept(bot, orderId, order, catIndex, query) {
     // best effort — acceptance is already persisted either way
   }
 
-  const allAccepted = updated.categories.every((cat) => cat.accepted);
-  if (allAccepted && !updated.finalNotified && order.sourceChatId && order.sourceMessageId) {
+  const allAcceptedNow = updated.categories.every((cat) => cat.accepted);
+  if (allAcceptedNow && !updated.finalNotified && order.sourceChatId && order.sourceMessageId) {
     const breakdown = updated.categories
       .map((cat) => `${escapeHtml(cat.name)} — ${escapeHtml(cat.accepted.name)} (${formatTime(cat.accepted.at)})`)
       .join("\n");
