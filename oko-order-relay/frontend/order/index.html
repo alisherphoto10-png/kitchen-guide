@@ -120,7 +120,20 @@
 
 <script>
   const params = new URLSearchParams(window.location.search);
+  // ?f=<секретный токен> — основной адрес формы (с 2026-09-30); ?venue=<slug>
+  // — старый, работает только пока сервер его не выключил для этой формы.
+  const formToken = params.get("f");
   const venue = params.get("venue");
+  const formQuery = formToken ? `f=${encodeURIComponent(formToken)}` : `venue=${encodeURIComponent(venue || "")}`;
+
+  // Один id на один заказ: если «Отправить» нажмут дважды или запрос
+  // повторится на плохом интернете, сервер не создаст второй заказ.
+  function newClientOrderId() {
+    const bytes = new Uint8Array(12);
+    (window.crypto || window.msCrypto).getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  const clientOrderId = newClientOrderId();
 
   const dateInput = document.getElementById("orderDate");
   const tomorrow = new Date(Date.now() + 86400000);
@@ -130,14 +143,15 @@
   let quantities = [];
 
   async function loadItems() {
-    if (!venue) {
+    if (!formToken && !venue) {
       document.getElementById("venueLabel").innerText = "Не указано заведение";
       return;
     }
     try {
-      const res = await fetch(`/api/oko-order/items?venue=${encodeURIComponent(venue)}`);
+      const res = await fetch(`/api/oko-order/items?${formQuery}`);
       if (!res.ok) {
-        document.getElementById("venueLabel").innerText = "Ошибка загрузки";
+        const data = await res.json().catch(() => ({}));
+        showBlocked(data.label || "Заказ", data.error || "Ошибка загрузки");
         return;
       }
       const data = await res.json();
@@ -148,6 +162,19 @@
     } catch {
       document.getElementById("venueLabel").innerText = "Нет соединения";
     }
+  }
+
+  // Ссылка устарела / недействительна / приём закрыт — вместо формы только
+  // понятное сообщение, чтобы не собирать заказ, который всё равно не уйдёт.
+  function showBlocked(title, message) {
+    document.getElementById("venueLabel").innerText = title;
+    const list = document.getElementById("itemsList");
+    list.className = "empty";
+    list.innerText = message;
+    document.getElementById("submitBtn").style.display = "none";
+    document.querySelectorAll("#formScreen .field, #formScreen .section-label, #formScreen .hint").forEach((el) => {
+      el.style.display = "none";
+    });
   }
 
   const checkIcon = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
@@ -250,8 +277,14 @@
       return;
     }
 
+    if (!dateInput.value) {
+      errorEl.innerText = "Укажите дату заказа";
+      return;
+    }
+
     const payload = {
-      venue: venue,
+      ...(formToken ? { f: formToken } : { venue: venue }),
+      clientOrderId: clientOrderId,
       name: document.getElementById("submitterName").value.trim(),
       date: dateInput.value,
       items: items,
@@ -270,6 +303,10 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (data.expired || data.closed) {
+          showBlocked(document.getElementById("venueLabel").innerText, data.error);
+          return;
+        }
         errorEl.innerText = data.error || "Не удалось отправить заказ";
         submitBtn.disabled = false;
         submitBtn.innerText = "Отправить заказ";

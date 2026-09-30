@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
+const { ipKeyGenerator } = require("express-rate-limit");
 const { readKnownChats, renameTopic } = require("./oko-known-chats");
 const {
   createOrderId,
@@ -14,6 +15,7 @@ const {
   markDelivery,
   markCategoryDelivered,
   markDeliveryFinalNotified,
+  findOrderByClientId,
 } = require("./oko-order-store");
 
 const ACCEPT_CALLBACK_PREFIX = "oko_accept:";
@@ -44,14 +46,17 @@ function buildOrderPrintLines(order, venueConfig) {
 }
 
 // "Облако" и "Мясо" (order.venue, ключи ИЗ ЭТОГО КОНФИГА — см.
-// data/oko-order-config.json) — это просто разные формы заказа, НЕ заведения
-// KitchenDesk: они не зарегистрированы в таблице restaurants и никогда не
-// будут. Поэтому тикеты обеих форм печатаются на принтере ОДНОГО реального
-// заведения — ОКО, просто дублируя то, что и так приходит в Telegram-группу.
-// "1" — настоящий id ОКО Гастробар в таблице restaurants KitchenDesk (не
-// придуманный, см. print-agent/README.md, п.14 — миграция ОКО на схему
-// синхронизации с реальными заведениями).
-const OKO_KITCHENDESK_TENANT_ID = "1";
+// data/oko-order-config.json) — это формы ВНЕШНИХ КЛИЕНТОВ ОКО (ОКО для них
+// кухня-поставщик), НЕ заведения KitchenDesk: в таблице restaurants их нет и
+// не будет. Каждая форма принадлежит заведению-кухне (form.restaurantId) —
+// на его принтере печатается тикет. Сейчас все формы принадлежат ОКО: "1" —
+// настоящий id ОКО Гастробар в таблице restaurants (см. print-agent/README.md,
+// п.14). Поле у формы не заполнено (формы до Этапа 1) → считается ОКО.
+const DEFAULT_RESTAURANT_ID = "1";
+
+function formRestaurantId(form) {
+  return String((form && form.restaurantId) || DEFAULT_RESTAURANT_ID);
+}
 
 function printOrderTicket(order, venueConfig) {
   try {
@@ -62,7 +67,7 @@ function printOrderTicket(order, venueConfig) {
       printLines: buildOrderPrintLines(order, venueConfig),
       itemName: `Заказ — ${venueConfig.label}`,
       by: order.name || "",
-      restaurantId: OKO_KITCHENDESK_TENANT_ID,
+      restaurantId: formRestaurantId(venueConfig),
     });
   } catch (err) {
     // Не критично — сам заказ уже ушёл в Telegram, печать тикета
@@ -84,6 +89,157 @@ function readConfig() {
 function writeConfig(config) {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), "utf8");
 }
+
+// ── Доступ к форме внешнего клиента (вариант «А + Г», 2026-09-30) ────────
+// Клиенты (Облако, Мясо, ...) не имеют учёток KitchenDesk, поэтому форма
+// открывается по секретной ссылке `?f=<token>` вместо угадываемого
+// `?venue=<slug>`. Старый адрес `?venue=` работает, пока у формы не
+// выключен legacySlug (формы до Этапа 1 — поле не задано → работает; после
+// «Выпустить новую ссылку» — false навсегда). Новые формы из админки сразу
+// создаются только с токеном.
+//
+// Поля формы, которые задаёт ТОЛЬКО сервер (POST /admin/config их не
+// перезаписывает — иначе открытая до перевыпуска вкладка админки вернула
+// бы старый токен/включила старую ссылку обратно при сохранении).
+const SERVER_FORM_FIELDS = ["token", "legacySlug", "restaurantId", "active", "pinned"];
+const FORM_TOKEN_RE = /^[A-Za-z0-9_-]{20,64}$/;
+
+function generateFormToken() {
+  return crypto.randomBytes(18).toString("base64url"); // 24 символа
+}
+
+function isLegacySlugAllowed(form) {
+  return form.legacySlug !== false;
+}
+
+function isFormActive(form) {
+  return form.active !== false;
+}
+
+function formUrl(form) {
+  if (!form.token) return null;
+  return `${process.env.OKO_ORDER_FORM_URL}?f=${form.token}`;
+}
+
+function tokensEqual(a, b) {
+  const bufA = Buffer.from(String(a));
+  const bufB = Buffer.from(String(b));
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
+
+// Находит форму по ?f=<token> (приоритет) или по старому ?venue=<slug>.
+// Возвращает { key, form, via } или { status, body } для ответа с ошибкой.
+function resolveForm(config, { f, venue }) {
+  if (f) {
+    if (typeof f === "string" && FORM_TOKEN_RE.test(f)) {
+      const key = Object.keys(config).find((k) => config[k].token && tokensEqual(config[k].token, f));
+      if (key) return { key, form: config[key], via: "token" };
+    }
+    return { status: 404, body: { error: "Ссылка на форму заказа недействительна. Нажмите кнопку «Заполнить заказ» в вашей теме Telegram ещё раз." } };
+  }
+  if (venue && typeof venue === "string" && Object.prototype.hasOwnProperty.call(config, venue)) {
+    const form = config[venue];
+    if (isLegacySlugAllowed(form)) return { key: venue, form, via: "legacy" };
+    return {
+      status: 410,
+      body: { error: "Эта ссылка устарела. Нажмите новую закреплённую кнопку «Заполнить заказ» в вашей теме Telegram.", expired: true },
+    };
+  }
+  return { status: 404, body: { error: "Неизвестная форма заказа" } };
+}
+
+const MAX_ORDER_LINES = 100;
+const MAX_QTY = 999;
+const MAX_COMMENT_LEN = 1000;
+const MAX_NAME_LEN = 80;
+const CLIENT_ORDER_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Серверная проверка заказа (вариант «Г»): только позиции из каталога этой
+// формы, разумное количество, длины полей. Возвращает { order } с очищенными
+// данными (имена позиций — ровно как в каталоге) или { error }.
+function validateOrder(body, form) {
+  const catalog = new Set((form.items || []).map((raw) => normalizeItem(raw).name));
+  if (!Array.isArray(body.items) || !body.items.length) {
+    return { error: "Добавьте хотя бы одну позицию" };
+  }
+  if (body.items.length > MAX_ORDER_LINES) {
+    return { error: "Слишком много позиций в одном заказе" };
+  }
+  const seen = new Set();
+  const items = [];
+  for (const line of body.items) {
+    const name = line && typeof line.name === "string" ? line.name.trim() : "";
+    if (!name || !catalog.has(name)) {
+      return { error: `Позиции «${name.slice(0, 60)}» нет в меню этой формы. Обновите страницу и соберите заказ заново.` };
+    }
+    if (seen.has(name)) {
+      return { error: `Позиция «${name}» указана дважды` };
+    }
+    seen.add(name);
+    const qty = Number(line.qty);
+    if (!Number.isFinite(qty) || qty <= 0 || qty > MAX_QTY) {
+      return { error: `Некорректное количество у «${name}» (от 1 до ${MAX_QTY})` };
+    }
+    items.push({ name, qty: Math.round(qty * 100) / 100 });
+  }
+  const date = typeof body.date === "string" ? body.date.trim() : "";
+  if (!DATE_RE.test(date)) {
+    return { error: "Укажите дату заказа" };
+  }
+  const comment = typeof body.comment === "string" ? body.comment.trim() : "";
+  if (comment.length > MAX_COMMENT_LEN) {
+    return { error: `Комментарий слишком длинный (до ${MAX_COMMENT_LEN} символов)` };
+  }
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (name.length > MAX_NAME_LEN) {
+    return { error: `Имя слишком длинное (до ${MAX_NAME_LEN} символов)` };
+  }
+  let clientOrderId = null;
+  if (body.clientOrderId !== undefined && body.clientOrderId !== null && body.clientOrderId !== "") {
+    if (typeof body.clientOrderId !== "string" || !CLIENT_ORDER_ID_RE.test(body.clientOrderId)) {
+      return { error: "Некорректный идентификатор заказа, обновите страницу" };
+    }
+    clientOrderId = body.clientOrderId;
+  }
+  return { order: { items, date, comment, name, clientOrderId } };
+}
+
+// Лимит отправок с одного IP на одну форму: 20 заказов за 10 минут — с
+// большим запасом для живой работы (обычно 1–3 заказа в день), но режет
+// спам/скрипты. Отдельный лимит на неудачные поиски формы (перебор
+// токенов/адресов) — успешные запросы его не расходуют.
+const submitLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `${ipKeyGenerator(req.ip)}|${String((req.body && (req.body.f || req.body.venue)) || "").slice(0, 64)}`,
+  message: { error: "Слишком много заказов подряд, попробуйте через несколько минут" },
+});
+const formLookupLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  // Считаем только «форма не найдена / ссылка устарела» — ошибки в самом
+  // заказе (400) и закрытая форма (403) сюда не относятся.
+  requestWasSuccessful: (req, res) => res.statusCode !== 404 && res.statusCode !== 410,
+  message: { error: "Слишком много неверных ссылок, попробуйте позже" },
+});
+
+// Защита от двойной отправки: одинаковый clientOrderId (его генерирует
+// страница формы один раз на заказ) в пределах суток — второй запрос не
+// создаёт второй заказ. Пока первый ещё отправляется в Telegram, повторный
+// ждёт его результата (inFlight), после — находится в сохранённых заказах.
+const inFlightSubmits = new Map();
+
+function relayFailure(err) {
+  console.error("[oko-order] ошибка при отправке заказа:", err && err.message);
+  return { status: 500, body: { error: "Не удалось отправить заказ, попробуйте ещё раз" } };
+}
+const DUPLICATE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 // 5 неудачных попыток за 15 минут с одного IP — дальше 429, пока окно не
 // истечёт. Успешные запросы (skipSuccessfulRequests) не расходуют лимит, так
@@ -232,14 +388,16 @@ function mentionMatchesUser(cook, from) {
 function createOkoOrderRouter(bot) {
   const router = express.Router();
 
-  // Public — the order form reads the current item list for a venue.
-  router.get("/items", (req, res) => {
-    const venue = req.query.venue;
+  // Public — the order form reads the current item list for a form
+  // (?f=<secret token>, or legacy ?venue=<slug> while still allowed).
+  router.get("/items", formLookupLimiter, (req, res) => {
     const config = readConfig();
-    if (!config[venue]) {
-      return res.status(404).json({ error: "Неизвестное заведение" });
+    const found = resolveForm(config, { f: req.query.f, venue: req.query.venue });
+    if (!found.form) return res.status(found.status).json(found.body);
+    if (!isFormActive(found.form)) {
+      return res.status(403).json({ error: "Приём заказов через эту форму сейчас закрыт", closed: true, label: found.form.label });
     }
-    res.json({ label: config[venue].label, items: config[venue].items.map(normalizeItem) });
+    res.json({ label: found.form.label, items: (found.form.items || []).map(normalizeItem) });
   });
 
   // Public — the order form submits here directly. Telegram only allows
@@ -247,113 +405,158 @@ function createOkoOrderRouter(bot) {
   // groups, so a group-posted button can't rely on that path — the form
   // instead POSTs straight to the backend, which relays into the kitchen
   // group itself.
-  router.post("/submit", async (req, res) => {
-    const order = req.body;
+  router.post("/submit", formLookupLimiter, submitLimiter, async (req, res) => {
+    const body = req.body && typeof req.body === "object" ? req.body : {};
     const config = readConfig();
-    const venueConfig = config[order && order.venue];
-    if (!venueConfig) {
-      return res.status(404).json({ error: "Неизвестное заведение" });
+    const found = resolveForm(config, { f: body.f, venue: body.venue });
+    if (!found.form) return res.status(found.status).json(found.body);
+    const { key: venueKey, form: venueConfig } = found;
+    if (!isFormActive(venueConfig)) {
+      return res.status(403).json({ error: "Приём заказов через эту форму сейчас закрыт", closed: true });
     }
-    if (!Array.isArray(order.items) || !order.items.length) {
-      return res.status(400).json({ error: "Добавьте хотя бы одну позицию" });
-    }
+    const checked = validateOrder(body, venueConfig);
+    if (checked.error) return res.status(400).json({ error: checked.error });
     if (!venueConfig.kitchenGroupChatId) {
-      return res.status(400).json({ error: "Для этого заведения не настроена поварская группа" });
+      return res.status(400).json({ error: "Для этой формы не настроена поварская группа" });
     }
+    const order = { venue: venueKey, ...checked.order };
+    const meta = {
+      ip: req.ip || null,
+      userAgent: String(req.get("user-agent") || "").slice(0, 200),
+      via: found.via,
+    };
 
-    // coreMessage is what the source group sees (in the "Заказ отправлен"
-    // confirmation) — cook mentions are deliberately NOT part of it, they're
-    // only relevant to whoever is in the kitchen group.
-    const coreMessage = buildOrderMessage(order, venueConfig);
-    const mentionsLine = buildCookMentionsLine(order, venueConfig);
-    const kitchenMessage = coreMessage + (mentionsLine ? `\n\n${mentionsLine}` : "");
-    const categoryGroups = getCategoryCookGroups(order, venueConfig);
-    const orderId = createOrderId();
-
-    // Two modes: if any category in this order has an assigned cook, each
-    // gets its own accept button (gated to that cook). Otherwise fall back
-    // to a single "✅ Принято" button anyone in the kitchen group can press —
-    // same behaviour as before category-based tagging existed.
-    let inlineKeyboard;
-    let categoriesRecord = null;
-    if (categoryGroups.length) {
-      inlineKeyboard = categoryGroups.map((g, i) => [
-        { text: `✅ ${g.category}`, callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}:${i}` },
-      ]);
-      categoriesRecord = categoryGroups.map((g) => ({
-        name: g.category,
-        cooks: g.cooks.map((c) => ({ label: c.label, username: c.username || null, userId: c.userId || null })),
-        accepted: null,
-      }));
-    } else {
-      inlineKeyboard = [[{ text: "✅ Принято", callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}` }]];
+    if (!order.clientOrderId) {
+      const result = await relayOrder(order, venueConfig, meta).catch(relayFailure);
+      return res.status(result.status).json(result.body);
     }
-
-    let kitchenSent;
+    const dupKey = `${venueKey}:${order.clientOrderId}`;
+    if (inFlightSubmits.has(dupKey)) {
+      const result = await inFlightSubmits.get(dupKey);
+      return res.status(result.status).json(result.status === 200 ? { ok: true, duplicate: true } : result.body);
+    }
+    if (findOrderByClientId(venueKey, order.clientOrderId, Date.now() - DUPLICATE_WINDOW_MS)) {
+      return res.json({ ok: true, duplicate: true });
+    }
+    const pending = relayOrder(order, venueConfig, meta).catch(relayFailure);
+    inFlightSubmits.set(dupKey, pending);
     try {
-      const kitchenOptions = { parse_mode: "HTML", reply_markup: { inline_keyboard: inlineKeyboard } };
-      if (venueConfig.kitchenThreadId) {
-        kitchenOptions.message_thread_id = Number(venueConfig.kitchenThreadId);
-      }
-      kitchenSent = await bot.sendMessage(venueConfig.kitchenGroupChatId, kitchenMessage, kitchenOptions);
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
+      const result = await pending;
+      return res.status(result.status).json(result.body);
+    } finally {
+      inFlightSubmits.delete(dupKey);
     }
-
-    // Печатаем бумажный тикет заказа сразу же, тем же временем, что и
-    // Telegram-сообщение — best-effort, ошибка печати не должна ронять
-    // приём заказа (сообщение в группу уже ушло, это важнее).
-    printOrderTicket(order, venueConfig);
-
-    // Best-effort confirmation back in the topic the order was placed from —
-    // a failure here shouldn't fail the request, the order already reached
-    // the kitchen group.
-    let sourceSent = null;
-    if (venueConfig.sourceGroupChatId) {
-      try {
-        const sourceOptions = { parse_mode: "HTML" };
-        if (venueConfig.sourceThreadId) {
-          sourceOptions.message_thread_id = Number(venueConfig.sourceThreadId);
-        }
-        sourceSent = await bot.sendMessage(
-          venueConfig.sourceGroupChatId,
-          `Заказ отправлен\n\n<blockquote>${coreMessage}</blockquote>`,
-          sourceOptions,
-        );
-      } catch {
-        // ignore — the order itself already went through
-      }
-    }
-
-    // Persisted so the "✅ Принято" button(s) (pressed later, from the
-    // kitchen group) know which two messages to update, and — in category
-    // mode — who's actually allowed to press which button.
-    saveOrder(orderId, {
-      venue: order.venue,
-      venueLabel: venueConfig.label,
-      coreMessage,
-      kitchenChatId: venueConfig.kitchenGroupChatId,
-      kitchenMessageId: kitchenSent.message_id,
-      sourceChatId: venueConfig.sourceGroupChatId || null,
-      sourceMessageId: sourceSent ? sourceSent.message_id : null,
-      categories: categoriesRecord,
-      accepted: null,
-      finalNotified: false,
-      // Захватываем на момент заказа, а не читаем venueConfig заново при
-      // нажатии — тот же принцип, что и у cookMentions → categoriesRecord
-      // (кто был назначен при отправке заказа, тот и остаётся назначенным,
-      // даже если конфиг заведения потом поменяют).
-      deliveryPerson: venueConfig.deliveryPerson || null,
-      delivered: null,
-      createdAt: Date.now(),
-    });
-
-    res.json({ ok: true });
   });
+
+  // Отправка уже проверенного заказа: кухня (+кнопки «Принято»), тикет на
+  // принтер, подтверждение в тему-источник, запись в oko-orders.json.
+  // Логика та же, что была внутри /submit до Этапа 1 — вынесена, чтобы её
+  // можно было обернуть защитой от двойной отправки.
+  async function relayOrder(order, venueConfig, meta) {
+      // coreMessage is what the source group sees (in the "Заказ отправлен"
+      // confirmation) — cook mentions are deliberately NOT part of it, they're
+      // only relevant to whoever is in the kitchen group.
+      const coreMessage = buildOrderMessage(order, venueConfig);
+      const mentionsLine = buildCookMentionsLine(order, venueConfig);
+      const kitchenMessage = coreMessage + (mentionsLine ? `\n\n${mentionsLine}` : "");
+      const categoryGroups = getCategoryCookGroups(order, venueConfig);
+      const orderId = createOrderId();
+
+      // Two modes: if any category in this order has an assigned cook, each
+      // gets its own accept button (gated to that cook). Otherwise fall back
+      // to a single "✅ Принято" button anyone in the kitchen group can press —
+      // same behaviour as before category-based tagging existed.
+      let inlineKeyboard;
+      let categoriesRecord = null;
+      if (categoryGroups.length) {
+        inlineKeyboard = categoryGroups.map((g, i) => [
+          { text: `✅ ${g.category}`, callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}:${i}` },
+        ]);
+        categoriesRecord = categoryGroups.map((g) => ({
+          name: g.category,
+          cooks: g.cooks.map((c) => ({ label: c.label, username: c.username || null, userId: c.userId || null })),
+          accepted: null,
+        }));
+      } else {
+        inlineKeyboard = [[{ text: "✅ Принято", callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}` }]];
+      }
+
+      let kitchenSent;
+      try {
+        const kitchenOptions = { parse_mode: "HTML", reply_markup: { inline_keyboard: inlineKeyboard } };
+        if (venueConfig.kitchenThreadId) {
+          kitchenOptions.message_thread_id = Number(venueConfig.kitchenThreadId);
+        }
+        kitchenSent = await bot.sendMessage(venueConfig.kitchenGroupChatId, kitchenMessage, kitchenOptions);
+      } catch (err) {
+        return { status: 500, body: { error: err.message } };
+      }
+
+      // Печатаем бумажный тикет заказа сразу же, тем же временем, что и
+      // Telegram-сообщение — best-effort, ошибка печати не должна ронять
+      // приём заказа (сообщение в группу уже ушло, это важнее).
+      printOrderTicket(order, venueConfig);
+
+      // Best-effort confirmation back in the topic the order was placed from —
+      // a failure here shouldn't fail the request, the order already reached
+      // the kitchen group.
+      let sourceSent = null;
+      if (venueConfig.sourceGroupChatId) {
+        try {
+          const sourceOptions = { parse_mode: "HTML" };
+          if (venueConfig.sourceThreadId) {
+            sourceOptions.message_thread_id = Number(venueConfig.sourceThreadId);
+          }
+          sourceSent = await bot.sendMessage(
+            venueConfig.sourceGroupChatId,
+            `Заказ отправлен\n\n<blockquote>${coreMessage}</blockquote>`,
+            sourceOptions,
+          );
+        } catch {
+          // ignore — the order itself already went through
+        }
+      }
+
+      // Persisted so the "✅ Принято" button(s) (pressed later, from the
+      // kitchen group) know which two messages to update, and — in category
+      // mode — who's actually allowed to press which button.
+      saveOrder(orderId, {
+        venue: order.venue,
+        restaurantId: formRestaurantId(venueConfig),
+        clientOrderId: order.clientOrderId || null,
+        // Для разбора спорных случаев (вариант «Г»): откуда пришёл заказ.
+        meta: meta,
+        venueLabel: venueConfig.label,
+        coreMessage,
+        kitchenChatId: venueConfig.kitchenGroupChatId,
+        kitchenMessageId: kitchenSent.message_id,
+        sourceChatId: venueConfig.sourceGroupChatId || null,
+        sourceMessageId: sourceSent ? sourceSent.message_id : null,
+        categories: categoriesRecord,
+        accepted: null,
+        finalNotified: false,
+        // Захватываем на момент заказа, а не читаем venueConfig заново при
+        // нажатии — тот же принцип, что и у cookMentions → categoriesRecord
+        // (кто был назначен при отправке заказа, тот и остаётся назначенным,
+        // даже если конфиг заведения потом поменяют).
+        deliveryPerson: venueConfig.deliveryPerson || null,
+        delivered: null,
+        createdAt: Date.now(),
+      });
+
+    return { status: 200, body: { ok: true } };
+  }
 
   // Admin — full config (routing IDs + items) for every configured venue.
   router.get("/admin/config", adminLoginLimiter, requireAdmin, (req, res) => {
-    res.json(readConfig());
+    // formUrl / legacySlugAllowed — вычисляемые, только для показа в админке
+    // (обратно при сохранении сервер их игнорирует, см. SERVER_FORM_FIELDS).
+    const config = readConfig();
+    const view = {};
+    for (const [key, form] of Object.entries(config)) {
+      view[key] = { ...form, formUrl: formUrl(form), legacySlugAllowed: isLegacySlugAllowed(form), active: isFormActive(form) };
+    }
+    res.json(view);
   });
 
   // Admin — groups/topics the bot has seen activity in (for the dropdown
@@ -416,7 +619,29 @@ function createOkoOrderRouter(bot) {
         return res.status(400).json({ error: `У заведения "${venueKey}" некорректный список позиций` });
       }
     }
-    writeConfig(next);
+    // Серверные поля (токен, старая ссылка, заведение, «Активна», id
+    // закреплённой кнопки) берутся с диска, а не из присланного — новая
+    // форма сразу получает секретную ссылку и без старого ?venue= адреса.
+    const current = readConfig();
+    const merged = {};
+    for (const [venueKey, venueConfig] of Object.entries(next)) {
+      const form = { ...venueConfig };
+      delete form.formUrl;
+      delete form.legacySlugAllowed;
+      SERVER_FORM_FIELDS.forEach((field) => delete form[field]);
+      const existing = current[venueKey];
+      if (existing) {
+        SERVER_FORM_FIELDS.forEach((field) => {
+          if (existing[field] !== undefined) form[field] = existing[field];
+        });
+      } else {
+        form.token = generateFormToken();
+        form.legacySlug = false;
+        form.restaurantId = DEFAULT_RESTAURANT_ID;
+      }
+      merged[venueKey] = form;
+    }
+    writeConfig(merged);
     res.json({ ok: true });
   });
 
@@ -461,48 +686,131 @@ function createOkoOrderRouter(bot) {
     }
   });
 
+  // Admin — включить/выключить приём заказов через форму (вариант «Г»).
+  // Выключенная форма показывает клиенту «приём закрыт», /submit отвечает 403.
+  router.post("/admin/set-active", adminLoginLimiter, requireAdmin, (req, res) => {
+    const { venue, active } = req.body || {};
+    const config = readConfig();
+    if (!venue || !Object.prototype.hasOwnProperty.call(config, venue)) {
+      return res.status(404).json({ error: "Неизвестная форма" });
+    }
+    if (typeof active !== "boolean") {
+      return res.status(400).json({ error: "Нужно active: true/false" });
+    }
+    config[venue].active = active;
+    writeConfig(config);
+    res.json({ ok: true, active });
+  });
+
   // Admin — (re)send and pin the order-form button in a venue's source topic.
   // Must be a plain `url` button, not `web_app` — Telegram rejects web_app
-  // buttons outside private chats (BUTTON_TYPE_INVALID).
+  // buttons outside private chats (BUTTON_TYPE_INVALID). Кнопка всегда ведёт
+  // на секретную ссылку ?f=<token> (токен выпускается, если его ещё нет;
+  // старый ?venue= адрес при этом НЕ выключается — это делает rotate-link).
   router.post("/admin/pin-button", adminLoginLimiter, requireAdmin, async (req, res) => {
-    const { venue } = req.body;
+    const { venue } = req.body || {};
     const config = readConfig();
-    const venueConfig = config[venue];
-    if (!venueConfig) {
+    if (!venue || !Object.prototype.hasOwnProperty.call(config, venue)) {
       return res.status(404).json({ error: "Неизвестное заведение" });
     }
-    if (!venueConfig.sourceGroupChatId) {
+    if (!config[venue].sourceGroupChatId) {
       return res.status(400).json({ error: "Не указан ID исходной группы для этого заведения" });
     }
-
+    if (!config[venue].token) {
+      config[venue].token = generateFormToken();
+      writeConfig(config);
+    }
     try {
-      const sendOptions = {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: "📝 Заполнить заказ",
-                url: `${process.env.OKO_ORDER_FORM_URL}?venue=${venue}`,
-              },
-            ],
-          ],
-        },
-      };
-      if (venueConfig.sourceThreadId) {
-        sendOptions.message_thread_id = Number(venueConfig.sourceThreadId);
+      const pinned = await sendAndPinFormButton(config[venue]);
+      const fresh = readConfig();
+      if (fresh[venue]) {
+        fresh[venue].pinned = pinned;
+        writeConfig(fresh);
       }
-
-      const sent = await bot.sendMessage(
-        venueConfig.sourceGroupChatId,
-        "Заполните заказ на нужную дату 👇",
-        sendOptions,
-      );
-      await bot.pinChatMessage(venueConfig.sourceGroupChatId, sent.message_id);
-      res.json({ ok: true, messageId: sent.message_id });
+      res.json({ ok: true, messageId: pinned.messageId, formUrl: formUrl(config[venue]) });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // Admin — «Выпустить новую ссылку»: новый секретный токен, старый токен и
+  // старый ?venue= адрес перестают работать сразу. Кнопка в теме клиента
+  // обновляется сама: если бот знает свою закреплённую кнопку (pinned) — у
+  // неё просто меняется адрес (то же сообщение, клиенты ничего не
+  // замечают); если не знает или правка не удалась — отправляет и
+  // закрепляет новую кнопку. Именно этим эндпоинтом делается переключение
+  // Облака/Мяса со старых адресов на секретные.
+  router.post("/admin/rotate-link", adminLoginLimiter, requireAdmin, async (req, res) => {
+    const { venue } = req.body || {};
+    const config = readConfig();
+    if (!venue || !Object.prototype.hasOwnProperty.call(config, venue)) {
+      return res.status(404).json({ error: "Неизвестная форма" });
+    }
+    const form = config[venue];
+    // Сначала новый токен (новая кнопка должна открываться сразу), а старый
+    // ?venue= адрес выключаем только ПОСЛЕ того, как кнопка в теме успешно
+    // обновлена — если Telegram откажет, клиенты не останутся без рабочей
+    // кнопки (старая закреплённая по-прежнему работает).
+    form.token = generateFormToken();
+    writeConfig(config);
+
+    if (!form.sourceGroupChatId) {
+      disableLegacySlug(venue);
+      return res.json({ ok: true, formUrl: formUrl(form), button: "none", note: "Тема-источник не задана — кнопку закреплять некуда, ссылку можно передать клиенту вручную" });
+    }
+
+    let button = null;
+    let pinned = form.pinned || null;
+    if (pinned && String(pinned.chatId) === String(form.sourceGroupChatId) && String(pinned.threadId || "") === String(form.sourceThreadId || "")) {
+      try {
+        await bot.editMessageReplyMarkup(formButtonMarkup(form), { chat_id: pinned.chatId, message_id: pinned.messageId });
+        button = "edited";
+      } catch (err) {
+        console.error("[oko-order] не удалось обновить закреплённую кнопку, отправляю новую:", err.message);
+      }
+    }
+    if (!button) {
+      try {
+        pinned = await sendAndPinFormButton(form);
+        button = "repinned";
+      } catch (err) {
+        return res.status(500).json({ error: `Кнопку в теме обновить не удалось: ${err.message}. Старая кнопка пока продолжает работать — попробуйте ещё раз.`, formUrl: formUrl(form) });
+      }
+    }
+    const fresh = readConfig();
+    if (fresh[venue]) {
+      fresh[venue].pinned = pinned;
+      fresh[venue].legacySlug = false;
+      writeConfig(fresh);
+    }
+    res.json({ ok: true, formUrl: formUrl(form), button, messageId: pinned.messageId });
+  });
+
+  function disableLegacySlug(venue) {
+    const fresh = readConfig();
+    if (fresh[venue]) {
+      fresh[venue].legacySlug = false;
+      writeConfig(fresh);
+    }
+  }
+
+  function formButtonMarkup(form) {
+    return { inline_keyboard: [[{ text: "📝 Заполнить заказ", url: formUrl(form) }]] };
+  }
+
+  async function sendAndPinFormButton(form) {
+    const sendOptions = { reply_markup: formButtonMarkup(form) };
+    if (form.sourceThreadId) {
+      sendOptions.message_thread_id = Number(form.sourceThreadId);
+    }
+    const sent = await bot.sendMessage(form.sourceGroupChatId, "Заполните заказ на нужную дату 👇", sendOptions);
+    await bot.pinChatMessage(form.sourceGroupChatId, sent.message_id);
+    return {
+      chatId: String(form.sourceGroupChatId),
+      threadId: form.sourceThreadId ? String(form.sourceThreadId) : null,
+      messageId: sent.message_id,
+    };
+  }
 
   return router;
 }

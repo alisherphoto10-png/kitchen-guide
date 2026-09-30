@@ -116,7 +116,24 @@ function markDeliveryFinalNotified(orderId) {
   return order;
 }
 
+/**
+ * Защита от двойной отправки формы: ищет уже сохранённый заказ этой формы с
+ * тем же clientOrderId (его генерирует страница формы), созданный не раньше
+ * sinceMs. Старые заказы (до Этапа 1) clientOrderId не имеют — не мешают.
+ */
+function findOrderByClientId(venue, clientOrderId, sinceMs) {
+  if (!clientOrderId) return null;
+  const orders = readOrders();
+  for (const [orderId, order] of Object.entries(orders)) {
+    if (order.venue === venue && order.clientOrderId === clientOrderId && (order.createdAt || 0) >= sinceMs) {
+      return { orderId, order };
+    }
+  }
+  return null;
+}
+
 module.exports = {
+  findOrderByClientId,
   createOrderId,
   saveOrder,
   getOrder,
