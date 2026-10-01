@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { request, ApiError } from '@/services/api'
 import {
   ArrowLeft, Check, ChevronRight, ImagePlus, Link2, MoreVertical, Plus, RefreshCw, Search, Send, Users, X,
 } from 'lucide-react'
@@ -12,9 +11,10 @@ import {
 // группы; «Позиции» — каталог формы; «Пользователи» — повара ОКО, которые
 // принимают заказ по своей категории, и доставщик.
 //
-// Работает поверх того же API, что и старая /oko-order/admin/ (пароль там
-// остаётся): /api/oko-order/admin/* пускает по входу KitchenDesk только
-// администратора ОКО и суперадмина. Формы хранятся целым конфигом — перед
+// Работает поверх того же API и с тем же паролем, что и старая
+// /oko-order/admin/ (решение пользователя 2026-10-01: во всех панелях один
+// пароль, не вход KitchenDesk). Пароль живёт в sessionStorage под тем же
+// ключом, что у старой админки. Формы хранятся целым конфигом — перед
 // каждым сохранением конфиг перечитывается с сервера и меняется только своя
 // форма, чтобы не затереть правки из соседней вкладки.
 
@@ -43,8 +43,39 @@ type Config = Record<string, Form>
 type Group = { title: string; description?: string; photoUrl?: string; active?: boolean }
 type KnownChat = { title?: string; type?: string; topics?: Record<string, string>; people?: Record<string, { firstName?: string; lastName?: string; username?: string | null }> }
 type Known = Record<string, KnownChat>
+type OrderStatus = 'new' | 'cooking' | 'shipping' | 'delivered'
+type OrderView = {
+  id: string; createdAt: number | null; date: string | null; venue: string; venueLabel: string
+  items: { name: string; qty: number; unit: string }[] | null; summary: string | null
+  status: OrderStatus; comment: string | null; name: string | null; receiptPhoto: boolean
+  timeline: { status: OrderStatus; at: number; via: string | null; trackUrl: string | null }[]
+}
 
 const API = '/api/oko-order/admin'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://kitchendesk.chefplan.ru'
+const PASSWORD_KEY = 'oko_admin_password'
+
+class OkoApiError extends Error {
+  status: number
+  constructor(message: string, status: number) { super(message); this.status = status }
+}
+function storedPassword() {
+  try { return sessionStorage.getItem(PASSWORD_KEY) || '' } catch { return '' }
+}
+// Неверный/сменившийся пароль (401) — мастер снова показывает ввод пароля.
+let onUnauthorized: () => void = () => {}
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Password': storedPassword(), ...options.headers },
+  })
+  if (res.status === 401) onUnauthorized()
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: 'Ошибка сети' }))
+    throw new OkoApiError(error.error || `HTTP ${res.status}`, res.status)
+  }
+  return res.json()
+}
 const okoApi = {
   config: () => request<Config>(`${API}/config`),
   saveConfig: (c: Config) => request<{ ok: boolean }>(`${API}/config`, { method: 'POST', body: JSON.stringify(c) }),
@@ -54,6 +85,7 @@ const okoApi = {
   deleteGroup: (chatId: string) => request<{ ok: boolean }>(`${API}/groups/delete`, { method: 'POST', body: JSON.stringify({ chatId }) }),
   setActive: (venue: string, active: boolean) => request<{ ok: boolean }>(`${API}/set-active`, { method: 'POST', body: JSON.stringify({ venue, active }) }),
   pin: (venue: string) => request<{ ok: boolean; formUrl: string }>(`${API}/pin-button`, { method: 'POST', body: JSON.stringify({ venue }) }),
+  orders: (venue?: string) => request<{ orders: OrderView[] }>(`${API}/orders?limit=200${venue ? `&venue=${encodeURIComponent(venue)}` : ''}`),
   media: (data: string, kind: string) => request<{ ok: boolean; url: string }>(`${API}/media`, { method: 'POST', body: JSON.stringify({ data, kind }) }),
 }
 
@@ -247,6 +279,7 @@ function Steps({ current }: { current: number }) {
 // ── экраны ──────────────────────────────────────────────────────
 
 type View =
+  | { name: 'orders' }
   | { name: 'groups' }
   | { name: 'connect'; replace?: string }
   | { name: 'group'; chatId: string }
@@ -255,7 +288,59 @@ type View =
 
 type Data = { config: Config; groups: Record<string, Group>; known: Known }
 
+function PasswordGate({ onLogin }: { onLogin: () => void }) {
+  const [value, setValue] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!value || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const res = await fetch(`${API_URL}${API}/config`, { headers: { 'X-Admin-Password': value } })
+      if (res.ok) {
+        try { sessionStorage.setItem(PASSWORD_KEY, value) } catch {}
+        onLogin()
+        return
+      }
+      const body = await res.json().catch(() => ({}))
+      setError(res.status === 401 ? 'Неверный пароль' : body.error || `Ошибка ${res.status}`)
+    } catch {
+      setError('Нет связи с сервером')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="min-h-screen flex items-center justify-center p-5">
+      <form onSubmit={submit} className={`${cardCls} p-6 w-full max-w-sm flex flex-col gap-4`}>
+        <div>
+          <div className="text-lg font-bold text-white">Заказы клиентов ОКО</div>
+          <div className="text-sm text-gray-500 mt-1">Введите пароль — тот же, что в панели /oko-order/admin/</div>
+        </div>
+        <input type="password" className={inputCls} value={value} onChange={e => setValue(e.target.value)} placeholder="Пароль" autoFocus autoComplete="current-password" />
+        {error && <div className="text-sm text-red-400">{error}</div>}
+        <button type="submit" className={primaryBtn} disabled={busy || !value}>{busy ? 'Проверяю…' : 'Войти'}</button>
+      </form>
+    </div>
+  )
+}
+
 export function OkoOrderSetup() {
+  // null — ещё не заглянули в sessionStorage (статическая сборка Next рендерит без него).
+  const [authed, setAuthed] = useState<boolean | null>(null)
+  useEffect(() => { setAuthed(!!storedPassword()) }, [])
+  onUnauthorized = () => {
+    try { sessionStorage.removeItem(PASSWORD_KEY) } catch {}
+    setAuthed(false)
+  }
+  if (authed === null) return <div className="min-h-screen flex items-center justify-center text-green-400 text-sm">Загрузка...</div>
+  if (!authed) return <PasswordGate onLogin={() => setAuthed(true)} />
+  return <OkoOrderWizard />
+}
+
+function OkoOrderWizard() {
   const [data, setData] = useState<Data | null>(null)
   const [loadError, setLoadError] = useState<{ status?: number; text: string } | null>(null)
   const [view, setView] = useState<View>({ name: 'groups' })
@@ -267,7 +352,7 @@ export function OkoOrderSetup() {
     return { config, groups, known }
   }
   useEffect(() => {
-    reload().catch(e => setLoadError({ status: e instanceof ApiError ? e.status : undefined, text: errText(e) }))
+    reload().catch(e => { if (e instanceof OkoApiError && e.status === 401) return; setLoadError({ status: e instanceof OkoApiError ? e.status : undefined, text: errText(e) }) })
   }, [])
   useEffect(() => {
     if (!toast) return
@@ -292,6 +377,7 @@ export function OkoOrderSetup() {
   }
 
   const step = view.name === 'groups' || view.name === 'connect' ? 1 : view.name === 'group' ? 2 : view.name === 'topic' ? 3 : 4
+  const navCls = (on: boolean) => `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium ${on ? 'bg-green-500/10 text-green-400' : 'text-gray-500 hover:text-gray-300 hover:bg-white/4'}`
   const props = { data, reload, setView, notify }
 
   return (
@@ -304,13 +390,12 @@ export function OkoOrderSetup() {
             <div className="text-[11px] text-gray-500">Заказы клиентов ОКО</div>
           </div>
         </div>
-        <button onClick={() => setView({ name: 'groups' })}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium bg-green-500/10 text-green-400">
+        <button onClick={() => setView({ name: 'orders' })} className={navCls(view.name === 'orders')}>
+          <Send className="w-4 h-4" /> Заказы
+        </button>
+        <button onClick={() => setView({ name: 'groups' })} className={navCls(view.name !== 'orders')}>
           <Link2 className="w-4 h-4" /> Группы
         </button>
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-600 cursor-default" title="Следующий этап">
-          <Send className="w-4 h-4" /> Заказы <span className="ml-auto text-[10px] uppercase tracking-wide">скоро</span>
-        </div>
         <a href="/web" className="mt-auto flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:text-gray-300">
           <ArrowLeft className="w-4 h-4" /> Вернуться в KitchenDesk
         </a>
@@ -318,10 +403,13 @@ export function OkoOrderSetup() {
 
       <main className="flex-1 min-w-0 px-4 py-5 lg:px-10 lg:py-8 pb-24">
         <div className="max-w-3xl mx-auto flex flex-col gap-5">
-          <div className="lg:hidden">
-            <a href="/web" className="inline-flex items-center gap-1.5 text-xs text-gray-500"><ArrowLeft className="w-3.5 h-3.5" /> KitchenDesk</a>
+          <div className="lg:hidden flex items-center gap-2">
+            <a href="/web" className="inline-flex items-center gap-1.5 text-xs text-gray-500 mr-auto"><ArrowLeft className="w-3.5 h-3.5" /> KitchenDesk</a>
+            <button onClick={() => setView({ name: 'orders' })} className={`text-xs px-3 py-1.5 rounded-lg ${view.name === 'orders' ? 'bg-green-500/15 text-green-400' : 'bg-white/5 text-gray-400'}`}>Заказы</button>
+            <button onClick={() => setView({ name: 'groups' })} className={`text-xs px-3 py-1.5 rounded-lg ${view.name !== 'orders' ? 'bg-green-500/15 text-green-400' : 'bg-white/5 text-gray-400'}`}>Группы</button>
           </div>
-          <Steps current={step} />
+          {view.name !== 'orders' && <Steps current={step} />}
+          {view.name === 'orders' && <OrdersScreen {...props} />}
           {view.name === 'groups' && <GroupsScreen {...props} />}
           {view.name === 'connect' && <ConnectScreen {...props} replace={view.replace} />}
           {view.name === 'group' && <GroupScreen {...props} chatId={view.chatId} />}
@@ -947,6 +1035,94 @@ function AddUserForm({ known, categories, hasDelivery, onAdd, onCancel, notify }
         <button className={primaryBtn} onClick={add}><Plus className="w-4 h-4" /> Добавить</button>
       </div>
     </div>
+  )
+}
+
+// Раздел «Заказы» (Этап 4): история и статусы по всем формам.
+const STATUS_META: Record<OrderStatus, { label: string; cls: string }> = {
+  new: { label: '🕐 Новый', cls: 'bg-white/8 text-gray-300' },
+  cooking: { label: '👨‍🍳 Готовится', cls: 'bg-amber-500/15 text-amber-300' },
+  shipping: { label: '🚚 Отправляется', cls: 'bg-sky-500/15 text-sky-300' },
+  delivered: { label: '✅ Доставлено', cls: 'bg-green-500/15 text-green-400' },
+}
+const STEP_KEYS: [OrderStatus, string][] = [['new', 'Новый'], ['cooking', 'Готовится'], ['shipping', 'Отправляется'], ['delivered', 'Доставлено']]
+function stamp(ms: number) {
+  return new Date(ms).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+function OrdersScreen({ data, notify }: ScreenProps) {
+  const [venue, setVenue] = useState('')
+  const [status, setStatus] = useState<'' | OrderStatus>('')
+  const [orders, setOrders] = useState<OrderView[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const load = async () => {
+    setLoading(true)
+    try { setOrders((await okoApi.orders(venue || undefined)).orders) } catch (e) { notify('error', errText(e)) } finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [venue])
+  const visible = (orders || []).filter(o => !status || o.status === status)
+  const counts = (orders || []).reduce((acc, o) => { acc[o.status] = (acc[o.status] || 0) + 1; return acc }, {} as Record<string, number>)
+
+  return (
+    <>
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Заказы</h1>
+          <p className="text-sm text-gray-500 mt-1">Статусы меняются сами: «Принято» поваром, скан QR на чеке, фото чека от клиента</p>
+        </div>
+        <button className={ghostBtn} disabled={loading} onClick={load} aria-label="Обновить"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <select className={inputCls} value={venue} onChange={e => setVenue(e.target.value)} aria-label="Форма">
+          <option value="">Все формы</option>
+          {Object.entries(data.config).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
+        </select>
+        <select className={inputCls} value={status} onChange={e => setStatus(e.target.value as any)} aria-label="Статус">
+          <option value="">Все статусы</option>
+          {STEP_KEYS.map(([k]) => <option key={k} value={k}>{STATUS_META[k].label}{counts[k] ? ` (${counts[k]})` : ''}</option>)}
+        </select>
+      </div>
+      {orders === null ? <div className="text-sm text-gray-500">Загрузка…</div> : visible.length === 0 ? (
+        <div className={`${cardCls} p-6 text-sm text-gray-400 text-center`}>Заказов нет</div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {visible.map(o => {
+            const byStatus = Object.fromEntries(o.timeline.map(e => [e.status, e]))
+            return (
+              <div key={o.id} className={`${cardCls} p-4 flex flex-col gap-3`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-white font-semibold truncate">{o.venueLabel}{o.date ? ` · на ${o.date}` : ''}</div>
+                    <div className="text-xs text-gray-500">Отправлен {o.createdAt ? stamp(o.createdAt) : '—'}{o.name ? ` · ${o.name}` : ''}</div>
+                  </div>
+                  <span className={`text-xs px-2.5 py-1 rounded-full whitespace-nowrap ${STATUS_META[o.status].cls}`}>{STATUS_META[o.status].label}</span>
+                </div>
+                {o.items ? (
+                  <ul className="text-sm text-gray-300 flex flex-col gap-0.5">
+                    {o.items.map(i => <li key={i.name} className="flex justify-between gap-3"><span className="truncate">{i.name}</span><span className="text-gray-500 whitespace-nowrap">{i.qty} {i.unit}</span></li>)}
+                  </ul>
+                ) : <div className="text-xs text-gray-500 whitespace-pre-line line-clamp-4">{o.summary}</div>}
+                {o.comment && <div className="text-xs text-gray-400">💬 {o.comment}</div>}
+                <div className="grid grid-cols-4 gap-2">
+                  {STEP_KEYS.map(([k, label]) => {
+                    const e = byStatus[k]
+                    return (
+                      <div key={k} className={`border-t-[3px] pt-1.5 text-[11px] leading-tight ${e ? 'border-green-500 text-gray-200' : 'border-white/10 text-gray-600'}`}>
+                        <div className="font-semibold">{label}</div>
+                        <div>{e ? stamp(e.at) : '—'}</div>
+                        {k === 'shipping' && e?.via === 'qr' && <div className="text-gray-500">по QR</div>}
+                        {e?.trackUrl && <a href={e.trackUrl} target="_blank" rel="noopener noreferrer" className="text-green-400 underline">трек</a>}
+                        {k === 'delivered' && e && o.receiptPhoto && <div className="text-gray-500">фото чека в группе</div>}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </>
   )
 }
 

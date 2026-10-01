@@ -16,6 +16,16 @@ const {
   markCategoryDelivered,
   markDeliveryFinalNotified,
   findOrderByClientId,
+  STATUS_LABELS,
+  orderStatus,
+  orderTimeline,
+  markShipping,
+  setShippingMessage,
+  setTrackUrl,
+  markReceived,
+  findOrderByShipToken,
+  findOrderByShippingMessage,
+  listOrders,
 } = require("./oko-order-store");
 
 const ACCEPT_CALLBACK_PREFIX = "oko_accept:";
@@ -117,7 +127,7 @@ function collectUnusedMedia(config) {
 // нужно проверить/поправить при деплое (см. заметку в README этого модуля) —
 // если сделать require наверху файла и путь окажется неверным, это уронит
 // вообще весь приём заказов при старте процесса, а не только печать.
-function buildOrderPrintLines(order, venueConfig) {
+function buildOrderPrintLines(order, venueConfig, withShipQr) {
   const lines = ["KitchenDesk", "------------------------------", `Заказ — ${venueConfig.label}`, order.date || "", "------------------------------"];
   (order.items || []).forEach((item) => {
     lines.push(`${item.name} — ${item.qty} ${item.unit || DEFAULT_UNIT}`);
@@ -129,6 +139,7 @@ function buildOrderPrintLines(order, venueConfig) {
     lines.push("------------------------------", `Отправил: ${order.name}`);
   }
   lines.push("------------------------------");
+  if (withShipQr) lines.push("При отправке отсканируйте QR:", "отметка «Отправляется»");
   return lines;
 }
 
@@ -145,13 +156,14 @@ function formRestaurantId(form) {
   return String((form && form.restaurantId) || DEFAULT_RESTAURANT_ID);
 }
 
-function printOrderTicket(order, venueConfig) {
+function printOrderTicket(order, venueConfig, shipToken) {
   try {
     // Путь проверен при деплое 2026-09-20: oko-shelf-life-store.js лежит в
     // том же каталоге, что и oko-order-api.js (/root/kitchendesk/backend/src/).
     const { createRawPrintJob } = require("./oko-shelf-life-store");
     createRawPrintJob({
-      printLines: buildOrderPrintLines(order, venueConfig),
+      printLines: buildOrderPrintLines(order, venueConfig, !!shipToken),
+      qrData: shipToken ? shipUrl(shipToken) : null,
       itemName: `Заказ — ${venueConfig.label}`,
       by: order.name || "",
       restaurantId: formRestaurantId(venueConfig),
@@ -163,11 +175,51 @@ function printOrderTicket(order, venueConfig) {
   }
 }
 
+// ── Этап 4: QR «Отправляется» на чеке заказа ────────────────────────────
+// Ссылка ведёт на страницу этого роутера (/api/oko-order/ship/<token>);
+// токен случайный на каждый заказ — как QR завершения смены на чек-листе.
+const SHIP_TOKEN_RE = /^[A-Za-z0-9_-]{24}$/;
+const TRACK_URL_MAX_LEN = 500;
+
+function generateShipToken() {
+  return crypto.randomBytes(18).toString("base64url");
+}
+
+function shipUrl(token) {
+  const origin = new URL(process.env.OKO_ORDER_FORM_URL || "https://kitchendesk.chefplan.ru/oko-order/").origin;
+  return `${origin}/api/oko-order/ship/${token}`;
+}
+
+// Ссылка отслеживания: только http(s), без пробелов. Пусто → null, плохая → false.
+function cleanTrackUrl(raw) {
+  const value = typeof raw === "string" ? raw.trim() : "";
+  if (!value) return null;
+  if (value.length > TRACK_URL_MAX_LEN || /\s/.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : false;
+  } catch {
+    return false;
+  }
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/"/g, "&quot;");
+}
+
+function formatDateTime(ms) {
+  return new Date(ms).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: ORDER_TIME_ZONE });
+}
+
 function formatTime(ms) {
   return new Date(ms).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
 
 const CONFIG_PATH = path.join(__dirname, "data", "oko-order-config.json");
+// Время в сообщениях/на странице QR — как у остальных сообщений модуля
+// (formatTime без зоны = зона процесса); здесь явно, чтобы страница QR и
+// история показывали то же самое.
+const ORDER_TIME_ZONE = process.env.TZ || undefined;
 
 function readConfig() {
   return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
@@ -383,28 +435,10 @@ const adminLoginLimiter = rateLimit({
   message: { error: "Слишком много попыток входа, попробуйте позже" },
 });
 
-// Этап 3: в админку можно войти и логином KitchenDesk (мастер в /web/
-// шлёт свой обычный Authorization: Bearer … / tg …) — тогда пускаем только
-// администратора ОКО (заведение, на которое печатаются заказы форм) и
-// суперадмина. Без заголовка Authorization — прежний пароль, старая
-// /oko-order/admin/ работает как раньше. Require ленивый: middleware/auth
-// тянет Postgres, а публичная форма от него не зависит.
-const KD_ADMIN_ROLES = ["admin"];
-
+// Вход в админку и мастер /web/oko-order — один пароль OKO_ADMIN_PASSWORD
+// (решение пользователя 2026-10-01: во всех его панелях единый пароль;
+// вход логином KitchenDesk, добавленный в Этапе 3, убран).
 function requireAdmin(req, res, next) {
-  const authHeader = req.header("Authorization") || "";
-  if (authHeader.startsWith("Bearer ") || authHeader.startsWith("tg ")) {
-    const { authMiddleware } = require("./middleware/auth");
-    return authMiddleware(req, res, () => {
-      const user = req.user;
-      if (!user) return res.status(401).json({ error: "Не авторизован" });
-      const okoAdmin = KD_ADMIN_ROLES.includes(user.role) && String(user.restaurant_id) === DEFAULT_RESTAURANT_ID;
-      if (!user.is_superadmin && !okoAdmin) {
-        return res.status(403).json({ error: "Настройка форм заказов доступна только администратору ОКО" });
-      }
-      next();
-    });
-  }
   const password = req.header("X-Admin-Password") || "";
   const expected = process.env.OKO_ADMIN_PASSWORD || "";
   const passwordBuf = Buffer.from(password);
@@ -684,7 +718,8 @@ function createOkoOrderRouter(bot) {
       // Печатаем бумажный тикет заказа сразу же, тем же временем, что и
       // Telegram-сообщение — best-effort, ошибка печати не должна ронять
       // приём заказа (сообщение в группу уже ушло, это важнее).
-      printOrderTicket(order, venueConfig);
+      const shipToken = generateShipToken();
+      printOrderTicket(order, venueConfig, shipToken);
 
       // Best-effort confirmation back in the topic the order was placed from —
       // a failure here shouldn't fail the request, the order already reached
@@ -730,11 +765,75 @@ function createOkoOrderRouter(bot) {
         // даже если конфиг заведения потом поменяют).
         deliveryPerson: venueConfig.deliveryPerson || null,
         delivered: null,
+        // Этап 4: состав для истории заказов и QR «Отправляется» с чека.
+        date: order.date || null,
+        items: order.items,
+        comment: order.comment || null,
+        name: order.name || null,
+        sourceThreadId: venueConfig.sourceThreadId ? String(venueConfig.sourceThreadId) : null,
+        kitchenThreadId: venueConfig.kitchenThreadId ? String(venueConfig.kitchenThreadId) : null,
+        shipToken,
+        shipping: null,
+        received: null,
         createdAt: Date.now(),
       });
 
     return { status: 200, body: { ok: true } };
   }
+
+  // ── Этап 4: история заказов формы для клиента (по той же секретной
+  // ссылке ?f=). Только то, что клиент и так видит: дата, состав, статусы.
+  router.get("/history", formLookupLimiter, (req, res) => {
+    const config = readConfig();
+    const found = resolveForm(config, { f: req.query.f, venue: req.query.venue });
+    if (!found.form) return res.status(found.status).json(found.body);
+    const orders = listOrders({ venue: found.key, limit: 30 }).map(([id, order]) => publicOrderView(id, order));
+    res.json({ label: found.form.label, orders });
+  });
+
+  // Admin — раздел «Заказы» мастера: все формы или одна (?venue=).
+  router.get("/admin/orders", adminLoginLimiter, requireAdmin, (req, res) => {
+    const venue = typeof req.query.venue === "string" && req.query.venue ? req.query.venue : null;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 300);
+    const orders = listOrders({ venue, limit }).map(([id, order]) => ({
+      ...publicOrderView(id, order),
+      venue: order.venue,
+      venueLabel: order.venueLabel || order.venue,
+      comment: order.comment || null,
+      name: order.name || null,
+      receiptPhoto: !!(order.received && order.received.fileId),
+    }));
+    res.json({ orders, statusLabels: STATUS_LABELS });
+  });
+
+  // QR с чека → страница заказа с кнопкой «Отправляется» (как QR
+  // завершения смены: токен в ссылке и есть доступ, пароль не нужен).
+  router.get("/ship/:token", formLookupLimiter, (req, res) => {
+    const found = SHIP_TOKEN_RE.test(req.params.token) ? findOrderByShipToken(req.params.token) : null;
+    if (!found) return sendShipPage(res, 404, { title: "QR не найден", text: "Такого заказа нет — проверьте, что сканируете QR с чека заказа." });
+    sendShipPage(res, 200, { token: req.params.token, orderId: found.orderId, order: found.order });
+  });
+
+  router.post("/ship/:token", formLookupLimiter, express.urlencoded({ extended: false, limit: "4kb" }), async (req, res) => {
+    const found = SHIP_TOKEN_RE.test(req.params.token) ? findOrderByShipToken(req.params.token) : null;
+    if (!found) return sendShipPage(res, 404, { title: "QR не найден", text: "Такого заказа нет — проверьте, что сканируете QR с чека заказа." });
+    const trackUrl = cleanTrackUrl(req.body && req.body.trackUrl);
+    if (trackUrl === false) {
+      return sendShipPage(res, 400, { token: req.params.token, orderId: found.orderId, order: found.order, error: "Ссылка отслеживания должна начинаться с http:// или https://" });
+    }
+    try {
+      if (found.order.shipping) {
+        // Уже отправлен — можно только дописать ссылку, если её не было.
+        if (trackUrl && !found.order.shipping.trackUrl) await addTrackUrl(bot, found.orderId, trackUrl);
+      } else {
+        await shipOrder(bot, found.orderId, { by: "QR с чека", via: "qr", trackUrl });
+      }
+    } catch (err) {
+      console.error("[oko-order] отметка «Отправляется» по QR:", err.message);
+    }
+    const fresh = getOrder(found.orderId);
+    sendShipPage(res, 200, { token: req.params.token, orderId: found.orderId, order: fresh, done: true });
+  });
 
   // Admin — full config (routing IDs + items) for every configured venue.
   router.get("/admin/config", adminLoginLimiter, requireAdmin, (req, res) => {
@@ -1105,6 +1204,212 @@ function createOkoOrderRouter(bot) {
   return router;
 }
 
+// ── Этап 4: статусы, отправка, фото-чек ────────────────────────────────
+
+function stripHtml(html) {
+  return String(html || "").replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+
+// Старые заказы (до Этапа 4) хранят только текст сообщения — достаём из
+// него дату («📅 Дата: 2026-10-31») и строки «• Позиция — 2 шт.». Не
+// разобралось — отдаём текст как есть (summary).
+function parseLegacyMessage(coreMessage) {
+  const text = stripHtml(coreMessage);
+  const dateMatch = /Дата:\s*(\d{4}-\d{2}-\d{2})/.exec(text);
+  const items = [];
+  text.split("\n").forEach((line) => {
+    const m = /^•\s*(.+?)\s+—\s+(\d+(?:[.,]\d+)?)\s*(.*)$/.exec(line.trim());
+    if (m) items.push({ name: m[1], qty: Number(m[2].replace(",", ".")), unit: m[3].trim() || DEFAULT_UNIT });
+  });
+  return { date: dateMatch ? dateMatch[1] : null, items: items.length ? items : null, text };
+}
+
+// Заказ для истории (клиент и раздел «Заказы»).
+function publicOrderView(id, order) {
+  const legacy = Array.isArray(order.items) ? null : parseLegacyMessage(order.coreMessage);
+  return {
+    id,
+    createdAt: order.createdAt || null,
+    date: order.date || (legacy && legacy.date) || null,
+    items: Array.isArray(order.items)
+      ? order.items.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit || DEFAULT_UNIT }))
+      : legacy.items,
+    summary: legacy && !legacy.items ? legacy.text : null,
+    status: orderStatus(order),
+    timeline: orderTimeline(order).map((e) => ({ status: e.status, at: e.at, via: e.via || null, trackUrl: e.trackUrl || null })),
+  };
+}
+
+function orderThreadOptions(threadId, replyTo) {
+  const options = { parse_mode: "HTML", disable_web_page_preview: true };
+  if (threadId) options.message_thread_id = Number(threadId);
+  if (replyTo) {
+    options.reply_to_message_id = replyTo;
+    options.allow_sending_without_reply = true;
+  }
+  return options;
+}
+
+function orderSourceThread(order) {
+  if (order.sourceThreadId) return order.sourceThreadId;
+  try {
+    const form = readConfig()[order.venue];
+    return form && form.sourceThreadId ? String(form.sourceThreadId) : null;
+  } catch {
+    return null;
+  }
+}
+
+function orderKitchenThread(order) {
+  if (order.kitchenThreadId) return order.kitchenThreadId;
+  try {
+    const form = readConfig()[order.venue];
+    return form && form.kitchenThreadId ? String(form.kitchenThreadId) : null;
+  } catch {
+    return null;
+  }
+}
+
+function orderTitle(order) {
+  return `«${escapeHtml(order.venueLabel || order.venue)}»${order.date ? ` на ${escapeHtml(order.date)}` : ""}`;
+}
+
+/**
+ * «Отправляется»: QR с чека (via "qr") или прежняя вторая кнопка доставщика
+ * (via "button"). Первая отметка побеждает. В тему клиента уходит сообщение
+ * об отправке (с трек-ссылкой, если есть) — на НЕГО клиент отвечает фото
+ * чека; в кухню — короткая пометка ответом на сообщение заказа.
+ */
+async function shipOrder(bot, orderId, { by, via, trackUrl }) {
+  const at = Date.now();
+  const { order, created } = markShipping(orderId, { at, by: by || null, via, trackUrl: trackUrl || null, messageId: null });
+  if (!order || !created) return { order, created: false };
+
+  if (order.sourceChatId) {
+    const lines = [
+      `🚚 <b>Заказ отправлен</b> — ${orderTitle(order)}`,
+      `Время отправки: ${formatTime(at)}`,
+    ];
+    if (trackUrl) lines.push(`Отслеживание: <a href="${escapeAttr(trackUrl)}">${escapeHtml(trackUrl)}</a>`);
+    lines.push("", "📸 Когда получите заказ, <b>ответьте на это сообщение</b> фото чека — так заказ отметится как доставленный.");
+    try {
+      const sent = await bot.sendMessage(order.sourceChatId, lines.join("\n"), orderThreadOptions(orderSourceThread(order), order.sourceMessageId));
+      setShippingMessage(orderId, sent.message_id);
+    } catch (err) {
+      console.error("[oko-order] сообщение об отправке клиенту не ушло:", err.message);
+    }
+  }
+  if (order.kitchenChatId) {
+    const how = via === "qr" ? "по QR с чека" : by ? escapeHtml(by) : "кнопкой";
+    const text = `🚚 <b>Отправляется</b> — ${how}, ${formatTime(at)}${trackUrl ? `\nОтслеживание: <a href="${escapeAttr(trackUrl)}">${escapeHtml(trackUrl)}</a>` : ""}`;
+    await bot.sendMessage(order.kitchenChatId, text, orderThreadOptions(orderKitchenThread(order), order.kitchenMessageId)).catch(() => {});
+  }
+  return { order: getOrder(orderId), created: true };
+}
+
+// Ссылка отслеживания после отправки (заказ уже отмечен без неё).
+async function addTrackUrl(bot, orderId, trackUrl) {
+  const order = setTrackUrl(orderId, trackUrl);
+  if (!order || !order.sourceChatId) return;
+  const text = `🔗 Ссылка отслеживания заказа ${orderTitle(order)}: <a href="${escapeAttr(trackUrl)}">${escapeHtml(trackUrl)}</a>\n\n📸 Фото чека при получении — ответом на сообщение «Заказ отправлен» выше.`;
+  await bot.sendMessage(order.sourceChatId, text, orderThreadOptions(orderSourceThread(order), order.shipping.messageId || order.sourceMessageId)).catch(() => {});
+}
+
+/**
+ * «Доставлено»: клиент присылает фото чека ОТВЕТОМ на сообщение бота
+ * «Заказ отправлен» (ответы на сообщения бота Telegram доставляет боту даже
+ * в режиме приватности). Без ответа фото не трогаем — так нет угадывания,
+ * к какому из нескольких заказов оно относится.
+ */
+function registerReceiptHandler(bot) {
+  bot.on("message", async (msg) => {
+    try {
+      if (!msg.reply_to_message || !msg.chat || (msg.chat.type !== "group" && msg.chat.type !== "supergroup")) return;
+      const photo = Array.isArray(msg.photo) && msg.photo.length ? msg.photo[msg.photo.length - 1] : null;
+      const imageDoc = msg.document && /^image\//.test(msg.document.mime_type || "") ? msg.document : null;
+      if (!photo && !imageDoc) return;
+      const found = findOrderByShippingMessage(msg.chat.id, msg.reply_to_message.message_id);
+      if (!found) return;
+      const by = [msg.from && msg.from.first_name, msg.from && msg.from.last_name].filter(Boolean).join(" ") || (msg.from && msg.from.username) || "клиент";
+      const at = Date.now();
+      const fileId = (photo || imageDoc).file_id;
+      const { order, created } = markReceived(found.orderId, { at, by, userId: msg.from ? msg.from.id : null, fileId, kind: photo ? "photo" : "document", messageId: msg.message_id });
+      if (!created) return;
+      const threadOpts = (replyTo) => {
+        const o = { reply_to_message_id: replyTo, allow_sending_without_reply: true };
+        if (msg.message_thread_id && msg.is_topic_message) o.message_thread_id = msg.message_thread_id;
+        return o;
+      };
+      await bot.sendMessage(msg.chat.id, `✅ Получение подтверждено (${formatTime(at)}), спасибо! Заказ отмечен как доставленный.`, threadOpts(msg.message_id)).catch(() => {});
+      if (order.kitchenChatId) {
+        const caption = `✅ <b>Доставлено</b> — ${orderTitle(order)}\nФото чека прислал(а) ${escapeHtml(by)}, ${formatTime(at)}`;
+        const opts = { ...orderThreadOptions(orderKitchenThread(order), order.kitchenMessageId), caption };
+        const send = photo ? bot.sendPhoto(order.kitchenChatId, fileId, opts) : bot.sendDocument(order.kitchenChatId, fileId, opts);
+        await send.catch((err) => console.error("[oko-order] фото-чек в кухню не ушло:", err.message));
+      }
+    } catch (err) {
+      console.error("[oko-order] обработка фото-чека:", err.message);
+    }
+  });
+}
+
+const SHIP_PAGE_STATUS = {
+  new: "🕐 Новый",
+  cooking: "👨‍🍳 Готовится",
+  shipping: "🚚 Отправляется",
+  delivered: "✅ Доставлено",
+};
+
+// Страница по QR с чека — простая HTML без сборки, как у QR чек-листа.
+function sendShipPage(res, status, { token, order, title, text, error, done }) {
+  const css = `body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;background:#15110f;color:#f3ece6;padding:24px 16px;box-sizing:border-box}
+  .card{max-width:440px;margin:0 auto;background:#211a16;border:1px solid #3a2e27;border-radius:18px;padding:22px}
+  h1{font-size:20px;margin:0 0 4px}.sub{color:#b5a79c;font-size:14px;margin:0 0 16px}
+  .st{display:inline-block;padding:6px 12px;border-radius:999px;background:#2e241e;font-size:14px;margin-bottom:14px}
+  ul{list-style:none;padding:0;margin:0 0 16px}li{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #3a2e27;font-size:15px}
+  li:last-child{border-bottom:none}.q{color:#e6a656;white-space:nowrap}
+  label{display:block;font-size:14px;color:#b5a79c;margin:6px 0}
+  input{width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #3a2e27;background:#15110f;color:#f3ece6;font-size:15px}
+  button{width:100%;margin-top:14px;padding:15px;border:none;border-radius:14px;background:#e6a656;color:#1b130c;font-size:17px;font-weight:700}
+  .err{color:#f08b7a;font-size:14px;margin-top:8px}.ok{color:#9fc690;font-size:15px;margin:10px 0}
+  .tl{font-size:14px;color:#b5a79c;margin-top:14px}.tl div{padding:3px 0}a{color:#e6a656;word-break:break-all}`;
+  let body;
+  if (!order) {
+    body = `<h1>${escapeHtml(title)}</h1><p class="sub">${escapeHtml(text)}</p>`;
+  } else {
+    const st = orderStatus(order);
+    const items = Array.isArray(order.items)
+      ? `<ul>${order.items.map((i) => `<li><span>${escapeHtml(i.name)}</span><span class="q">${escapeHtml(i.qty)} ${escapeHtml(i.unit || DEFAULT_UNIT)}</span></li>`).join("")}</ul>`
+      : `<p class="sub">${escapeHtml(stripHtml(order.coreMessage))}</p>`;
+    const timeline = orderTimeline(order)
+      .map((e) => `<div>${SHIP_PAGE_STATUS[e.status]} — ${formatDateTime(e.at)}${e.trackUrl ? ` · <a href="${escapeAttr(e.trackUrl)}">трек</a>` : ""}</div>`)
+      .join("");
+    let action = "";
+    if (!order.shipping && !order.received) {
+      action = `<form method="post" action="${escapeAttr(token)}">
+        <label for="t">Ссылка отслеживания (необязательно)</label>
+        <input id="t" name="trackUrl" type="url" inputmode="url" placeholder="https://…" maxlength="${TRACK_URL_MAX_LEN}">
+        ${error ? `<div class="err">${escapeHtml(error)}</div>` : ""}
+        <button type="submit">🚚 Отправляется</button></form>`;
+    } else if (order.shipping && !order.shipping.trackUrl && !order.received) {
+      action = `${done ? `<div class="ok">Отмечено: заказ отправляется. Клиенту ушло сообщение в Telegram.</div>` : ""}
+        <form method="post" action="${escapeAttr(token)}">
+        <label for="t">Добавить ссылку отслеживания</label>
+        <input id="t" name="trackUrl" type="url" inputmode="url" placeholder="https://…" maxlength="${TRACK_URL_MAX_LEN}" required>
+        ${error ? `<div class="err">${escapeHtml(error)}</div>` : ""}
+        <button type="submit">Отправить ссылку клиенту</button></form>`;
+    } else if (done) {
+      action = `<div class="ok">Готово — клиенту ушло сообщение в Telegram.</div>`;
+    }
+    body = `<h1>Заказ ${escapeHtml(order.venueLabel || order.venue)}</h1>
+      <p class="sub">${order.date ? `на ${escapeHtml(order.date)} · ` : ""}создан ${formatDateTime(order.createdAt)}</p>
+      <div class="st">${SHIP_PAGE_STATUS[st]}</div>${items}${action}<div class="tl">${timeline}</div>`;
+  }
+  res.status(status).set("Cache-Control", "no-store").type("html").send(`<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>Заказ — KitchenDesk</title><style>${css}</style></head><body><div class="card">${body}</div></body></html>`);
+}
+
 /**
  * Handles taps on the "✅ Принято" button(s) attached to each order message
  * in the kitchen group. Two modes, depending on how the order was saved:
@@ -1121,6 +1426,9 @@ function createOkoOrderRouter(bot) {
  * @param {import('node-telegram-bot-api')} bot
  */
 function registerOrderAcceptHandler(bot) {
+  // Этап 4: фото-чек ответом на «Заказ отправлен» → «Доставлено». Регистрируется
+  // здесь, чтобы не трогать index.js (он вызывает только эту функцию).
+  registerReceiptHandler(bot);
   bot.on("callback_query", async (query) => {
     const data = query.data || "";
     if (!data.startsWith(ACCEPT_CALLBACK_PREFIX)) return;
@@ -1177,6 +1485,7 @@ async function handleGenericAccept(bot, orderId, order, query) {
     }
 
     await bot.answerCallbackQuery(query.id, { text: "Отправлено в доставку!" }).catch(() => {});
+    await shipOrder(bot, orderId, { by: deliveredByName, via: "button" }).catch((err) => console.error("[oko-order] shipOrder:", err.message));
     return;
   }
 
@@ -1283,6 +1592,9 @@ async function handleCategoryAccept(bot, orderId, order, catIndex, query) {
     }
 
     await bot.answerCallbackQuery(query.id, { text: "Отправлено в доставку!" }).catch(() => {});
+    if (allDeliveredNow) {
+      await shipOrder(bot, orderId, { by: deliveredByName, via: "button" }).catch((err) => console.error("[oko-order] shipOrder:", err.message));
+    }
     return;
   }
 

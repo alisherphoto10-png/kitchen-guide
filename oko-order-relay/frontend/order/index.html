@@ -279,6 +279,29 @@
   @keyframes shimmer { to { background-position: -200% 0; } }
 
   /* ── Планшет и компьютер: шире колонка, крупнее шапка, категории сеткой ── */
+  /* Этап 4: история заказов со статусами */
+  .history-link { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 12px; padding: 14px 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); font-weight: 600; text-align: left; }
+  .history-link .ic { color: var(--accent); display: flex; }
+  .history-link .chev { margin-left: auto; color: var(--faint); }
+  .history-list { display: grid; gap: 12px; margin-top: 6px; }
+  .h-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .h-head { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+  .h-date { font-weight: 700; font-size: 17px; }
+  .h-sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .chip { flex-shrink: 0; font-size: 13px; font-weight: 650; padding: 5px 10px; border-radius: 999px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+  .chip.st-cooking { background: var(--accent-soft); color: var(--accent); }
+  .chip.st-shipping { background: rgba(120, 170, 230, .14); color: #9ec3ef; }
+  .chip.st-delivered { background: rgba(159, 198, 144, .15); color: var(--ok); }
+  .h-items { margin: 10px 0 0; padding: 0; list-style: none; font-size: 15px; }
+  .h-items li { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+  .h-items li span:last-child { color: var(--muted); white-space: nowrap; }
+  .h-summary { color: var(--muted); font-size: 14px; margin-top: 8px; white-space: pre-line; }
+  .h-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
+  .h-step { font-size: 11.5px; color: var(--faint); border-top: 3px solid var(--line); padding-top: 6px; line-height: 1.3; }
+  .h-step.done { color: var(--text); border-color: var(--accent); }
+  .h-step b { display: block; font-weight: 650; }
+  .h-step a { color: var(--accent); }
+  .h-empty { text-align: center; color: var(--muted); padding: 40px 10px; }
   @media (min-width: 700px) {
     :root { --gutter: 32px; }
     body { font-size: 17px; }
@@ -352,6 +375,11 @@
         </button>
       </div>
     </div>
+    <button class="history-link" type="button" onclick="openHistory()">
+      <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg></span>
+      История заказов
+      <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+    </button>
     <div id="homeBody">
       <div class="section-head"><h3>Категории</h3></div>
       <div class="cat-list"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
@@ -379,6 +407,21 @@
     </div>
   </div>
   <div class="wrap"><div class="items" id="catItems"></div></div>
+</section>
+
+<!-- Этап 4. История заказов со статусами -->
+<section class="screen" id="scr-history">
+  <div class="top-bar">
+    <div class="wrap">
+      <div class="top-row">
+        <button class="icon-btn" type="button" aria-label="Назад" onclick="history.back()">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+        </button>
+        <h2>История заказов</h2>
+      </div>
+    </div>
+  </div>
+  <div class="wrap"><div class="history-list" id="historyList"></div></div>
 </section>
 
 <!-- 4. Предпросмотр заказа -->
@@ -466,6 +509,7 @@
     <div class="actions">
       <button class="btn btn-primary" type="button" onclick="startNewOrder(false)">Вернуться к каталогу</button>
       <button class="btn btn-ghost" type="button" onclick="startNewOrder(true)">Повторить этот заказ</button>
+      <button class="btn btn-ghost" type="button" onclick="startNewOrder(false); openHistory()">История заказов</button>
     </div>
   </div>
 </section>
@@ -603,6 +647,9 @@
       show("scr-cat");
     } else if (s.screen === "review") {
       renderReview();
+    } else if (s.screen === "history") {
+      show("scr-history");
+      loadHistory();
     } else {
       renderHome();
       show("scr-home");
@@ -622,6 +669,55 @@
     history.pushState({ screen: "review" }, "");
     renderReview();
   }
+  function openHistory() {
+    history.pushState({ screen: "history" }, "");
+    screenFromState({ screen: "history" });
+  }
+
+  // ── Этап 4: история заказов ──
+  const STEPS = [
+    ["new", "Новый"],
+    ["cooking", "Готовится"],
+    ["shipping", "Отправляется"],
+    ["delivered", "Доставлено"],
+  ];
+  const STATUS_TEXT = { new: "🕐 Новый", cooking: "👨‍🍳 Готовится", shipping: "🚚 Отправляется", delivered: "✅ Доставлено" };
+  function fmtStamp(ms) {
+    return new Date(ms).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
+  function historyCardHtml(o) {
+    const byStatus = {};
+    (o.timeline || []).forEach((e) => { byStatus[e.status] = e; });
+    const items = Array.isArray(o.items)
+      ? `<ul class="h-items">${o.items.map((i) => `<li><span>${esc(i.name)}</span><span>${esc(fmtQty(i.qty))} ${esc(i.unit)}</span></li>`).join("")}</ul>`
+      : `<div class="h-summary">${esc(o.summary || "")}</div>`;
+    const steps = STEPS.map(([key, label]) => {
+      const e = byStatus[key];
+      const track = e && e.trackUrl && /^https?:\/\//.test(e.trackUrl) ? ` · <a href="${esc(e.trackUrl)}" target="_blank" rel="noopener">трек</a>` : "";
+      return `<div class="h-step${e ? " done" : ""}"><b>${label}</b>${e ? esc(fmtStamp(e.at)) + track : "—"}</div>`;
+    }).join("");
+    return `<div class="h-card">
+      <div class="h-head">
+        <div><div class="h-date">${o.date ? esc(humanDate(o.date)) : "Без даты"}</div>
+        <div class="h-sub">Отправлен ${o.createdAt ? esc(fmtStamp(o.createdAt)) : "—"}</div></div>
+        <span class="chip st-${esc(o.status)}">${STATUS_TEXT[o.status] || ""}</span>
+      </div>${items}<div class="h-steps">${steps}</div></div>`;
+  }
+  async function loadHistory() {
+    const list = document.getElementById("historyList");
+    list.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+    try {
+      const res = await fetch(`/api/oko-order/history?${formQuery}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Не удалось загрузить историю");
+      list.innerHTML = data.orders && data.orders.length
+        ? data.orders.map(historyCardHtml).join("")
+        : '<div class="h-empty">Заказов пока нет</div>';
+    } catch (err) {
+      list.innerHTML = `<div class="h-empty">${esc(err.message || "Нет связи — попробуйте ещё раз")}</div>`;
+    }
+  }
+
   function goHome() {
     history.replaceState({ screen: "home" }, "");
     screenFromState({ screen: "home" });

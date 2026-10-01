@@ -132,7 +132,119 @@ function findOrderByClientId(venue, clientOrderId, sinceMs) {
   return null;
 }
 
+// ── Этап 4 (2026-10-01): статусы заказа ──────────────────────────────
+// 🕐 Новый → 👨‍🍳 Готовится (первое «Принято») → 🚚 Отправляется (скан QR на
+// печатном чеке или прежняя кнопка доставщика) → ✅ Доставлено (клиент
+// прислал фото чека ОТВЕТОМ на сообщение бота об отправке). Старые заказы
+// (до Этапа 4) статуса не хранят — он выводится из accepted/delivered.
+const STATUS_LABELS = { new: "Новый", cooking: "Готовится", shipping: "Отправляется", delivered: "Доставлено" };
+
+function orderStatus(order) {
+  if (order.received) return "delivered";
+  if (order.shipping || order.delivered || (order.categories || []).some((c) => c.delivered)) return "shipping";
+  if (order.accepted || (order.categories || []).some((c) => c.accepted)) return "cooking";
+  return "new";
+}
+
+// История с точным временем: создание, первое «Принято», отправка, получение.
+function orderTimeline(order) {
+  const events = [];
+  if (order.createdAt) events.push({ status: "new", at: order.createdAt });
+  const accepts = [order.accepted, ...(order.categories || []).map((c) => c.accepted)].filter(Boolean);
+  if (accepts.length) {
+    const first = accepts.reduce((a, b) => (a.at <= b.at ? a : b));
+    events.push({ status: "cooking", at: first.at, by: first.name });
+  }
+  const shipped = order.shipping
+    || order.delivered
+    || (order.categories || []).map((c) => c.delivered).filter(Boolean).sort((a, b) => a.at - b.at)[0];
+  if (shipped) {
+    events.push({ status: "shipping", at: shipped.at, by: shipped.by || shipped.name, via: shipped.via || "button", trackUrl: shipped.trackUrl || null });
+  }
+  if (order.received) events.push({ status: "delivered", at: order.received.at, by: order.received.by });
+  return events;
+}
+
+// Отметка «Отправляется» — один раз (первая побеждает: QR и кнопка
+// доставщика не перезаписывают друг друга). Возвращает { order, created }.
+function markShipping(orderId, shipping) {
+  const orders = readOrders();
+  const order = orders[orderId];
+  if (!order) return { order: null, created: false };
+  if (order.shipping) return { order, created: false };
+  order.shipping = shipping;
+  writeOrders(orders);
+  return { order, created: true };
+}
+
+// id сообщения «Заказ отправлен» в теме клиента — на него клиент отвечает фото чека.
+function setShippingMessage(orderId, messageId) {
+  const orders = readOrders();
+  const order = orders[orderId];
+  if (!order || !order.shipping) return null;
+  order.shipping.messageId = messageId;
+  writeOrders(orders);
+  return order;
+}
+
+function setTrackUrl(orderId, trackUrl) {
+  const orders = readOrders();
+  const order = orders[orderId];
+  if (!order || !order.shipping) return null;
+  order.shipping.trackUrl = trackUrl;
+  writeOrders(orders);
+  return order;
+}
+
+function markReceived(orderId, received) {
+  const orders = readOrders();
+  const order = orders[orderId];
+  if (!order) return { order: null, created: false };
+  if (order.received) return { order, created: false };
+  order.received = received;
+  writeOrders(orders);
+  return { order, created: true };
+}
+
+function findOrderByShipToken(token) {
+  if (!token) return null;
+  const orders = readOrders();
+  for (const [orderId, order] of Object.entries(orders)) {
+    if (order.shipToken && order.shipToken === token) return { orderId, order };
+  }
+  return null;
+}
+
+// Фото-чек приходит ответом на сообщение бота об отправке — ищем заказ по
+// чату клиента и id этого сообщения.
+function findOrderByShippingMessage(chatId, messageId) {
+  const orders = readOrders();
+  for (const [orderId, order] of Object.entries(orders)) {
+    if (order.shipping && order.shipping.messageId === messageId && String(order.sourceChatId) === String(chatId)) {
+      return { orderId, order };
+    }
+  }
+  return null;
+}
+
+function listOrders({ venue, limit } = {}) {
+  return Object.entries(readOrders())
+    .filter(([, order]) => !venue || order.venue === venue)
+    .sort(([, a], [, b]) => (b.createdAt || 0) - (a.createdAt || 0))
+    .slice(0, limit || 50);
+}
+
 module.exports = {
+  STATUS_LABELS,
+  orderStatus,
+  orderTimeline,
+  markShipping,
+  setShippingMessage,
+  setTrackUrl,
+  markReceived,
+  findOrderByShipToken,
+  findOrderByShippingMessage,
+  listOrders,
   findOrderByClientId,
   createOrderId,
   saveOrder,

@@ -16,7 +16,7 @@ function makeStubBot() {
     calls, handlers, failures,
     on(ev, fn) { (handlers[ev] = handlers[ev] || []).push(fn); },
   };
-  for (const m of ["sendMessage", "pinChatMessage", "editMessageReplyMarkup", "editMessageText", "answerCallbackQuery"]) {
+  for (const m of ["sendMessage", "sendPhoto", "sendDocument", "pinChatMessage", "editMessageReplyMarkup", "editMessageText", "answerCallbackQuery"]) {
     bot[m] = async (...args) => {
       calls.push({ m, args });
       if (failures[m] > 0) { failures[m] -= 1; throw new Error(`stub ${m} failure`); }
@@ -45,6 +45,7 @@ app.use(express.static(path.join(__dirname, "frontend")));
 // тестовые ручки стенда
 app.get("/__calls", (req, res) => res.json(bot.calls || []));
 app.post("/__fail", (req, res) => { Object.assign(bot.failures, req.body); res.json({ ok: true }); });
+app.post("/__message", async (req, res) => { for (const h of bot.handlers.message || []) await h(req.body); res.json({ ok: true }); });
 app.post("/__callback", async (req, res) => { for (const h of bot.handlers.callback_query || []) await h(req.body); res.json({ ok: true }); });
 const port = Number(process.env.PORT || 3099);
 app.listen(port, "127.0.0.1", () => console.log("staging on", port));
