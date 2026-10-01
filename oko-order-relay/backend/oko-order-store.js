@@ -187,18 +187,6 @@ function setShippingMessage(orderId, messageId) {
   return order;
 }
 
-// id сообщения «Отправляется» в поварской группе — отдельно от messageId
-// (тема клиента), чтобы при подтверждении доставки отредактировать статус
-// в обеих копиях, а не только в теме клиента.
-function setShippingKitchenMessage(orderId, messageId) {
-  const orders = readOrders();
-  const order = orders[orderId];
-  if (!order || !order.shipping) return null;
-  order.shipping.kitchenMessageId = messageId;
-  writeOrders(orders);
-  return order;
-}
-
 function setTrackUrl(orderId, trackUrl) {
   const orders = readOrders();
   const order = orders[orderId];
@@ -266,7 +254,6 @@ module.exports = {
   orderTimeline,
   markShipping,
   setShippingMessage,
-  setShippingKitchenMessage,
   setTrackUrl,
   markReceived,
   findOrderByShipToken,

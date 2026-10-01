@@ -21,7 +21,6 @@ const {
   orderTimeline,
   markShipping,
   setShippingMessage,
-  setShippingKitchenMessage,
   setTrackUrl,
   markReceived,
   findOrderByShipToken,
@@ -1324,64 +1323,97 @@ function orderSourceThread(order) {
   }
 }
 
-function orderKitchenThread(order) {
-  if (order.kitchenThreadId) return order.kitchenThreadId;
-  try {
-    const form = readConfig()[order.venue];
-    return form && form.kitchenThreadId ? String(form.kitchenThreadId) : null;
-  } catch {
-    return null;
+// Текущий статус заказа как одна строка — заменяет, а не копит хвост
+// исходного сообщения: кухня и тема клиента каждая живут ОДНИМ сообщением
+// весь жизненный цикл заказа, здесь только текст актуального состояния.
+// Категорийный «Принято» (кто принял какую категорию) виден по кнопкам —
+// сюда попадает только общий случай (без категорий).
+function statusLine(order) {
+  if (order.received) return `✅ <b>Доставлено</b> — ${formatTime(order.received.at)}`;
+  if (order.shipping) {
+    const how = order.shipping.via === "qr" ? "по QR с чека" : order.shipping.by ? escapeHtml(order.shipping.by) : "кнопкой";
+    return `🚚 <b>Отправлен</b> — ${how}, ${formatTime(order.shipping.at)}`;
   }
+  if (!order.categories && order.accepted) {
+    return `✅ <b>Принято:</b> ${escapeHtml(order.accepted.name)}, ${formatTime(order.accepted.at)}`;
+  }
+  return null;
 }
 
-function orderTitle(order) {
-  return `«${escapeHtml(order.venueLabel || order.venue)}»${order.date ? ` на ${escapeHtml(order.date)}` : ""}`;
+function buildKitchenMessageText(order) {
+  const line = statusLine(order);
+  return order.coreMessage + (line ? `\n\n${line}` : "");
+}
+
+function buildSourceMessageText(order) {
+  return `${statusLine(order) || "📥 <b>Заказ отправлен</b>"}\n\n<blockquote>${order.coreMessage}</blockquote>`;
+}
+
+// Правит статус в месте, без новых сообщений: исходное сообщение заказа
+// (и в теме клиента, и в поварской группе) живёт всю жизнь заказа.
+async function editOrderStatus(bot, order) {
+  if (order.sourceChatId && order.sourceMessageId) {
+    await bot.editMessageText(buildSourceMessageText(order), {
+      chat_id: order.sourceChatId,
+      message_id: order.sourceMessageId,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    }).catch(() => {});
+  }
+  if (order.kitchenChatId && order.kitchenMessageId) {
+    await bot.editMessageText(buildKitchenMessageText(order), {
+      chat_id: order.kitchenChatId,
+      message_id: order.kitchenMessageId,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    }).catch(() => {});
+  }
 }
 
 /**
  * «Отправляется»: QR с чека (via "qr") или прежняя вторая кнопка доставщика
- * (via "button"). Первая отметка побеждает. В тему клиента уходит сообщение
- * об отправке (с трек-ссылкой, если есть) — на НЕГО клиент отвечает фото
- * чека; в кухню — короткая пометка ответом на сообщение заказа.
+ * (via "button"). Первая отметка побеждает. Статус правится ПРЯМО В
+ * исходных сообщениях (тема клиента + поварская группа) — без новых копий
+ * текста заказа. Единственное новое сообщение за весь цикл отправки —
+ * короткое, со ссылкой отслеживания (если есть) и просьбой ответить фото;
+ * именно на него клиент отвечает, и оно удаляется после доставки.
  */
 async function shipOrder(bot, orderId, { by, via, trackUrl }) {
   const at = Date.now();
   const { order, created } = markShipping(orderId, { at, by: by || null, via, trackUrl: trackUrl || null, messageId: null });
   if (!order || !created) return { order, created: false };
 
+  await editOrderStatus(bot, order);
+
   if (order.sourceChatId) {
-    const lines = [
-      `🚚 <b>Заказ отправлен</b> — ${orderTitle(order)}`,
-      `Время отправки: ${formatTime(at)}`,
-    ];
+    const lines = [];
     if (trackUrl) lines.push(`Отслеживание: <a href="${escapeAttr(trackUrl)}">${escapeHtml(trackUrl)}</a>`);
-    lines.push("", "📸 Когда получите заказ, <b>ответьте на это сообщение</b> фото чека — так заказ отметится как доставленный.");
+    lines.push("📸 Когда получите заказ, <b>ответьте на это сообщение</b> фото чека — так заказ отметится как доставленный.");
     try {
-      const sent = await bot.sendMessage(order.sourceChatId, lines.join("\n"), orderThreadOptions(orderSourceThread(order), order.sourceMessageId));
+      const sent = await bot.sendMessage(order.sourceChatId, lines.join("\n"), {
+        ...orderThreadOptions(orderSourceThread(order), order.sourceMessageId),
+        disable_web_page_preview: true,
+      });
       setShippingMessage(orderId, sent.message_id);
     } catch (err) {
       console.error("[oko-order] сообщение об отправке клиенту не ушло:", err.message);
     }
   }
-  if (order.kitchenChatId) {
-    const how = via === "qr" ? "по QR с чека" : by ? escapeHtml(by) : "кнопкой";
-    const text = `🚚 <b>Отправляется</b> — ${how}, ${formatTime(at)}${trackUrl ? `\nОтслеживание: <a href="${escapeAttr(trackUrl)}">${escapeHtml(trackUrl)}</a>` : ""}`;
-    try {
-      const sentKitchen = await bot.sendMessage(order.kitchenChatId, text, orderThreadOptions(orderKitchenThread(order), order.kitchenMessageId));
-      setShippingKitchenMessage(orderId, sentKitchen.message_id);
-    } catch {
-      // best effort — статус всё равно сохранён, только копия в кухне не придёт
-    }
-  }
   return { order: getOrder(orderId), created: true };
 }
 
-// Ссылка отслеживания после отправки (заказ уже отмечен без неё).
+// Ссылка отслеживания после отправки (заказ уже отмечен без неё) — правит
+// то же короткое сообщение-ссылку, новое сообщение не шлём.
 async function addTrackUrl(bot, orderId, trackUrl) {
   const order = setTrackUrl(orderId, trackUrl);
-  if (!order || !order.sourceChatId) return;
-  const text = `🔗 Ссылка отслеживания заказа ${orderTitle(order)}: <a href="${escapeAttr(trackUrl)}">${escapeHtml(trackUrl)}</a>\n\n📸 Фото чека при получении — ответом на сообщение «Заказ отправлен» выше.`;
-  await bot.sendMessage(order.sourceChatId, text, orderThreadOptions(orderSourceThread(order), order.shipping.messageId || order.sourceMessageId)).catch(() => {});
+  if (!order || !order.sourceChatId || !order.shipping || !order.shipping.messageId) return;
+  const text = `Отслеживание: <a href="${escapeAttr(trackUrl)}">${escapeHtml(trackUrl)}</a>\n📸 Когда получите заказ, <b>ответьте на это сообщение</b> фото чека — так заказ отметится как доставленный.`;
+  await bot.editMessageText(text, {
+    chat_id: order.sourceChatId,
+    message_id: order.shipping.messageId,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+  }).catch(() => {});
 }
 
 /**
@@ -1405,40 +1437,16 @@ function registerReceiptHandler(bot) {
       const { order, created } = markReceived(found.orderId, { at, by, userId: msg.from ? msg.from.id : null, fileId, kind: photo ? "photo" : "document", messageId: msg.message_id });
       if (!created) return;
 
-      // Статус-строка в начале ОБОИХ отправленных ранее сообщений ("Заказ
-      // отправлен" в теме клиента, "Отправляется" в поварской группе)
-      // меняется на «Доставлено» — не новое сообщение, а правка того же.
-      const trackLine = order.shipping && order.shipping.trackUrl
-        ? `\nОтслеживание: <a href="${escapeAttr(order.shipping.trackUrl)}">${escapeHtml(order.shipping.trackUrl)}</a>`
-        : "";
-      if (order.shipping && order.shipping.messageId) {
-        const sourceText = `✅ <b>Доставлено</b> — ${orderTitle(order)}${trackLine}\nФото чека получено, ${formatTime(at)}`;
-        await bot.editMessageText(sourceText, {
-          chat_id: msg.chat.id,
-          message_id: order.shipping.messageId,
-          parse_mode: "HTML",
-          disable_web_page_preview: true,
-        }).catch(() => {});
-      }
-      if (order.kitchenChatId && order.shipping && order.shipping.kitchenMessageId) {
-        const kitchenText = `✅ <b>Доставлено</b>${trackLine}\nФото чека от ${escapeHtml(by)}, ${formatTime(at)}`;
-        await bot.editMessageText(kitchenText, {
-          chat_id: order.kitchenChatId,
-          message_id: order.shipping.kitchenMessageId,
-          parse_mode: "HTML",
-          disable_web_page_preview: true,
-        }).catch(() => {});
-      }
+      // Статус в обоих исходных сообщениях (тема клиента + поварская
+      // группа) меняется на «Доставлено» на месте — никаких новых
+      // сообщений и никакого фото в кухню (явно попросил пользователь).
+      await editOrderStatus(bot, order);
 
-      const threadOpts = (replyTo) => {
-        const o = { reply_to_message_id: replyTo, allow_sending_without_reply: true };
-        if (msg.message_thread_id && msg.is_topic_message) o.message_thread_id = msg.message_thread_id;
-        return o;
-      };
-      // Фото-чек остаётся только в теме клиента, где его прислали — в
-      // поварскую группу уходит только смена статуса (правка выше), само
-      // фото туда НЕ дублируется (явно попросил пользователь).
-      await bot.sendMessage(msg.chat.id, `✅ Получение подтверждено (${formatTime(at)}), спасибо! Заказ отмечен как доставленный.`, threadOpts(msg.message_id)).catch(() => {});
+      // Короткое сообщение-ссылка своё дело сделало — удаляем его, чтобы
+      // в чате не копились отдельные сообщения на каждый шаг заказа.
+      if (order.shipping && order.shipping.messageId) {
+        await bot.deleteMessage(msg.chat.id, order.shipping.messageId).catch(() => {});
+      }
     } catch (err) {
       console.error("[oko-order] обработка фото-чека:", err.message);
     }
