@@ -104,19 +104,6 @@ function markCategoryDelivered(orderId, catIndex, delivered) {
 }
 
 /**
- * Отдельный от finalNotified флаг — "все категории доставлены" сообщение в
- * исходную группу шлём один раз, тем же принципом защиты от гонки.
- */
-function markDeliveryFinalNotified(orderId) {
-  const orders = readOrders();
-  const order = orders[orderId];
-  if (!order) return null;
-  order.deliveryFinalNotified = true;
-  writeOrders(orders);
-  return order;
-}
-
-/**
  * Защита от двойной отправки формы: ищет уже сохранённый заказ этой формы с
  * тем же clientOrderId (его генерирует страница формы), созданный не раньше
  * sinceMs. Старые заказы (до Этапа 1) clientOrderId не имеют — не мешают.
@@ -269,6 +256,5 @@ module.exports = {
   markFinalNotified,
   markDelivery,
   markCategoryDelivered,
-  markDeliveryFinalNotified,
   ORDERS_PATH,
 };

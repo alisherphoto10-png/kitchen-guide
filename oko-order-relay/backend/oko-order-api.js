@@ -14,7 +14,6 @@ const {
   markFinalNotified,
   markDelivery,
   markCategoryDelivered,
-  markDeliveryFinalNotified,
   findOrderByClientId,
   STATUS_LABELS,
   orderStatus,
@@ -1560,29 +1559,16 @@ async function handleGenericAccept(bot, orderId, order, query) {
     }
 
     const deliveredByName = [query.from.first_name, query.from.last_name].filter(Boolean).join(" ");
-    const deliveredAt = Date.now();
-    const updated = markDelivery(orderId, { name: deliveredByName, at: deliveredAt });
-    const noteTime = formatTime(deliveredAt);
+    markDelivery(orderId, { name: deliveredByName, at: Date.now() });
 
-    try {
-      await bot.editMessageText(
-        `${order.coreMessage}\n\n✅ <b>Принято:</b> ${escapeHtml(order.accepted.name)}, ${formatTime(order.accepted.at)}\n🚚 <b>В доставке:</b> ${escapeHtml(updated.delivered.name)}, ${noteTime}`,
-        { chat_id: order.kitchenChatId, message_id: order.kitchenMessageId, parse_mode: "HTML", reply_markup: { inline_keyboard: [] } },
-      );
-    } catch {
-      // best effort — the delivered state is already persisted either way
-    }
-
-    if (order.sourceChatId && order.sourceMessageId) {
-      try {
-        await bot.editMessageText(
-          `✅ Заказ принят кухней (${formatTime(order.accepted.at)})\n🚚 В процессе доставки (${noteTime})\n\n<blockquote>${order.coreMessage}</blockquote>`,
-          { chat_id: order.sourceChatId, message_id: order.sourceMessageId, parse_mode: "HTML" },
-        );
-      } catch {
-        // best effort
-      }
-    }
+    // Текст обоих сообщений (кухня + тема клиента) выставит shipOrder()
+    // ниже, той же статус-строкой, что и у отправки по QR — отдельно
+    // руками его здесь не трогаем, чтобы не редактировать одно и то же
+    // сообщение дважды разным текстом подряд. Кнопку убираем сразу.
+    await bot.editMessageReplyMarkup(
+      { inline_keyboard: [] },
+      { chat_id: order.kitchenChatId, message_id: order.kitchenMessageId },
+    ).catch(() => {});
 
     await bot.answerCallbackQuery(query.id, { text: "Отправлено в доставку!" }).catch(() => {});
     await shipOrder(bot, orderId, { by: deliveredByName, via: "button" }).catch((err) => console.error("[oko-order] shipOrder:", err.message));
@@ -1673,24 +1659,11 @@ async function handleCategoryAccept(bot, orderId, order, catIndex, query) {
       // best effort — delivered state is already persisted either way
     }
 
+    // Текст темы клиента (и повторная правка кухни) выставит shipOrder()
+    // ниже той же статус-строкой, что и у отправки по QR — руками здесь
+    // не редактируем, чтобы не менять одно и то же сообщение дважды
+    // разным текстом подряд.
     const allDeliveredNow = updated.categories.every((cat) => cat.delivered);
-    if (allDeliveredNow && !updated.deliveryFinalNotified && order.sourceChatId && order.sourceMessageId) {
-      const breakdown = updated.categories
-        .map((cat) =>
-          `${escapeHtml(cat.name)} — принял ${escapeHtml(cat.accepted.name)} (${formatTime(cat.accepted.at)}), ` +
-          `доставка: ${escapeHtml(cat.delivered.name)} (${formatTime(cat.delivered.at)})`)
-        .join("\n");
-      try {
-        await bot.editMessageText(
-          `🚚 Заказ в процессе доставки:\n${breakdown}\n\n<blockquote>${order.coreMessage}</blockquote>`,
-          { chat_id: order.sourceChatId, message_id: order.sourceMessageId, parse_mode: "HTML" },
-        );
-        markDeliveryFinalNotified(orderId);
-      } catch {
-        // best effort
-      }
-    }
-
     await bot.answerCallbackQuery(query.id, { text: "Отправлено в доставку!" }).catch(() => {});
     if (allDeliveredNow) {
       await shipOrder(bot, orderId, { by: deliveredByName, via: "button" }).catch((err) => console.error("[oko-order] shipOrder:", err.message));

@@ -16,7 +16,7 @@ function makeStubBot() {
     calls, handlers, failures,
     on(ev, fn) { (handlers[ev] = handlers[ev] || []).push(fn); },
   };
-  for (const m of ["sendMessage", "sendPhoto", "sendDocument", "pinChatMessage", "editMessageReplyMarkup", "editMessageText", "answerCallbackQuery"]) {
+  for (const m of ["sendMessage", "sendPhoto", "sendDocument", "pinChatMessage", "editMessageReplyMarkup", "editMessageText", "deleteMessage", "answerCallbackQuery"]) {
     bot[m] = async (...args) => {
       calls.push({ m, args });
       if (failures[m] > 0) { failures[m] -= 1; throw new Error(`stub ${m} failure`); }
