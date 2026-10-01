@@ -25,6 +25,7 @@ const {
   markReceived,
   findOrderByShipToken,
   findOrderByShippingMessage,
+  ensureShipToken,
   listOrders,
 } = require("./oko-order-store");
 
@@ -802,8 +803,40 @@ function createOkoOrderRouter(bot) {
       comment: order.comment || null,
       name: order.name || null,
       receiptPhoto: !!(order.received && order.received.fileId),
+      // Этап 5: можно напечатать чек с QR (ещё не отправлен) и печатался ли он уже.
+      canPrintQr: !order.shipping && !order.received,
+      hasQr: !!order.shipToken,
     }));
     res.json({ orders, statusLabels: STATUS_LABELS });
+  });
+
+  // Этап 5: «Распечатать чек с QR» для уже существующего заказа — старые
+  // заказы (до Этапа 4) печатались без QR, и без него их нельзя провести
+  // через «Отправляется → Доставлено». Токен QR выдаётся заказу один раз,
+  // повторная печать даёт тот же QR. Уже отправленным/доставленным — не нужно.
+  router.post("/admin/orders/print-qr", adminLoginLimiter, requireAdmin, (req, res) => {
+    const orderId = typeof (req.body && req.body.id) === "string" ? req.body.id : "";
+    const existing = orderId ? getOrder(orderId) : null;
+    if (!existing) return res.status(404).json({ error: "Заказ не найден" });
+    if (existing.shipping || existing.received) {
+      return res.status(409).json({ error: "Заказ уже отмечен как отправленный — QR больше не нужен" });
+    }
+    const order = ensureShipToken(orderId, generateShipToken);
+    try {
+      const { createRawPrintJob } = require("./oko-shelf-life-store");
+      const label = order.venueLabel || order.venue;
+      createRawPrintJob({
+        printLines: buildReprintLines(order),
+        qrData: shipUrl(order.shipToken),
+        itemName: `Заказ — ${label} (чек с QR)`,
+        by: "Мастер заказов",
+        restaurantId: String(order.restaurantId || DEFAULT_RESTAURANT_ID),
+      });
+    } catch (err) {
+      console.error("[oko-order] чек с QR для заказа", orderId, err.message);
+      return res.status(500).json({ error: "Не удалось поставить чек в очередь печати" });
+    }
+    res.json({ ok: true });
   });
 
   // QR с чека → страница заказа с кнопкой «Отправляется» (как QR
@@ -1222,6 +1255,36 @@ function parseLegacyMessage(coreMessage) {
     if (m) items.push({ name: m[1], qty: Number(m[2].replace(",", ".")), unit: m[3].trim() || DEFAULT_UNIT });
   });
   return { date: dateMatch ? dateMatch[1] : null, items: items.length ? items : null, text };
+}
+
+// Этап 5: строки чека для уже существующего заказа. Новые заказы хранят
+// состав; у старых он разбирается из текста сообщения (как в истории), а
+// комментарий и отправитель — оттуда же. Не разобралось — печатаем текст.
+function buildReprintLines(order) {
+  const legacy = Array.isArray(order.items) ? null : parseLegacyMessage(order.coreMessage);
+  let comment = order.comment || null;
+  let name = order.name || null;
+  if (legacy && !legacy.items) {
+    comment = null; // весь текст сообщения печатается ниже как есть
+  } else if (legacy) {
+    const c = /Комментарий:\s*\n([\s\S]*?)(?:\n\s*\nОтправил:|$)/.exec(legacy.text);
+    const n = /^Отправил:\s*(.+)$/m.exec(legacy.text);
+    comment = c ? c[1].trim() || null : null;
+    name = n ? n[1].trim() : null;
+  }
+  const src = {
+    date: order.date || (legacy && legacy.date) || "",
+    items: Array.isArray(order.items) ? order.items : (legacy.items || []),
+    comment,
+    name,
+  };
+  const lines = buildOrderPrintLines(src, { label: order.venueLabel || order.venue }, true);
+  if (order.createdAt) lines.splice(4, 0, `Оформлен: ${formatDateTime(order.createdAt)}`);
+  if (legacy && !legacy.items) {
+    const body = legacy.text.split("\n").map((l) => l.trim()).filter(Boolean).slice(1);
+    lines.splice(lines.indexOf("------------------------------", 5) + 1, 0, ...body);
+  }
+  return lines;
 }
 
 // Заказ для истории (клиент и раздел «Заказы»).

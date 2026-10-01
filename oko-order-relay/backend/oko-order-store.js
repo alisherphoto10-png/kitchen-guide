@@ -206,6 +206,20 @@ function markReceived(orderId, received) {
   return { order, created: true };
 }
 
+// Этап 5: чек с QR для уже существующего заказа (старые заказы токена не
+// имеют). Токен выдаётся один раз — повторная печать даёт тот же QR, так что
+// ранее напечатанный чек остаётся рабочим.
+function ensureShipToken(orderId, generate) {
+  const orders = readOrders();
+  const order = orders[orderId];
+  if (!order) return null;
+  if (!order.shipToken) {
+    order.shipToken = generate();
+    writeOrders(orders);
+  }
+  return order;
+}
+
 function findOrderByShipToken(token) {
   if (!token) return null;
   const orders = readOrders();
@@ -244,6 +258,7 @@ module.exports = {
   markReceived,
   findOrderByShipToken,
   findOrderByShippingMessage,
+  ensureShipToken,
   listOrders,
   findOrderByClientId,
   createOrderId,

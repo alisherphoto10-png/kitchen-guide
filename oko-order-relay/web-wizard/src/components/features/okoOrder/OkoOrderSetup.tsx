@@ -48,6 +48,7 @@ type OrderView = {
   id: string; createdAt: number | null; date: string | null; venue: string; venueLabel: string
   items: { name: string; qty: number; unit: string }[] | null; summary: string | null
   status: OrderStatus; comment: string | null; name: string | null; receiptPhoto: boolean
+  canPrintQr?: boolean; hasQr?: boolean
   timeline: { status: OrderStatus; at: number; via: string | null; trackUrl: string | null }[]
 }
 
@@ -86,6 +87,7 @@ const okoApi = {
   setActive: (venue: string, active: boolean) => request<{ ok: boolean }>(`${API}/set-active`, { method: 'POST', body: JSON.stringify({ venue, active }) }),
   pin: (venue: string) => request<{ ok: boolean; formUrl: string }>(`${API}/pin-button`, { method: 'POST', body: JSON.stringify({ venue }) }),
   orders: (venue?: string) => request<{ orders: OrderView[] }>(`${API}/orders?limit=200${venue ? `&venue=${encodeURIComponent(venue)}` : ''}`),
+  printQr: (id: string) => request<{ ok: boolean }>(`${API}/orders/print-qr`, { method: 'POST', body: JSON.stringify({ id }) }),
   media: (data: string, kind: string) => request<{ ok: boolean; url: string }>(`${API}/media`, { method: 'POST', body: JSON.stringify({ data, kind }) }),
 }
 
@@ -283,7 +285,9 @@ type View =
   | { name: 'groups' }
   | { name: 'connect'; replace?: string }
   | { name: 'group'; chatId: string }
-  | { name: 'topic'; chatId: string; key: string | null }
+  // from: 'groups' — тему открыли из быстрого доступа на главном экране,
+  // «Назад» и «Сохранить» возвращают туда же, минуя экран группы.
+  | { name: 'topic'; chatId: string; key: string | null; from?: 'groups' }
   | { name: 'done'; chatId: string; key: string }
 
 type Data = { config: Config; groups: Record<string, Group>; known: Known }
@@ -360,6 +364,22 @@ function OkoOrderWizard() {
     return () => clearTimeout(t)
   }, [toast])
   useEffect(() => { document.getElementById('oko-order-scroll')?.scrollTo({ top: 0 }) }, [view])
+  // Прямая ссылка на тему (#topic=oblako) — можно сохранить в закладки и
+  // открывать нужную тему сразу. Хэш ставится при открытии темы и
+  // убирается на остальных экранах.
+  const [hashChecked, setHashChecked] = useState(false)
+  useEffect(() => {
+    if (!data || hashChecked) return
+    setHashChecked(true)
+    const key = decodeURIComponent((/^#topic=(.+)$/.exec(window.location.hash) || [])[1] || '')
+    const form = key ? data.config[key] : null
+    if (form?.sourceGroupChatId) setView({ name: 'topic', chatId: String(form.sourceGroupChatId), key, from: 'groups' })
+  }, [data, hashChecked])
+  useEffect(() => {
+    if (!hashChecked) return
+    const hash = view.name === 'topic' && view.key ? `#topic=${encodeURIComponent(view.key)}` : ''
+    if (window.location.hash !== hash) window.history.replaceState(null, '', window.location.pathname + window.location.search + hash)
+  }, [view, hashChecked])
 
   const notify = (kind: 'ok' | 'error', text: string) => setToast({ kind, text })
 
@@ -413,7 +433,7 @@ function OkoOrderWizard() {
           {view.name === 'groups' && <GroupsScreen {...props} />}
           {view.name === 'connect' && <ConnectScreen {...props} replace={view.replace} />}
           {view.name === 'group' && <GroupScreen {...props} chatId={view.chatId} />}
-          {view.name === 'topic' && <TopicScreen {...props} chatId={view.chatId} formKey={view.key} />}
+          {view.name === 'topic' && <TopicScreen key={view.key || 'new'} {...props} chatId={view.chatId} formKey={view.key} from={view.from} />}
           {view.name === 'done' && <DoneScreen {...props} chatId={view.chatId} formKey={view.key} />}
         </div>
       </main>
@@ -446,6 +466,51 @@ function groupForms(data: Data, chatId: string) {
   return Object.entries(data.config).filter(([, f]) => String(f.sourceGroupChatId || '') === chatId)
 }
 
+// Быстрый доступ (2026-10-01, по просьбе пользователя — осознанный отход от
+// макета 01): все темы всех групп одним списком с поиском, прямо в тему без
+// экрана группы. Цепочка Группа → Темы → Тема для первичной настройки новых
+// групп/тем остаётся как была.
+function QuickTopics({ data, setView }: { data: Data; setView: (v: View) => void }) {
+  const [query, setQuery] = useState('')
+  const all = Object.entries(data.config)
+    .filter(([, f]) => f.sourceGroupChatId)
+    .sort(([, a], [, b]) => a.label.localeCompare(b.label, 'ru'))
+  if (!all.length) return null
+  const q = query.trim().toLowerCase()
+  const visible = all.filter(([, f]) => !q || f.label.toLowerCase().includes(q) || groupTitle(data, String(f.sourceGroupChatId)).toLowerCase().includes(q))
+  return (
+    <Section title="Темы" subtitle="Быстрый переход к нужной теме — без захода в группу">
+      {all.length > 4 && (
+        <div className="relative mb-3">
+          <Search className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input className={`${inputCls} pl-9`} value={query} onChange={e => setQuery(e.target.value)} placeholder="Найти тему" aria-label="Найти тему" />
+        </div>
+      )}
+      {visible.length === 0 ? <div className="text-sm text-gray-500">Ничего не найдено</div> : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {visible.map(([key, f]) => {
+            const chatId = String(f.sourceGroupChatId)
+            const on = f.active !== false && f.groupActive !== false
+            return (
+              <button key={key} data-topic={key} onClick={() => setView({ name: 'topic', chatId, key, from: 'groups' })}
+                className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/8 text-left min-w-0">
+                <Thumb url={formPhoto(f)} alt={f.label} size="w-11 h-11" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-white text-sm font-medium truncate">{f.label}</div>
+                  <div className="text-[11px] text-gray-500 truncate">
+                    {groupTitle(data, chatId)} · {f.items.length} {plural(f.items.length, 'позиция', 'позиции', 'позиций')} · {on ? <span className="text-green-400">активна</span> : <span className="text-gray-400">выключена</span>}
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-gray-600 flex-shrink-0" />
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </Section>
+  )
+}
+
 // Шаг 1 — список групп / пустое состояние
 function GroupsScreen({ data, reload, setView, notify }: ScreenProps) {
   const ids = groupIds(data)
@@ -471,6 +536,8 @@ function GroupsScreen({ data, reload, setView, notify }: ScreenProps) {
         <button className={primaryBtn} onClick={() => setView({ name: 'connect' })}><Plus className="w-4 h-4" /> Подключить группу</button>
       </div>
 
+      <QuickTopics data={data} setView={setView} />
+
       {ids.length === 0 ? (
         <div className={`${cardCls} p-8 flex flex-col items-center text-center gap-3`}>
           <div className="w-16 h-16 rounded-full bg-sky-500/15 flex items-center justify-center"><Send className="w-7 h-7 text-sky-400" /></div>
@@ -480,6 +547,7 @@ function GroupsScreen({ data, reload, setView, notify }: ScreenProps) {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
+          {Object.keys(data.config).length > 0 && <h2 className="text-base font-semibold text-white -mb-1">Группы и их настройка</h2>}
           {ids.map(chatId => {
             const forms = groupForms(data, chatId)
             const g = data.groups[chatId]
@@ -715,7 +783,8 @@ function GroupScreen({ data, reload, setView, notify, chatId }: ScreenProps & { 
 }
 
 // Шаг 3 — тема (форма): название, тема Telegram, получатель, позиции, пользователи
-function TopicScreen({ data, reload, setView, notify, chatId, formKey }: ScreenProps & { chatId: string; formKey: string | null }) {
+function TopicScreen({ data, reload, setView, notify, chatId, formKey, from }: ScreenProps & { chatId: string; formKey: string | null; from?: 'groups' }) {
+  const back = () => setView(from === 'groups' ? { name: 'groups' } : { name: 'group', chatId })
   const original = formKey ? data.config[formKey] : null
   const siblings = groupForms(data, chatId).filter(([k]) => k !== formKey)
   const [draft, setDraft] = useState<Form>(() => original
@@ -789,15 +858,15 @@ function TopicScreen({ data, reload, setView, notify, chatId, formKey }: ScreenP
       const fromServer = await okoApi.config()
       if ((fromServer[key]?.active !== false) !== active) await okoApi.setActive(key, active)
       await reload()
-      if (formKey) { notify('ok', 'Тема сохранена'); setView({ name: 'group', chatId }) }
+      if (formKey) { notify('ok', 'Тема сохранена'); back() }
       else setView({ name: 'done', chatId, key })
     } catch (e) { notify('error', errText(e)) } finally { setSaving(false) }
   }
 
   return (
     <>
-      <button onClick={() => setView({ name: 'group', chatId })} className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-white w-fit">
-        <ArrowLeft className="w-4 h-4" /> Назад
+      <button onClick={back} className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-white w-fit">
+        <ArrowLeft className="w-4 h-4" /> {from === 'groups' ? 'Все темы' : 'Назад'}
       </button>
 
       <div className={`${cardCls} p-4 flex items-center gap-4`}>
@@ -1051,6 +1120,7 @@ function stamp(ms: number) {
 }
 
 function OrdersScreen({ data, notify }: ScreenProps) {
+  const [printing, setPrinting] = useState<string | null>(null)
   const [venue, setVenue] = useState('')
   const [status, setStatus] = useState<'' | OrderStatus>('')
   const [orders, setOrders] = useState<OrderView[] | null>(null)
@@ -1061,6 +1131,15 @@ function OrdersScreen({ data, notify }: ScreenProps) {
   }
   useEffect(() => { load() }, [venue])
   const visible = (orders || []).filter(o => !status || o.status === status)
+  // Этап 5: чек с QR для уже существующего заказа (старые печатались без QR).
+  const printQr = async (o: OrderView) => {
+    setPrinting(o.id)
+    try {
+      await okoApi.printQr(o.id)
+      setOrders(list => (list || []).map(x => x.id === o.id ? { ...x, hasQr: true } : x))
+      notify('ok', 'Чек с QR отправлен на принтер ОКО')
+    } catch (e) { notify('error', errText(e)) } finally { setPrinting(null) }
+  }
   const counts = (orders || []).reduce((acc, o) => { acc[o.status] = (acc[o.status] || 0) + 1; return acc }, {} as Record<string, number>)
 
   return (
@@ -1103,6 +1182,14 @@ function OrdersScreen({ data, notify }: ScreenProps) {
                   </ul>
                 ) : <div className="text-xs text-gray-500 whitespace-pre-line line-clamp-4">{o.summary}</div>}
                 {o.comment && <div className="text-xs text-gray-400">💬 {o.comment}</div>}
+                {o.canPrintQr && (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <button className={`${ghostBtn} py-2`} disabled={printing === o.id} onClick={() => printQr(o)} data-print-qr={o.id}>
+                      🖨 {printing === o.id ? 'Отправляю…' : o.hasQr ? 'Напечатать чек с QR ещё раз' : 'Распечатать чек с QR'}
+                    </button>
+                    <span className="text-[11px] text-gray-500">{o.hasQr ? 'QR тот же — подойдёт любой из напечатанных чеков' : 'При отправке отсканируйте QR — заказ станет «Отправляется»'}</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-4 gap-2">
                   {STEP_KEYS.map(([k, label]) => {
                     const e = byStatus[k]
