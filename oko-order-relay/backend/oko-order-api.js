@@ -36,7 +36,7 @@ const MEDIA_DIR = path.join(__dirname, "data", "oko-order-media");
 const MEDIA_MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 // Максимальная сторона после пережатия: фон — на всю ширину телефона с
 // запасом под retina, логотип и фото позиций — маленькие миниатюры.
-const MEDIA_KINDS = { cover: 1600, logo: 512, item: 640, category: 800 };
+const MEDIA_KINDS = { cover: 1600, logo: 512, item: 640, category: 800, group: 800 };
 const MEDIA_GC_AGE_MS = 24 * 60 * 60 * 1000;
 
 function cleanMediaUrl(value) {
@@ -79,6 +79,7 @@ function referencedMedia(config) {
     const clean = cleanMediaUrl(url);
     if (clean) names.add(clean.slice(MEDIA_URL_PREFIX.length));
   };
+  Object.values(readGroups()).forEach((group) => add(group && group.photoUrl));
   Object.values(config).forEach((form) => {
     add(form.coverUrl);
     add(form.logoUrl);
@@ -200,6 +201,43 @@ function isLegacySlugAllowed(form) {
 
 function isFormActive(form) {
   return form.active !== false;
+}
+
+// ── Этап 3 (2026-10-01): «Группы» мастера настройки (макет 01) ──────────
+// Группа = Telegram-группа клиента, где закреплены кнопки форм
+// (sourceGroupChatId); «Темы» группы = формы с этой группой-источником.
+// Сами формы по-прежнему живут в oko-order-config.json (ключи верхнего
+// уровня — только формы, туда ничего не добавляем). Здесь — только то, чего
+// у формы нет: название/описание/фото группы и выключатель «Активна» на всю
+// группу. Группы нет в файле → считается активной, поэтому Облако и Мясо
+// работают как раньше, пока группу не выключат явно.
+const GROUPS_PATH = path.join(__dirname, "data", "oko-order-groups.json");
+const GROUP_CHAT_ID_RE = /^-?\d{1,20}$/;
+const GROUP_TITLE_MAX_LEN = 60;
+const GROUP_DESCRIPTION_MAX_LEN = 300;
+
+function readGroups() {
+  try {
+    const groups = JSON.parse(fs.readFileSync(GROUPS_PATH, "utf8"));
+    return groups && typeof groups === "object" && !Array.isArray(groups) ? groups : {};
+  } catch (err) {
+    if (err.code !== "ENOENT") console.error("[oko-order] не удалось прочитать группы:", err.message);
+    return {};
+  }
+}
+
+function writeGroups(groups) {
+  fs.writeFileSync(GROUPS_PATH, JSON.stringify(groups, null, 2), "utf8");
+}
+
+function isGroupActive(form) {
+  const group = form && form.sourceGroupChatId ? readGroups()[String(form.sourceGroupChatId)] : null;
+  return !group || group.active !== false;
+}
+
+// Принимает ли форма заказы прямо сейчас: выключена сама форма или вся её группа.
+function isFormOpen(form) {
+  return isFormActive(form) && isGroupActive(form);
 }
 
 function formUrl(form) {
@@ -345,7 +383,28 @@ const adminLoginLimiter = rateLimit({
   message: { error: "Слишком много попыток входа, попробуйте позже" },
 });
 
+// Этап 3: в админку можно войти и логином KitchenDesk (мастер в /web/
+// шлёт свой обычный Authorization: Bearer … / tg …) — тогда пускаем только
+// администратора ОКО (заведение, на которое печатаются заказы форм) и
+// суперадмина. Без заголовка Authorization — прежний пароль, старая
+// /oko-order/admin/ работает как раньше. Require ленивый: middleware/auth
+// тянет Postgres, а публичная форма от него не зависит.
+const KD_ADMIN_ROLES = ["admin"];
+
 function requireAdmin(req, res, next) {
+  const authHeader = req.header("Authorization") || "";
+  if (authHeader.startsWith("Bearer ") || authHeader.startsWith("tg ")) {
+    const { authMiddleware } = require("./middleware/auth");
+    return authMiddleware(req, res, () => {
+      const user = req.user;
+      if (!user) return res.status(401).json({ error: "Не авторизован" });
+      const okoAdmin = KD_ADMIN_ROLES.includes(user.role) && String(user.restaurant_id) === DEFAULT_RESTAURANT_ID;
+      if (!user.is_superadmin && !okoAdmin) {
+        return res.status(403).json({ error: "Настройка форм заказов доступна только администратору ОКО" });
+      }
+      next();
+    });
+  }
   const password = req.header("X-Admin-Password") || "";
   const expected = process.env.OKO_ADMIN_PASSWORD || "";
   const passwordBuf = Buffer.from(password);
@@ -503,7 +562,7 @@ function createOkoOrderRouter(bot) {
     const config = readConfig();
     const found = resolveForm(config, { f: req.query.f, venue: req.query.venue });
     if (!found.form) return res.status(found.status).json(found.body);
-    if (!isFormActive(found.form)) {
+    if (!isFormOpen(found.form)) {
       return res.status(403).json({ error: "Приём заказов через эту форму сейчас закрыт", closed: true, label: found.form.label });
     }
     res.json({
@@ -541,7 +600,7 @@ function createOkoOrderRouter(bot) {
     const found = resolveForm(config, { f: body.f, venue: body.venue });
     if (!found.form) return res.status(found.status).json(found.body);
     const { key: venueKey, form: venueConfig } = found;
-    if (!isFormActive(venueConfig)) {
+    if (!isFormOpen(venueConfig)) {
       return res.status(403).json({ error: "Приём заказов через эту форму сейчас закрыт", closed: true });
     }
     const checked = validateOrder(body, venueConfig);
@@ -684,7 +743,7 @@ function createOkoOrderRouter(bot) {
     const config = readConfig();
     const view = {};
     for (const [key, form] of Object.entries(config)) {
-      view[key] = { ...form, formUrl: formUrl(form), legacySlugAllowed: isLegacySlugAllowed(form), active: isFormActive(form) };
+      view[key] = { ...form, formUrl: formUrl(form), legacySlugAllowed: isLegacySlugAllowed(form), active: isFormActive(form), groupActive: isGroupActive(form) };
     }
     res.json(view);
   });
@@ -775,6 +834,7 @@ function createOkoOrderRouter(bot) {
       else delete form.categoryPhotos;
       delete form.formUrl;
       delete form.legacySlugAllowed;
+      delete form.groupActive;
       SERVER_FORM_FIELDS.forEach((field) => delete form[field]);
       const existing = current[venueKey];
       if (existing) {
@@ -863,6 +923,57 @@ function createOkoOrderRouter(bot) {
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // Admin — группы мастера (Этап 3). GET — метаданные всех групп; формы
+  // группы фронт берёт из /admin/config по sourceGroupChatId.
+  router.get("/admin/groups", adminLoginLimiter, requireAdmin, (req, res) => {
+    const groups = readGroups();
+    const view = {};
+    for (const [chatId, group] of Object.entries(groups)) {
+      view[chatId] = { ...group, active: group.active !== false };
+    }
+    res.json(view);
+  });
+
+  // Создать/обновить группу. Присланные поля целиком заменяют старые
+  // (кроме createdAt). Фото — только наше /media/.
+  router.post("/admin/groups", adminLoginLimiter, requireAdmin, (req, res) => {
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const chatId = String(body.chatId || "").trim();
+    if (!GROUP_CHAT_ID_RE.test(chatId)) return res.status(400).json({ error: "Некорректный ID группы" });
+    const title = typeof body.title === "string" ? body.title.trim().slice(0, GROUP_TITLE_MAX_LEN) : "";
+    if (!title) return res.status(400).json({ error: "Укажите название группы" });
+    if (body.active !== undefined && typeof body.active !== "boolean") {
+      return res.status(400).json({ error: "Нужно active: true/false" });
+    }
+    const description = typeof body.description === "string" ? body.description.trim().slice(0, GROUP_DESCRIPTION_MAX_LEN) : "";
+    const groups = readGroups();
+    const existing = groups[chatId] || {};
+    const group = { title, active: body.active !== false, createdAt: existing.createdAt || Date.now() };
+    if (description) group.description = description;
+    const photoUrl = cleanMediaUrl(body.photoUrl);
+    if (photoUrl) group.photoUrl = photoUrl;
+    groups[chatId] = group;
+    writeGroups(groups);
+    collectUnusedMedia(readConfig());
+    res.json({ ok: true, group: { ...group, chatId } });
+  });
+
+  // Убрать группу из списка — только если в ней не осталось форм (иначе
+  // формы потеряли бы выключатель группы молча).
+  router.post("/admin/groups/delete", adminLoginLimiter, requireAdmin, (req, res) => {
+    const chatId = String((req.body && req.body.chatId) || "").trim();
+    const groups = readGroups();
+    if (!Object.prototype.hasOwnProperty.call(groups, chatId)) return res.status(404).json({ error: "Неизвестная группа" });
+    const config = readConfig();
+    if (Object.values(config).some((form) => String(form.sourceGroupChatId || "") === chatId)) {
+      return res.status(409).json({ error: "В группе есть темы — сначала удалите или перенесите их" });
+    }
+    delete groups[chatId];
+    writeGroups(groups);
+    collectUnusedMedia(config);
+    res.json({ ok: true });
   });
 
   // Admin — включить/выключить приём заказов через форму (вариант «Г»).
