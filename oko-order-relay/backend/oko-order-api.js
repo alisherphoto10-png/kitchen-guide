@@ -1348,9 +1348,35 @@ function buildSourceMessageText(order) {
   return `${statusLine(order) || "📥 <b>Заказ отправлен</b>"}\n\n<blockquote>${order.coreMessage}</blockquote>`;
 }
 
+// Клавиатура кухонного сообщения для текущего состояния заказа. ВАЖНО:
+// editMessageText без явного reply_markup СНИМАЕТ существующую клавиатуру
+// (так ведёт себя Telegram) — значит, каждая правка текста кухонного
+// сообщения обязана заново передать актуальные кнопки, иначе повара теряют
+// кнопку «Принято» (категория — свою, общий случай — общую), даже если
+// категория/заказ ещё не приняты.
+function buildKitchenKeyboard(orderId, order) {
+  if (order.categories && order.categories.length) {
+    return order.categories.map((cat, i) => [{
+      text: cat.delivered ? `🚚 ${cat.name} · ${cat.delivered.name}`
+        : cat.accepted ? `✅ ${cat.name} · ${cat.accepted.name}` : `✅ ${cat.name}`,
+      callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}:${i}`,
+    }]);
+  }
+  if (!order.accepted) {
+    return [[{ text: "✅ Принято", callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}` }]];
+  }
+  // Принято — кнопка остаётся только если назначен доставщик (вторым
+  // нажатием той же кнопки он переводит заказ в доставку) и доставка ещё
+  // не отмечена; иначе кнопка больше не нужна.
+  if (order.deliveryPerson && !order.delivered) {
+    return [[{ text: "✅ Принято", callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}` }]];
+  }
+  return [];
+}
+
 // Правит статус в месте, без новых сообщений: исходное сообщение заказа
 // (и в теме клиента, и в поварской группе) живёт всю жизнь заказа.
-async function editOrderStatus(bot, order) {
+async function editOrderStatus(bot, orderId, order) {
   if (order.sourceChatId && order.sourceMessageId) {
     await bot.editMessageText(buildSourceMessageText(order), {
       chat_id: order.sourceChatId,
@@ -1365,6 +1391,7 @@ async function editOrderStatus(bot, order) {
       message_id: order.kitchenMessageId,
       parse_mode: "HTML",
       disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: buildKitchenKeyboard(orderId, order) },
     }).catch(() => {});
   }
 }
@@ -1382,7 +1409,7 @@ async function shipOrder(bot, orderId, { by, via, trackUrl }) {
   const { order, created } = markShipping(orderId, { at, by: by || null, via, trackUrl: trackUrl || null, messageId: null });
   if (!order || !created) return { order, created: false };
 
-  await editOrderStatus(bot, order);
+  await editOrderStatus(bot, orderId, order);
 
   if (order.sourceChatId) {
     const lines = [];
@@ -1439,7 +1466,7 @@ function registerReceiptHandler(bot) {
       // Статус в обоих исходных сообщениях (тема клиента + поварская
       // группа) меняется на «Доставлено» на месте — никаких новых
       // сообщений и никакого фото в кухню (явно попросил пользователь).
-      await editOrderStatus(bot, order);
+      await editOrderStatus(bot, found.orderId, order);
 
       // Короткое сообщение-ссылка своё дело сделало — удаляем его, чтобы
       // в чате не копились отдельные сообщения на каждый шаг заказа.
@@ -1561,15 +1588,11 @@ async function handleGenericAccept(bot, orderId, order, query) {
     const deliveredByName = [query.from.first_name, query.from.last_name].filter(Boolean).join(" ");
     markDelivery(orderId, { name: deliveredByName, at: Date.now() });
 
-    // Текст обоих сообщений (кухня + тема клиента) выставит shipOrder()
-    // ниже, той же статус-строкой, что и у отправки по QR — отдельно
-    // руками его здесь не трогаем, чтобы не редактировать одно и то же
-    // сообщение дважды разным текстом подряд. Кнопку убираем сразу.
-    await bot.editMessageReplyMarkup(
-      { inline_keyboard: [] },
-      { chat_id: order.kitchenChatId, message_id: order.kitchenMessageId },
-    ).catch(() => {});
-
+    // Текст и клавиатуру обоих сообщений (кухня + тема клиента) выставит
+    // shipOrder() ниже (editOrderStatus сама уберёт кнопку — see
+    // buildKitchenKeyboard: order.delivered уже установлен выше) — отдельно
+    // руками здесь не трогаем, чтобы не редактировать одно и то же
+    // сообщение дважды подряд.
     await bot.answerCallbackQuery(query.id, { text: "Отправлено в доставку!" }).catch(() => {});
     await shipOrder(bot, orderId, { by: deliveredByName, via: "button" }).catch((err) => console.error("[oko-order] shipOrder:", err.message));
     return;
@@ -1596,7 +1619,7 @@ async function handleGenericAccept(bot, orderId, order, query) {
         // Кнопка не убирается, если для заведения назначен отправитель
         // доставки — та же кнопка, второе нажатие (от него) переводит заказ
         // в доставку, см. ветку выше. Без deliveryPerson — как раньше.
-        reply_markup: { inline_keyboard: updated.deliveryPerson ? [[{ text: "✅ Принято", callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}` }]] : [] },
+        reply_markup: { inline_keyboard: buildKitchenKeyboard(orderId, updated) },
       },
     );
   } catch {
@@ -1639,20 +1662,12 @@ async function handleCategoryAccept(bot, orderId, order, catIndex, query) {
       return bot.answerCallbackQuery(query.id, { text: "Не удалось сохранить, попробуйте ещё раз", show_alert: true }).catch(() => {});
     }
 
-    const inlineKeyboard = updated.categories.map((cat, i) => [
-      {
-        // Текст меняется, а не копится — доставка заменяет имя повара своим,
-        // а не дописывается рядом (было "✅ Категория · Повар", стало
-        // "🚚 Категория · Су-шеф", а не "✅ Категория · Повар → Су-шеф").
-        text: cat.delivered
-          ? `🚚 ${cat.name} · ${cat.delivered.name}`
-          : cat.accepted ? `✅ ${cat.name} · ${cat.accepted.name}` : `✅ ${cat.name}`,
-        callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}:${i}`,
-      },
-    ]);
+    // Текст меняется, а не копится — доставка заменяет имя повара своим, а
+    // не дописывается рядом (было "✅ Категория · Повар", стало
+    // "🚚 Категория · Су-шеф", а не "✅ Категория · Повар → Су-шеф").
     try {
       await bot.editMessageReplyMarkup(
-        { inline_keyboard: inlineKeyboard },
+        { inline_keyboard: buildKitchenKeyboard(orderId, updated) },
         { chat_id: order.kitchenChatId, message_id: order.kitchenMessageId },
       );
     } catch {
@@ -1692,15 +1707,9 @@ async function handleCategoryAccept(bot, orderId, order, catIndex, query) {
   // Rebuild the whole keyboard: accepted categories show who/when in the
   // button label, pending ones are untouched — so progress is visible
   // directly on the message without needing to open it.
-  const inlineKeyboard = updated.categories.map((cat, i) => [
-    {
-      text: cat.accepted ? `✅ ${cat.name} · ${cat.accepted.name}` : `✅ ${cat.name}`,
-      callback_data: `${ACCEPT_CALLBACK_PREFIX}${orderId}:${i}`,
-    },
-  ]);
   try {
     await bot.editMessageReplyMarkup(
-      { inline_keyboard: inlineKeyboard },
+      { inline_keyboard: buildKitchenKeyboard(orderId, updated) },
       { chat_id: order.kitchenChatId, message_id: order.kitchenMessageId },
     );
   } catch {
