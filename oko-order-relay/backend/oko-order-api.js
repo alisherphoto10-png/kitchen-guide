@@ -1435,13 +1435,10 @@ function registerReceiptHandler(bot) {
         if (msg.message_thread_id && msg.is_topic_message) o.message_thread_id = msg.message_thread_id;
         return o;
       };
+      // Фото-чек остаётся только в теме клиента, где его прислали — в
+      // поварскую группу уходит только смена статуса (правка выше), само
+      // фото туда НЕ дублируется (явно попросил пользователь).
       await bot.sendMessage(msg.chat.id, `✅ Получение подтверждено (${formatTime(at)}), спасибо! Заказ отмечен как доставленный.`, threadOpts(msg.message_id)).catch(() => {});
-      if (order.kitchenChatId) {
-        const caption = `✅ <b>Доставлено</b> — ${orderTitle(order)}\nФото чека прислал(а) ${escapeHtml(by)}, ${formatTime(at)}`;
-        const opts = { ...orderThreadOptions(orderKitchenThread(order), order.kitchenMessageId), caption };
-        const send = photo ? bot.sendPhoto(order.kitchenChatId, fileId, opts) : bot.sendDocument(order.kitchenChatId, fileId, opts);
-        await send.catch((err) => console.error("[oko-order] фото-чек в кухню не ушло:", err.message));
-      }
     } catch (err) {
       console.error("[oko-order] обработка фото-чека:", err.message);
     }
