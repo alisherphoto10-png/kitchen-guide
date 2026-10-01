@@ -1605,11 +1605,16 @@ async function handleGenericAccept(bot, orderId, order, query) {
 
   // Первое нажатие — обычная приёмка (как раньше).
   const acceptedByName = [query.from.first_name, query.from.last_name].filter(Boolean).join(" ");
-  const acceptedAt = Date.now();
-  const updated = markAccepted(orderId, { name: acceptedByName, at: acceptedAt });
-  const noteTime = formatTime(acceptedAt);
+  const updated = markAccepted(orderId, { name: acceptedByName, at: Date.now() });
 
-  try {
+  // Кнопка больше не исчезает после отправки (см. buildKitchenKeyboard) —
+  // значит, повар может нажать «Принято» уже ПОСЛЕ того, как заказ ушёл в
+  // доставку по QR. В этом случае статус в сообщениях откатывать назад на
+  // «Принято» нельзя — пересобираем его той же функцией, что и QR/фото.
+  if (order.shipping || order.received) {
+    await editOrderStatus(bot, orderId, updated);
+  } else {
+    const noteTime = formatTime(updated.accepted.at);
     await bot.editMessageText(
       `${order.coreMessage}\n\n✅ <b>Принято:</b> ${escapeHtml(updated.accepted.name)}, ${noteTime}`,
       {
@@ -1621,19 +1626,13 @@ async function handleGenericAccept(bot, orderId, order, query) {
         // в доставку, см. ветку выше. Без deliveryPerson — как раньше.
         reply_markup: { inline_keyboard: buildKitchenKeyboard(orderId, updated) },
       },
-    );
-  } catch {
-    // best effort — the accepted state is already persisted either way
-  }
+    ).catch(() => {});
 
-  if (order.sourceChatId && order.sourceMessageId) {
-    try {
+    if (order.sourceChatId && order.sourceMessageId) {
       await bot.editMessageText(
         `✅ Заказ принят кухней (${noteTime})\n\n<blockquote>${order.coreMessage}</blockquote>`,
         { chat_id: order.sourceChatId, message_id: order.sourceMessageId, parse_mode: "HTML" },
-      );
-    } catch {
-      // best effort
+      ).catch(() => {});
     }
   }
 
@@ -1717,18 +1716,27 @@ async function handleCategoryAccept(bot, orderId, order, catIndex, query) {
   }
 
   const allAcceptedNow = updated.categories.every((cat) => cat.accepted);
-  if (allAcceptedNow && !updated.finalNotified && order.sourceChatId && order.sourceMessageId) {
-    const breakdown = updated.categories
-      .map((cat) => `${escapeHtml(cat.name)} — ${escapeHtml(cat.accepted.name)} (${formatTime(cat.accepted.at)})`)
-      .join("\n");
-    try {
-      await bot.editMessageText(
-        `✅ Заказ принят кухней:\n${breakdown}\n\n<blockquote>${order.coreMessage}</blockquote>`,
-        { chat_id: order.sourceChatId, message_id: order.sourceMessageId, parse_mode: "HTML" },
-      );
+  if (allAcceptedNow && !updated.finalNotified) {
+    // Заказ уже мог уйти в доставку/быть доставленным, пока принимались
+    // остальные категории (кнопки теперь не исчезают после отправки) — в
+    // этом случае не откатываем тему клиента назад на «Принято кухней»,
+    // пересобираем статус как он есть на самом деле.
+    if (order.shipping || order.received) {
+      await editOrderStatus(bot, orderId, updated);
       markFinalNotified(orderId);
-    } catch {
-      // best effort
+    } else if (order.sourceChatId && order.sourceMessageId) {
+      const breakdown = updated.categories
+        .map((cat) => `${escapeHtml(cat.name)} — ${escapeHtml(cat.accepted.name)} (${formatTime(cat.accepted.at)})`)
+        .join("\n");
+      try {
+        await bot.editMessageText(
+          `✅ Заказ принят кухней:\n${breakdown}\n\n<blockquote>${order.coreMessage}</blockquote>`,
+          { chat_id: order.sourceChatId, message_id: order.sourceMessageId, parse_mode: "HTML" },
+        );
+        markFinalNotified(orderId);
+      } catch {
+        // best effort
+      }
     }
   }
 
