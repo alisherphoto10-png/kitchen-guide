@@ -21,6 +21,7 @@ const {
   orderTimeline,
   markShipping,
   setShippingMessage,
+  setShippingKitchenMessage,
   setTrackUrl,
   markReceived,
   findOrderByShipToken,
@@ -1365,7 +1366,12 @@ async function shipOrder(bot, orderId, { by, via, trackUrl }) {
   if (order.kitchenChatId) {
     const how = via === "qr" ? "по QR с чека" : by ? escapeHtml(by) : "кнопкой";
     const text = `🚚 <b>Отправляется</b> — ${how}, ${formatTime(at)}${trackUrl ? `\nОтслеживание: <a href="${escapeAttr(trackUrl)}">${escapeHtml(trackUrl)}</a>` : ""}`;
-    await bot.sendMessage(order.kitchenChatId, text, orderThreadOptions(orderKitchenThread(order), order.kitchenMessageId)).catch(() => {});
+    try {
+      const sentKitchen = await bot.sendMessage(order.kitchenChatId, text, orderThreadOptions(orderKitchenThread(order), order.kitchenMessageId));
+      setShippingKitchenMessage(orderId, sentKitchen.message_id);
+    } catch {
+      // best effort — статус всё равно сохранён, только копия в кухне не придёт
+    }
   }
   return { order: getOrder(orderId), created: true };
 }
@@ -1398,6 +1404,32 @@ function registerReceiptHandler(bot) {
       const fileId = (photo || imageDoc).file_id;
       const { order, created } = markReceived(found.orderId, { at, by, userId: msg.from ? msg.from.id : null, fileId, kind: photo ? "photo" : "document", messageId: msg.message_id });
       if (!created) return;
+
+      // Статус-строка в начале ОБОИХ отправленных ранее сообщений ("Заказ
+      // отправлен" в теме клиента, "Отправляется" в поварской группе)
+      // меняется на «Доставлено» — не новое сообщение, а правка того же.
+      const trackLine = order.shipping && order.shipping.trackUrl
+        ? `\nОтслеживание: <a href="${escapeAttr(order.shipping.trackUrl)}">${escapeHtml(order.shipping.trackUrl)}</a>`
+        : "";
+      if (order.shipping && order.shipping.messageId) {
+        const sourceText = `✅ <b>Доставлено</b> — ${orderTitle(order)}${trackLine}\nФото чека получено, ${formatTime(at)}`;
+        await bot.editMessageText(sourceText, {
+          chat_id: msg.chat.id,
+          message_id: order.shipping.messageId,
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+        }).catch(() => {});
+      }
+      if (order.kitchenChatId && order.shipping && order.shipping.kitchenMessageId) {
+        const kitchenText = `✅ <b>Доставлено</b>${trackLine}\nФото чека от ${escapeHtml(by)}, ${formatTime(at)}`;
+        await bot.editMessageText(kitchenText, {
+          chat_id: order.kitchenChatId,
+          message_id: order.shipping.kitchenMessageId,
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+        }).catch(() => {});
+      }
+
       const threadOpts = (replyTo) => {
         const o = { reply_to_message_id: replyTo, allow_sending_without_reply: true };
         if (msg.message_thread_id && msg.is_topic_message) o.message_thread_id = msg.message_thread_id;
