@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
+        android:fullBackupContent="@xml/kd_backup_rules"
+        android:dataExtractionRules="@xml/kd_data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -23,6 +26,32 @@
             </intent-filter>
 
         </activity>
+
+        <!-- Виджет «Моя сводка» на главном экране (2026-10-16): DigestWidget + DigestWorker -->
+        <receiver
+            android:name=".DigestWidget"
+            android:label="@string/widget_name"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/kd_digest_widget_info" />
+        </receiver>
+
+        <!-- Пуши FCM: свой сервис вместо сервиса плагина — тихий пуш виджета
+             обрабатывается здесь, остальные уходят в плагин как раньше -->
+        <service
+            android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
+            tools:node="remove" />
+        <service
+            android:name=".KdMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <provider
             android:name="androidx.core.content.FileProvider"

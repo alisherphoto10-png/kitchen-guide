@@ -4,4 +4,6 @@
     <string name="title_activity_main">KitchenDesk</string>
     <string name="package_name">com.kitchendesk.app</string>
     <string name="custom_url_scheme">com.kitchendesk.app</string>
+    <string name="widget_name">Моя сводка</string>
+    <string name="widget_description">Дата и самое срочное из «Ждёт вашего решения»</string>
 </resources>

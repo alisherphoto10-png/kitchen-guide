@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- То же для Android 12+: ключ виджета не копируется ни в облако, ни на новый телефон -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="kd_widget.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="kd_widget.xml" />
+    </device-transfer>
+</data-extraction-rules>

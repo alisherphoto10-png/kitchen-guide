@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Фон виджета «Моя сводка»: тёмная карточка в цветах панели суперадмина -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#F20E1420" />
+    <stroke android:width="1dp" android:color="#FF1E2736" />
+    <corners android:radius="20dp" />
+</shape>

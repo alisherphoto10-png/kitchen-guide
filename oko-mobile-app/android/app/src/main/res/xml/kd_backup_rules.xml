@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ключ виджета не уезжает в резервную копию Google: восстановленный на другом
+     телефоне, он работал бы там без привязки (Android 6–11). -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="kd_widget.xml" />
+</full-backup-content>

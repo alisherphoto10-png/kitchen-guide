@@ -204,6 +204,13 @@ public class MainActivity extends BridgeActivity {
     }
   }
 
+  // Виджет «Моя сводка»: открыли приложение — заодно обновить виджет (если он стоит)
+  @Override
+  public void onResume() {
+    super.onResume();
+    DigestWidget.refreshNow(getApplicationContext());
+  }
+
   @Override
   public void onPause() {
     super.onPause();
