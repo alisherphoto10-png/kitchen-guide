@@ -37,6 +37,9 @@ import org.json.JSONObject;
 //   • WorkManager раз в 15 минут — подстраховка (чаще Android не даёт);
 //   • нажатие на дату в виджете и каждый раз, когда открывают приложение.
 //
+// Строка поставщика открывает окно быстрого ответа (QuickReplyActivity) — фразы
+// одним нажатием, без открытия приложения и Telegram (2026-10-16).
+//
 // Всё сохраняется в SharedPreferences "kd_widget" (в резервную копию не попадает,
 // см. res/xml/kd_backup_rules.xml): key, data (последний ответ), fetched_at, state.
 public class DigestWidget extends AppWidgetProvider {
@@ -182,7 +185,10 @@ public class DigestWidget extends AppWidgetProvider {
       v.setViewVisibility(TEXT[i], text.isEmpty() ? View.GONE : View.VISIBLE);
       v.setTextViewText(TIME[i], ago(it.optString("at", null)));
       String tg = it.optString("tg", "");
-      v.setOnClickPendingIntent(ROW[i], safeTg(tg) ? openUrl(ctx, tg, 100 + i) : openApp(ctx));
+      String chat = it.optString("chat_id", "");
+      // поставщик → окно быстрого ответа (QuickReplyActivity); старые данные без chat_id → чат в Telegram
+      v.setOnClickPendingIntent(ROW[i], !chat.isEmpty() ? quickReply(ctx, it, 100 + i)
+        : safeTg(tg) ? openUrl(ctx, tg, 100 + i) : openApp(ctx));
     }
     if (n > 0) v.setViewVisibility(R.id.w_empty, View.GONE);
     else v.setTextViewText(R.id.w_empty, "Ничего не ждёт — можно выдохнуть");
@@ -235,8 +241,18 @@ public class DigestWidget extends AppWidgetProvider {
   }
 
   // только чат в Telegram — никакие другие адреса из ответа сервера не открываем
-  private static boolean safeTg(String url) {
+  static boolean safeTg(String url) {
     return url != null && (url.matches("^https://t\\.me/[A-Za-z][A-Za-z0-9_]{3,}$") || url.matches("^tg://user\\?id=\\d+$"));
+  }
+
+  private static PendingIntent quickReply(Context ctx, JSONObject it, int code) {
+    Intent i = new Intent(ctx, QuickReplyActivity.class)
+      .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK)
+      .putExtra(QuickReplyActivity.EXTRA_CHAT, it.optString("chat_id"))
+      .putExtra(QuickReplyActivity.EXTRA_TITLE, it.optString("title"))
+      .putExtra(QuickReplyActivity.EXTRA_TEXT, it.optString("text"))
+      .putExtra(QuickReplyActivity.EXTRA_TG, it.optString("tg", ""));
+    return PendingIntent.getActivity(ctx, code, i, immutable());
   }
 
   private static PendingIntent openUrl(Context ctx, String url, int code) {

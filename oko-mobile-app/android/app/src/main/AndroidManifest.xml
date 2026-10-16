@@ -40,6 +40,16 @@
                 android:resource="@xml/kd_digest_widget_info" />
         </receiver>
 
+        <!-- Окно быстрого ответа поставщику из виджета: поверх главного экрана,
+             отдельной задачей (не поднимает приложение), без следа в недавних -->
+        <activity
+            android:name=".QuickReplyActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity="com.kitchendesk.app.quickreply"
+            android:theme="@android:style/Theme.DeviceDefault.Dialog.NoActionBar" />
+
         <!-- Пуши FCM: свой сервис вместо сервиса плагина — тихий пуш виджета
              обрабатывается здесь, остальные уходят в плагин как раньше -->
         <service
