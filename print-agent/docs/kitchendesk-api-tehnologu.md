@@ -85,16 +85,18 @@ curl -s "https://kitchendesk.chefplan.ru/api/ext/receipts?since=2026-10-01" -H "
       ],
       "items": [
         {
-          "id": 2, "product_id": 1099, "product_name": "Вешенки", "purpose": "kitchen", "unit": "кг",
+          "id": 2, "product_id": 1099, "product_name": "вешенки", "supplier_note": null, "purpose": "kitchen", "unit": "кг",
           "ordered_qty": 3, "ordered_raw": "3", "received_qty": 2.9, "receive_unit": null, "received_count": null,
           "returned_qty": 0, "accepted_qty": 2.9, "extra": false, "backorder": false, "closed_reason": null,
-          "note": "мятые, 2 пакета", "checked_by": "Алишер", "checked_at": "2026-10-20T09:51:39.750Z"
+          "note": "мятые, 2 пакета", "checked_by": "Алишер", "checked_at": "2026-10-20T09:51:39.750Z",
+          "iiko": { "status": "linked", "product_id": "0b6f…-…", "catalog_unit": "кг", "note": null }
         },
         {
-          "id": 5, "product_id": 1102, "product_name": "Тобико", "purpose": "kitchen", "unit": "кг",
+          "id": 5, "product_id": 1102, "product_name": "Пастила яблочная", "supplier_note": null, "purpose": "bar", "unit": "кг",
           "ordered_qty": 1, "ordered_raw": "1", "received_qty": 0, "receive_unit": null, "received_count": null,
           "returned_qty": 0, "accepted_qty": 0, "extra": false, "backorder": true, "closed_reason": null,
-          "note": null, "checked_by": "Шухрат", "checked_at": "2026-10-20T09:51:37.355Z"
+          "note": null, "checked_by": "Шухрат", "checked_at": "2026-10-20T09:51:37.355Z",
+          "iiko": { "status": "not_in_iiko", "product_id": null, "catalog_unit": "кг", "note": "⚠️ новый товар, нет в iiko — заведите его" }
         }
       ],
       "returns": []
@@ -126,7 +128,8 @@ curl -s "https://kitchendesk.chefplan.ru/api/ext/receipts?since=2026-10-01" -H "
 
 | Поле | Что это |
 |---|---|
-| `product_name`, `unit` | товар и единица, как в заказе |
+| `product_name`, `unit` | товар и единица строки, как в заказе. У заведения с iiko название — буквально как в номенклатуре iiko (после сверки каталога) |
+| `supplier_note` | приписка: фасовка или марка («480 гр»). Название при этом то же, что в iiko: «трюфельная паста» 480 гр и 540 гр — две строки с одним `iiko.product_id` и разной `supplier_note`. Нет приписки — `null` |
 | `purpose` | для какого отдела: `kitchen` кухня, `bar` бар, `hall` зал, `household` хоз. товар |
 | `ordered_qty` | сколько заказали (число; `null`, если в заказе было написано не числом — тогда смотрите `ordered_raw`) |
 | `received_qty` | сколько фактически приняли (в `unit`) |
@@ -138,10 +141,11 @@ curl -s "https://kitchendesk.chefplan.ru/api/ext/receipts?since=2026-10-01" -H "
 | `closed_reason` | не привезли и не будет — причина |
 | `note` | комментарий принимавшего |
 | `checked_by` | кто отметил позицию |
+| **`iiko`** | **связь с iiko** (у заведения без iiko — `null`). `status`: `linked` — товар iiko, `product_id` — его id в iiko, `catalog_unit` — единица iiko (может отличаться от `unit`: строку иногда заказывают в другой единице, например манго весом); `not_in_iiko` — **новый товар, его ещё нет в iiko: заведите его** (`note` — готовый текст); `own` — свой товар заведения, в iiko не ведётся (например, кофемолка); `unchecked` — карточку ещё не сверили с iiko; `no_card` — строка без карточки каталога. Статус и id — у каждой строки свои: лайм для кухни и лайм для бара — две строки (разные склады) с одним `product_id` |
 
 ### Возвраты (`returns`)
 
-Если часть товара вернули поставщику, в накладной появляется возврат «ВЗ-0001» с позициями (`receipt_item_id`, `qty`, `reason`). `returned_qty`/`accepted_qty` в позициях уже посчитаны с учётом действующих возвратов. Отменённый возврат помечен `voided: true` и в расчёт не входит.
+Если часть товара вернули поставщику, в накладной появляется возврат «ВЗ-0001» с позициями (`receipt_item_id`, `product_name`, `supplier_note`, `qty`, `reason`). Название и приписка — так же, как в позициях накладной: раздельно. `returned_qty`/`accepted_qty` в позициях уже посчитаны с учётом действующих возвратов. Отменённый возврат помечен `voided: true` и в расчёт не входит.
 
 ---
 
